@@ -5,18 +5,131 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+// const { execSync } = require('child_process');
+
+const BLUE = "\x1b[34m";
+const GREEN = "\x1b[32m";
+const YELLOW = "\x1b[33m";
+const RED = "\x1b[31m";
+const CYAN = "\x1b[36m";
+const RESET = "\x1b[0m";
+
+const USAGE_API_URL = "https://api.anthropic.com/api/oauth/usage";
+const USAGE_THRESHOLD_HIGH = 80;
+const USAGE_THRESHOLD_MEDIUM = 50;
+const CREDENTIALS_PATH = path.join(os.homedir(), ".claude", ".credentials.json");
+
+/**
+ * Read access token from credentials file.
+ */
+function getAccessToken() {
+    try {
+        const data = fs.readFileSync(CREDENTIALS_PATH, 'utf8');
+        const creds = JSON.parse(data);
+        return creds?.claudeAiOauth?.accessToken || null;
+    } catch (error) {
+        return null;
+    }
+}
+
+/**
+ * Fetch usage data from Anthropic API.
+ */
+async function fetchUsage(accessToken) {
+    try {
+        const response = await fetch(USAGE_API_URL, {
+            method: 'GET',
+            headers: {
+                "Authorization": `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+                "anthropic-beta": "oauth-2025-04-20",
+            },
+            signal: AbortSignal.timeout(5000) // 5 second timeout
+        });
+
+        if (!response.ok) return null;
+        return await response.json();
+    } catch (error) {
+        return null;
+    }
+}
+
+function getUsageColor(percentage) {
+    if (percentage >= USAGE_THRESHOLD_HIGH) return RED;
+    if (percentage >= USAGE_THRESHOLD_MEDIUM) return YELLOW;
+    return GREEN;
+}
+
+const formatUsage = (val, pre = "", post = "%", col = undefined, dp = 0) => {
+    // Convert string from split() to a number, or keep as NaN/undefined
+    num = parseFloat(val); 
+    
+    if (isNaN(num)) return `${RED}NA${RESET}`
+
+    if (col == undefined) {
+      col = getUsageColor(num);
+    }
+    
+    return `${col}${pre}${num.toFixed(dp)}${post}${RESET}`;
+};
+
+function formatDuration(isoString) {
+    if (!isoString) return "";
+
+    const target = new Date(isoString);
+    const now = new Date();
+    const diffMs = target - now;
+
+    if (isNaN(target.getTime()) || diffMs <= 0) {
+        return " now"; 
+    }
+
+    const diffMins = Math.round(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const remainingMins = diffMins % 60;
+
+    if (diffHours > 0) {
+        return ` ${diffHours}h ${remainingMins}m`;
+    }
+    return ` ${diffMins}m`;
+}
 
 // Read JSON from stdin
 let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', chunk => input += chunk);
-process.stdin.on('end', () => {
+process.stdin.on('end', async () => {
   try {
     const data = JSON.parse(input);
     const model = data.model?.display_name || 'Claude';
     const dir = data.workspace?.current_dir || process.cwd();
     const session = data.session_id || '';
     const remaining = data.context_window?.remaining_percentage;
+
+    // Usage limits
+    const homeDir = os.homedir();
+    const CACHE_MAX_AGE = 30; // seconds
+    const CACHE_FILE = path.join(homeDir, '.claude', 'cache', 'gsd-usage.txt');
+
+    const cacheIsStale = () => {
+        if (!fs.existsSync(CACHE_FILE)) return true;
+        return (Date.now() / 1000) - fs.statSync(CACHE_FILE).mtimeMs / 1000 > CACHE_MAX_AGE;
+    };
+
+    if (cacheIsStale()) {
+        try {
+            const token = getAccessToken();
+            if (!token) throw new Error("No token found");
+            const usageData = await fetchUsage(token);
+            process.stdout.write(usageData)
+
+            fs.writeFileSync(CACHE_FILE, `${usageData.five_hour?.utilization ?? 0}|${usageData.five_hour?.resets_at ?? ""}|${usageData.seven_day?.utilization ?? 0}|${usageData.seven_day?.resets_at ?? ""}|${usageData.extra_usage?.used_credits ?? 0}`);
+        } catch {
+            fs.writeFileSync(CACHE_FILE, '||||');
+        }
+    }
+
+    const [u_session, u_session_reset, u_week, u_week_reset, u_extra] = fs.readFileSync(CACHE_FILE, 'utf8').trim().split('|');
 
     // Context window display (shows USED percentage scaled to 80% limit)
     // Claude Code enforces an 80% context limit, so we scale to show 100% at that point
@@ -62,7 +175,7 @@ process.stdin.on('end', () => {
 
     // Current task from todos
     let task = '';
-    const homeDir = os.homedir();
+    // const homeDir = os.homedir();
     const todosDir = path.join(homeDir, '.claude', 'todos');
     if (session && fs.existsSync(todosDir)) {
       try {
@@ -101,6 +214,10 @@ process.stdin.on('end', () => {
       process.stdout.write(`${gsdUpdate}\x1b[2m${model}\x1b[0m │ \x1b[1m${task}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}`);
     } else {
       process.stdout.write(`${gsdUpdate}\x1b[2m${model}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}`);
+    }
+
+    if (u_session.length > 0) {
+      process.stdout.write(`\n${formatUsage(u_session)}${formatDuration(u_session_reset)} │ ${formatUsage(u_week)}${formatDuration(u_week_reset)} | ${formatUsage(u_extra, "$", "", YELLOW, 2)}`);
     }
   } catch (e) {
     // Silent fail - don't break statusline on parse errors
