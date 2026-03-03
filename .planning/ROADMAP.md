@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Project scaffold: all config + source files, cargo build verification (SCAF-01, SCAF-02, SCAF-03, SCAF-04)
+- [x] 01-01-PLAN.md — Project scaffold: all config + source files, cargo build verification (SCAF-01, SCAF-02, SCAF-03, SCAF-04)
 - [ ] 01-02-PLAN.md — Flash to hardware, verify stable device ID across power cycles (SCAF-05)
 
 ### Phase 2: Connectivity
@@ -63,6 +63,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scaffold | 0/2 | Not started | - |
+| 1. Scaffold | 1/2 | In progress | - |
 | 2. Connectivity | 0/TBD | Not started | - |
 | 3. Status LED | 0/TBD | Not started | - |
