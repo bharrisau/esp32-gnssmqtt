@@ -35,7 +35,7 @@ NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real 
 
 ## Context
 
-- **Target hardware**: ESP32-C6 (RISC-V, WiFi 6, BLE 5)
+- **Target hardware**: Seeed XIAO ESP32-C6 (RISC-V, WiFi 6, BLE 5) — single yellow user LED on GPIO15, active-low (3.3V → 1.5kΩ → LED → GPIO15)
 - **GNSS module**: UM980 multi-band RTK receiver, UART interface at 115200 baud
 - **Language**: Rust (embedded, no_std or std via esp-idf-hal)
 - **NMEA example**: `$GNGLL,4004.73885655,N,11614.19746477,E,023842.00,A,A*75`
