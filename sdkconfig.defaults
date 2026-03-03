@@ -1,0 +1,18 @@
+# esp32-gnssmqtt sdkconfig.defaults
+# Kconfig overrides for ESP-IDF v5.3.3 / ESP32-C6
+
+# Main task stack — Rust std requires significantly more than the default 3KB
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8000
+
+# FreeRTOS stack overflow detection — Method 2 (canary bytes at stack end)
+# Checks on every context switch; minimal performance overhead
+CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY=y
+
+# Log level: INFO (3)
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_DEFAULT_LEVEL=3
+
+# UART RX ring buffer note:
+# There is NO CONFIG_UART_RX_BUFFER_SIZE Kconfig option in ESP-IDF v5.
+# The UART RX ring buffer size is set at runtime via uart_driver_install().
+# Phase 2 MUST pass rx_buffer_size >= 4096 (see src/config.rs UART_RX_BUF_SIZE).
