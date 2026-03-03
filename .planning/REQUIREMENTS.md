@@ -23,7 +23,7 @@ Milestone 1: Foundation — scaffold, WiFi/MQTT connectivity with hardcoded cred
 - [ ] **CONN-04**: Device automatically reconnects to MQTT broker after a connection drop; re-subscribes to all topics inside the `Connected` event handler
 - [ ] **CONN-05**: Device publishes a periodic heartbeat message to `gnss/{device_id}/heartbeat` with the MQTT retain flag set
 - [ ] **CONN-06**: Device registers an MQTT Last Will and Testament message to `gnss/{device_id}/status` with payload `offline` and retain flag set at connect time
-- [ ] **CONN-07**: Device bridges USB debug serial (UART0 / USB CDC) to the UM980 UART — lines received from USB are forwarded to the UM980, and UM980 replies are echoed back over USB
+- [x] **CONN-07**: Device bridges USB debug serial (UART0 / USB CDC) to the UM980 UART — lines received from USB are forwarded to the UM980, and UM980 replies are echoed back over USB
 
 ### Status LED
 
@@ -81,7 +81,7 @@ Milestone 2: GNSS relay — UART pipeline, NMEA-to-MQTT publishing, and remote U
 | CONN-04 | Phase 2 | Pending |
 | CONN-05 | Phase 2 | Pending |
 | CONN-06 | Phase 2 | Pending |
-| CONN-07 | Phase 2 | Pending |
+| CONN-07 | Phase 2 | Complete |
 | LED-01 | Phase 3 | Pending |
 | LED-02 | Phase 3 | Pending |
 | LED-03 | Phase 3 | Pending |

@@ -70,5 +70,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scaffold | 2/2 | Complete | 2026-03-03 |
-| 2. Connectivity | 0/4 | In progress | - |
+| 2. Connectivity | 1/4 | In Progress|  |
 | 3. Status LED | 0/TBD | Not started | - |

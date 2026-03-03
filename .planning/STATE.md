@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-03T10:30:15.657Z"
+last_updated: "2026-03-03T11:23:00Z"
 progress:
-  total_phases: 1
+  total_phases: 3
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 6
+  completed_plans: 3
 ---
 
 # Project State
@@ -18,33 +18,34 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real time, with zero-touch provisioning and remote reconfiguration of the GNSS module.
-**Current focus:** Phase 1 - Scaffold
+**Current focus:** Phase 2 - Connectivity
 
 ## Current Position
 
-Phase: 1 of 3 (Scaffold) — COMPLETE
-Plan: 2 of 2 in phase 1 — COMPLETE
-Status: Phase 1 complete — ready for Phase 2 (Connectivity)
-Last activity: 2026-03-03 — Plan 01-02 complete: firmware flashed to hardware, device ID FFFEB5 verified stable
+Phase: 2 of 3 (Connectivity) — IN PROGRESS
+Plan: 3 of 4 in phase 2 — COMPLETE (02-03)
+Status: Phase 2 in progress — uart_bridge done, Plan 04 (human-verify) next
+Last activity: 2026-03-03 — Plan 02-03 complete: uart_bridge.rs created with bidirectional UART1/USB-CDC bridge
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 30%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: ~60 min
-- Total execution time: ~1 hour
+- Total plans completed: 3
+- Average duration: ~35 min
+- Total execution time: ~1h 34min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-scaffold | 2 | ~90min | ~45min |
+| 02-connectivity | 1 (so far) | ~4min | ~4min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~60min), 01-02 (~30min)
-- Trend: Phase 1 complete
+- Last 5 plans: 01-01 (~60min), 01-02 (~30min), 02-03 (~4min)
+- Trend: Phase 2 in progress
 
 *Updated after each plan completion*
 
@@ -67,6 +68,9 @@ Recent decisions affecting current work:
 - [01-02]: Factory partition must extend to end of flash; 4MB XIAO ESP32-C6 needs 0x3E0000 factory size
 - [01-02]: CONFIG_PARTITION_TABLE_CUSTOM=y and CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y required in sdkconfig.defaults
 - [01-02]: Windows build.rs must copy partitions.csv (no symlinks without Developer Mode)
+- [02-03]: Arc<UartDriver> used for thread-safe UART sharing — fallback is Arc<Mutex<UartDriver>> if UartDriver not Send
+- [02-03]: stdin()/stdout() used for USB CDC side — unverified for XIAO ESP32-C6 USB JTAG; Plan 04 checkpoint will confirm
+- [02-03]: NON_BLOCK + 10ms sleep in UM980->USB poll thread avoids FreeRTOS watchdog trips
 
 ### Pending Todos
 
@@ -82,5 +86,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 01-02-PLAN.md (hardware flash verified, device ID FFFEB5 stable, Phase 1 complete)
-Resume file: .planning/phases/02-connectivity/ (Phase 2 planning required — TBD plans)
+Stopped at: Completed 02-03-PLAN.md (uart_bridge.rs created, bidirectional UART1/USB-CDC bridge)
+Resume file: .planning/phases/02-connectivity/02-04-PLAN.md (human-verify checkpoint — flash and test bridge)
