@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 ## Current Position
 
-Phase: 1 of 3 (Scaffold)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-03-03 — Plan 01-01 complete: scaffold compiled, binary artifact verified
+Phase: 1 of 3 (Scaffold) — COMPLETE
+Plan: 2 of 2 in phase 1 — COMPLETE
+Status: Phase 1 complete — ready for Phase 2 (Connectivity)
+Last activity: 2026-03-03 — Plan 01-02 complete: firmware flashed to hardware, device ID FFFEB5 verified stable
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
@@ -27,11 +27,11 @@ Progress: [█░░░░░░░░░] 10%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-scaffold | 1 | ~60min | ~60min |
+| 01-scaffold | 2 | ~90min | ~45min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~60min)
-- Trend: baseline established
+- Last 5 plans: 01-01 (~60min), 01-02 (~30min)
+- Trend: Phase 1 complete
 
 *Updated after each plan completion*
 
@@ -50,6 +50,10 @@ Recent decisions affecting current work:
 - [01-01]: embuild manages ESP-IDF v5.3.3 download — no manual SDK setup required
 - [01-01]: Device ID from last 3 MAC bytes (first 3 are Espressif OUI, not unique)
 - [01-01]: nightly Rust toolchain required for RISC-V esp-idf-sys build-std support
+- [01-02]: Device ID FFFEB5 confirmed as permanent identifier for this hardware unit (eFuse-derived)
+- [01-02]: Factory partition must extend to end of flash; 4MB XIAO ESP32-C6 needs 0x3E0000 factory size
+- [01-02]: CONFIG_PARTITION_TABLE_CUSTOM=y and CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y required in sdkconfig.defaults
+- [01-02]: Windows build.rs must copy partitions.csv (no symlinks without Developer Mode)
 
 ### Pending Todos
 
@@ -58,12 +62,12 @@ None yet.
 ### Blockers/Concerns
 
 - [Phase 1 RESOLVED]: Pinned esp-idf-svc =0.51.0, esp-idf-hal =0.45.2, esp-idf-sys =0.36.1 — build confirmed working
-- [Phase 1 DEFERRED]: Flash to hardware and stable device ID verification (01-02-PLAN.md)
+- [Phase 1 RESOLVED]: Hardware flash verified — device ID FFFEB5 stable, all SCAF requirements met
 - [Phase 2]: BLE GATT server API (`esp-idf-svc::bt`) was volatile as of mid-2025 — verify before Phase 3 BLE provisioning work (v2 milestone)
 - [01-01 NOTE]: Fresh clone needs `cargo install ldproxy` and first build needs git submodule init in ESP-IDF dir (embuild auto-handles submodules on subsequent builds)
 
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 01-01-PLAN.md (scaffold: config files + source files + cargo build verified)
-Resume file: .planning/phases/01-scaffold/01-02-PLAN.md
+Stopped at: Completed 01-02-PLAN.md (hardware flash verified, device ID FFFEB5 stable, Phase 1 complete)
+Resume file: .planning/phases/02-connectivity/ (Phase 2 planning required — TBD plans)

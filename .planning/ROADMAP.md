@@ -12,7 +12,7 @@ Milestone 1 (Foundation) builds the full working skeleton of the ESP32-C6 firmwa
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Scaffold** - Version-pinned project that compiles for ESP32-C6, flashes via espflash, and provides a stable device ID
+- [x] **Phase 1: Scaffold** - Version-pinned project that compiles for ESP32-C6, flashes via espflash, and provides a stable device ID
 - [ ] **Phase 2: Connectivity** - Device connects to WiFi and MQTT with hardcoded credentials, publishes heartbeat, reconnects automatically, and bridges USB debug to UM980
 - [ ] **Phase 3: Status LED** - LED reflects connectivity state with distinct blink patterns for connecting, connected, and error states
 
@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md — Project scaffold: all config + source files, cargo build verification (SCAF-01, SCAF-02, SCAF-03, SCAF-04)
-- [ ] 01-02-PLAN.md — Flash to hardware, verify stable device ID across power cycles (SCAF-05)
+- [x] 01-02-PLAN.md — Flash to hardware, verify stable device ID across power cycles (SCAF-05)
 
 ### Phase 2: Connectivity
 **Goal**: Device connects to WiFi and MQTT broker using compile-time credentials, publishes a periodic retained heartbeat, registers an LWT for offline detection, reconnects automatically after drops, and bridges USB serial to the UM980 for development debugging
@@ -63,6 +63,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scaffold | 1/2 | In progress | - |
+| 1. Scaffold | 2/2 | Complete | 2026-03-03 |
 | 2. Connectivity | 0/TBD | Not started | - |
 | 3. Status LED | 0/TBD | Not started | - |

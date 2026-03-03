@@ -13,7 +13,7 @@ Milestone 1: Foundation — scaffold, WiFi/MQTT connectivity with hardcoded cred
 - [x] **SCAF-02**: `esp-idf-hal`, `esp-idf-svc`, and `esp-idf-sys` crate versions are pinned with `=` specifiers in `Cargo.toml` from a known-good `esp-idf-template` scaffold
 - [x] **SCAF-03**: `sdkconfig.defaults` sets UART RX ring buffer to 4096+ bytes and enables FreeRTOS stack overflow detection
 - [x] **SCAF-04**: `partitions.csv` defines a NVS partition of at least 64KB
-- [ ] **SCAF-05**: Device ID module reads hardware eFuse/MAC at runtime and returns a stable unique string
+- [x] **SCAF-05**: Device ID module reads hardware eFuse/MAC at runtime and returns a stable unique string
 
 ### Connectivity
 
@@ -74,7 +74,7 @@ Milestone 2: GNSS relay — UART pipeline, NMEA-to-MQTT publishing, and remote U
 | SCAF-02 | Phase 1 | Complete (01-01) |
 | SCAF-03 | Phase 1 | Complete (01-01) |
 | SCAF-04 | Phase 1 | Complete (01-01) |
-| SCAF-05 | Phase 1 | Pending |
+| SCAF-05 | Phase 1 | Complete (01-02) |
 | CONN-01 | Phase 2 | Pending |
 | CONN-02 | Phase 2 | Pending |
 | CONN-03 | Phase 2 | Pending |
@@ -93,4 +93,4 @@ Milestone 2: GNSS relay — UART pipeline, NMEA-to-MQTT publishing, and remote U
 
 ---
 *Requirements defined: 2026-03-03*
-*Last updated: 2026-03-03 after 01-01 completion (SCAF-01, SCAF-02, SCAF-03, SCAF-04 marked complete)*
+*Last updated: 2026-03-03 after 01-02 completion (SCAF-05 marked complete — all Phase 1 requirements satisfied)*
