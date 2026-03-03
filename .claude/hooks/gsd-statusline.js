@@ -50,6 +50,7 @@ async function fetchUsage(accessToken) {
         if (!response.ok) return null;
         return await response.json();
     } catch (error) {
+        console.error("Failed to fetch")
         return null;
     }
 }
@@ -105,6 +106,9 @@ process.stdin.on('end', async () => {
     const dir = data.workspace?.current_dir || process.cwd();
     const session = data.session_id || '';
     const remaining = data.context_window?.remaining_percentage;
+    const cost = data.cost?.total_cost_usd ?? 0.0;
+    const tok_out = data.context_window?.total_output_tokens ?? 0.0;
+    const tok_in = data.context_window?.total_input_tokens ?? 0.0;
 
     // Usage limits
     const homeDir = os.homedir();
@@ -121,9 +125,9 @@ process.stdin.on('end', async () => {
             const token = getAccessToken();
             if (!token) throw new Error("No token found");
             const usageData = await fetchUsage(token);
-            process.stdout.write(usageData)
+            // console.error(usageData)
 
-            fs.writeFileSync(CACHE_FILE, `${usageData.five_hour?.utilization ?? 0}|${usageData.five_hour?.resets_at ?? ""}|${usageData.seven_day?.utilization ?? 0}|${usageData.seven_day?.resets_at ?? ""}|${usageData.extra_usage?.used_credits ?? 0}`);
+            fs.writeFileSync(CACHE_FILE, `${usageData.five_hour?.utilization ?? 0}|${usageData.five_hour?.resets_at ?? ""}|${usageData.seven_day?.utilization ?? 0}|${usageData.seven_day?.resets_at ?? ""}|${(usageData.extra_usage?.used_credits ?? 0) / 100.0}`);
         } catch {
             fs.writeFileSync(CACHE_FILE, '||||');
         }
@@ -211,13 +215,13 @@ process.stdin.on('end', async () => {
     // Output
     const dirname = path.basename(dir);
     if (task) {
-      process.stdout.write(`${gsdUpdate}\x1b[2m${model}\x1b[0m │ \x1b[1m${task}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}`);
+      process.stdout.write(`${gsdUpdate}\x1b[2m${model}\x1b[0m │ \x1b[1m${task}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx} | ${cost}`);
     } else {
-      process.stdout.write(`${gsdUpdate}\x1b[2m${model}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}`);
+      process.stdout.write(`${gsdUpdate}\x1b[2m${model}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx} | ${cost}`);
     }
 
     if (u_session.length > 0) {
-      process.stdout.write(`\n${formatUsage(u_session)}${formatDuration(u_session_reset)} │ ${formatUsage(u_week)}${formatDuration(u_week_reset)} | ${formatUsage(u_extra, "$", "", YELLOW, 2)}`);
+      process.stdout.write(`\n${formatUsage(u_session)}${formatDuration(u_session_reset)} │ ${formatUsage(u_week)}${formatDuration(u_week_reset)} | ${formatUsage(u_extra, "$", "", YELLOW, 2)} | ${tok_in}:${tok_out}`);
     }
   } catch (e) {
     // Silent fail - don't break statusline on parse errors
