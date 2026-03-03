@@ -23,11 +23,15 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Depends on**: Nothing (first phase)
 **Requirements**: SCAF-01, SCAF-02, SCAF-03, SCAF-04, SCAF-05
 **Success Criteria** (what must be TRUE):
-  1. `cargo build` completes without error targeting `riscv32imc-esp-espidf` and `espflash` successfully flashes the binary to the ESP32-C6
+  1. `cargo build` completes without error targeting `riscv32imac-esp-espidf` and `espflash` successfully flashes the binary to the ESP32-C6
   2. The device prints a stable, unique device ID string derived from the hardware MAC/eFuse on every boot — the same string across power cycles
   3. The NVS partition is present in `partitions.csv` (64KB+) and the sdkconfig sets the UART RX ring buffer to 4096+ bytes with FreeRTOS stack overflow detection enabled
   4. All three Espressif crates (`esp-idf-hal`, `esp-idf-svc`, `esp-idf-sys`) are pinned with `=` version specifiers and the project builds from a clean `cargo clean`
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffold: all config + source files, cargo build verification (SCAF-01, SCAF-02, SCAF-03, SCAF-04)
+- [ ] 01-02-PLAN.md — Flash to hardware, verify stable device ID across power cycles (SCAF-05)
 
 ### Phase 2: Connectivity
 **Goal**: Device connects to WiFi and MQTT broker using compile-time credentials, publishes a periodic retained heartbeat, registers an LWT for offline detection, reconnects automatically after drops, and bridges USB serial to the UM980 for development debugging
@@ -59,6 +63,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scaffold | 0/TBD | Not started | - |
+| 1. Scaffold | 0/2 | Not started | - |
 | 2. Connectivity | 0/TBD | Not started | - |
 | 3. Status LED | 0/TBD | Not started | - |
