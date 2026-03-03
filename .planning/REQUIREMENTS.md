@@ -18,11 +18,11 @@ Milestone 1: Foundation — scaffold, WiFi/MQTT connectivity with hardcoded cred
 ### Connectivity
 
 - [ ] **CONN-01**: Device connects to WiFi using compile-time hardcoded SSID and password
-- [ ] **CONN-02**: Device connects to MQTT broker using compile-time hardcoded host, port, username, and password
+- [x] **CONN-02**: Device connects to MQTT broker using compile-time hardcoded host, port, username, and password
 - [ ] **CONN-03**: Device automatically reconnects to WiFi after a connection drop, with exponential backoff
-- [ ] **CONN-04**: Device automatically reconnects to MQTT broker after a connection drop; re-subscribes to all topics inside the `Connected` event handler
-- [ ] **CONN-05**: Device publishes a periodic heartbeat message to `gnss/{device_id}/heartbeat` with the MQTT retain flag set
-- [ ] **CONN-06**: Device registers an MQTT Last Will and Testament message to `gnss/{device_id}/status` with payload `offline` and retain flag set at connect time
+- [x] **CONN-04**: Device automatically reconnects to MQTT broker after a connection drop; re-subscribes to all topics inside the `Connected` event handler
+- [x] **CONN-05**: Device publishes a periodic heartbeat message to `gnss/{device_id}/heartbeat` with the MQTT retain flag set
+- [x] **CONN-06**: Device registers an MQTT Last Will and Testament message to `gnss/{device_id}/status` with payload `offline` and retain flag set at connect time
 - [x] **CONN-07**: Device bridges USB debug serial (UART0 / USB CDC) to the UM980 UART — lines received from USB are forwarded to the UM980, and UM980 replies are echoed back over USB
 
 ### Status LED
@@ -76,11 +76,11 @@ Milestone 2: GNSS relay — UART pipeline, NMEA-to-MQTT publishing, and remote U
 | SCAF-04 | Phase 1 | Complete (01-01) |
 | SCAF-05 | Phase 1 | Complete (01-02) |
 | CONN-01 | Phase 2 | Pending |
-| CONN-02 | Phase 2 | Pending |
+| CONN-02 | Phase 2 | Complete (02-02) |
 | CONN-03 | Phase 2 | Pending |
-| CONN-04 | Phase 2 | Pending |
-| CONN-05 | Phase 2 | Pending |
-| CONN-06 | Phase 2 | Pending |
+| CONN-04 | Phase 2 | Complete (02-02) |
+| CONN-05 | Phase 2 | Complete (02-02) |
+| CONN-06 | Phase 2 | Complete (02-02) |
 | CONN-07 | Phase 2 | Complete |
 | LED-01 | Phase 3 | Pending |
 | LED-02 | Phase 3 | Pending |
@@ -93,4 +93,4 @@ Milestone 2: GNSS relay — UART pipeline, NMEA-to-MQTT publishing, and remote U
 
 ---
 *Requirements defined: 2026-03-03*
-*Last updated: 2026-03-03 after 01-02 completion (SCAF-05 marked complete — all Phase 1 requirements satisfied)*
+*Last updated: 2026-03-03 after 02-02 completion (CONN-02, CONN-04, CONN-05, CONN-06 marked complete — src/mqtt.rs implemented)*

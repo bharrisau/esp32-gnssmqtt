@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-03T11:23:00Z"
+last_updated: "2026-03-03T11:32:00Z"
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -23,28 +23,28 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Phase: 2 of 3 (Connectivity) — IN PROGRESS
-Plan: 3 of 4 in phase 2 — COMPLETE (02-03)
-Status: Phase 2 in progress — uart_bridge done, Plan 04 (human-verify) next
-Last activity: 2026-03-03 — Plan 02-03 complete: uart_bridge.rs created with bidirectional UART1/USB-CDC bridge
+Plan: 4 of 4 in phase 2 — IN PROGRESS (02-04 next)
+Status: Phase 2 in progress — mqtt.rs done (02-02), uart_bridge done (02-03), Plan 04 (human-verify) next
+Last activity: 2026-03-03 — Plan 02-02 complete: mqtt.rs created with LWT, pump thread, heartbeat loop
 
-Progress: [███░░░░░░░] 30%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: ~35 min
-- Total execution time: ~1h 34min
+- Total plans completed: 4
+- Average duration: ~26 min
+- Total execution time: ~1h 41min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-scaffold | 2 | ~90min | ~45min |
-| 02-connectivity | 1 (so far) | ~4min | ~4min |
+| 02-connectivity | 2 (so far) | ~11min | ~6min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~60min), 01-02 (~30min), 02-03 (~4min)
+- Last 5 plans: 01-01 (~60min), 01-02 (~30min), 02-03 (~4min), 02-02 (~7min)
 - Trend: Phase 2 in progress
 
 *Updated after each plan completion*
@@ -71,6 +71,10 @@ Recent decisions affecting current work:
 - [02-03]: Arc<UartDriver> used for thread-safe UART sharing — fallback is Arc<Mutex<UartDriver>> if UartDriver not Send
 - [02-03]: stdin()/stdout() used for USB CDC side — unverified for XIAO ESP32-C6 USB JTAG; Plan 04 checkpoint will confirm
 - [02-03]: NON_BLOCK + 10ms sleep in UM980->USB poll thread avoids FreeRTOS watchdog trips
+- [02-02]: lwt_topic String declared before MqttClientConfiguration in same scope to satisfy LwtConfiguration<'a> lifetime
+- [02-02]: EspMqttConnection moved into pump thread; EspMqttClient in Arc<Mutex<>> — reconnect-aware pattern from esp-idf-svc
+- [02-02]: pump_mqtt_events returns ! (diverging); permanent sleep loop after connection.next() exits to keep thread alive
+- [02-02]: heartbeat uses client.publish() (blocking) from dedicated thread — acceptable because pump keeps outbox moving
 
 ### Pending Todos
 
@@ -86,5 +90,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 02-03-PLAN.md (uart_bridge.rs created, bidirectional UART1/USB-CDC bridge)
-Resume file: .planning/phases/02-connectivity/02-04-PLAN.md (human-verify checkpoint — flash and test bridge)
+Stopped at: Completed 02-02-PLAN.md (mqtt.rs created: LWT, pump thread, heartbeat loop)
+Resume file: .planning/phases/02-connectivity/02-04-PLAN.md (human-verify checkpoint — flash and test full connectivity stack)
