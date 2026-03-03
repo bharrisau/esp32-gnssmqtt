@@ -10,6 +10,7 @@ use esp_idf_svc::log::EspLogger;
 
 mod config;
 mod device_id;
+mod mqtt;
 mod uart_bridge;
 
 fn main() {
