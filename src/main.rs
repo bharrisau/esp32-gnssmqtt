@@ -10,6 +10,7 @@ use esp_idf_svc::log::EspLogger;
 
 mod config;
 mod device_id;
+mod uart_bridge;
 
 fn main() {
     // Step 1: Apply ESP-IDF linker patches — MUST be called before anything else.
