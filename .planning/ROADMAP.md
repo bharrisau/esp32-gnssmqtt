@@ -43,7 +43,13 @@ Plans:
   3. After a deliberate WiFi disconnect, the device reconnects and resumes publishing heartbeats without a manual reboot
   4. After a deliberate MQTT broker restart, the device reconnects and re-subscribes to all topics without a manual reboot
   5. Lines typed into the USB serial console are forwarded to the UM980 UART, and UM980 responses appear in the USB serial console
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Populate config.rs credentials + create src/wifi.rs (connect + reconnect supervisor) (CONN-01, CONN-03)
+- [ ] 02-02-PLAN.md — Create src/mqtt.rs (LWT, pump thread, heartbeat) (CONN-02, CONN-04, CONN-05, CONN-06)
+- [ ] 02-03-PLAN.md — Create src/uart_bridge.rs (UART0/USB CDC <-> UART1/UM980 bridge) (CONN-07)
+- [ ] 02-04-PLAN.md — Wire main.rs, cargo build, flash + hardware verification checkpoint (all CONN)
 
 ### Phase 3: Status LED
 **Goal**: The status LED communicates connectivity state through distinct blink patterns, giving an operator standing next to the device clear visual feedback without needing a serial monitor
@@ -64,5 +70,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scaffold | 2/2 | Complete | 2026-03-03 |
-| 2. Connectivity | 0/TBD | Not started | - |
+| 2. Connectivity | 0/4 | In progress | - |
 | 3. Status LED | 0/TBD | Not started | - |
