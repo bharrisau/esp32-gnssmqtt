@@ -12,6 +12,7 @@ mod config;
 mod device_id;
 mod mqtt;
 mod uart_bridge;
+mod wifi;
 
 fn main() {
     // Step 1: Apply ESP-IDF linker patches — MUST be called before anything else.
