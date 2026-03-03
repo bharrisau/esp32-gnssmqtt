@@ -17,9 +17,9 @@ Milestone 1: Foundation — scaffold, WiFi/MQTT connectivity with hardcoded cred
 
 ### Connectivity
 
-- [ ] **CONN-01**: Device connects to WiFi using compile-time hardcoded SSID and password
+- [x] **CONN-01**: Device connects to WiFi using compile-time hardcoded SSID and password
 - [x] **CONN-02**: Device connects to MQTT broker using compile-time hardcoded host, port, username, and password
-- [ ] **CONN-03**: Device automatically reconnects to WiFi after a connection drop, with exponential backoff
+- [x] **CONN-03**: Device automatically reconnects to WiFi after a connection drop, with exponential backoff
 - [x] **CONN-04**: Device automatically reconnects to MQTT broker after a connection drop; re-subscribes to all topics inside the `Connected` event handler
 - [x] **CONN-05**: Device publishes a periodic heartbeat message to `gnss/{device_id}/heartbeat` with the MQTT retain flag set
 - [x] **CONN-06**: Device registers an MQTT Last Will and Testament message to `gnss/{device_id}/status` with payload `offline` and retain flag set at connect time
@@ -75,9 +75,9 @@ Milestone 2: GNSS relay — UART pipeline, NMEA-to-MQTT publishing, and remote U
 | SCAF-03 | Phase 1 | Complete (01-01) |
 | SCAF-04 | Phase 1 | Complete (01-01) |
 | SCAF-05 | Phase 1 | Complete (01-02) |
-| CONN-01 | Phase 2 | Pending |
+| CONN-01 | Phase 2 | Complete |
 | CONN-02 | Phase 2 | Complete (02-02) |
-| CONN-03 | Phase 2 | Pending |
+| CONN-03 | Phase 2 | Complete |
 | CONN-04 | Phase 2 | Complete (02-02) |
 | CONN-05 | Phase 2 | Complete (02-02) |
 | CONN-06 | Phase 2 | Complete (02-02) |

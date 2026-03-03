@@ -46,7 +46,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Populate config.rs credentials + create src/wifi.rs (connect + reconnect supervisor) (CONN-01, CONN-03)
+- [x] 02-01-PLAN.md — Populate config.rs credentials + create src/wifi.rs (connect + reconnect supervisor) (CONN-01, CONN-03)
 - [x] 02-02-PLAN.md — Create src/mqtt.rs (LWT, pump thread, heartbeat) (CONN-02, CONN-04, CONN-05, CONN-06)
 - [x] 02-03-PLAN.md — Create src/uart_bridge.rs (UART0/USB CDC <-> UART1/UM980 bridge) (CONN-07)
 - [ ] 02-04-PLAN.md — Wire main.rs, cargo build, flash + hardware verification checkpoint (all CONN)
@@ -70,5 +70,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scaffold | 2/2 | Complete | 2026-03-03 |
-| 2. Connectivity | 2/4 | In Progress|  |
+| 2. Connectivity | 3/4 | In Progress|  |
 | 3. Status LED | 0/TBD | Not started | - |

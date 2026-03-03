@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-03T11:32:00Z"
+last_updated: "2026-03-03T11:44:00Z"
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 Phase: 2 of 3 (Connectivity) — IN PROGRESS
 Plan: 4 of 4 in phase 2 — IN PROGRESS (02-04 next)
-Status: Phase 2 in progress — mqtt.rs done (02-02), uart_bridge done (02-03), Plan 04 (human-verify) next
-Last activity: 2026-03-03 — Plan 02-02 complete: mqtt.rs created with LWT, pump thread, heartbeat loop
+Status: Phase 2 in progress — wifi.rs done (02-01), mqtt.rs done (02-02), uart_bridge done (02-03), Plan 04 (human-verify) next
+Last activity: 2026-03-03 — Plan 02-01 complete: wifi.rs created with wifi_connect and wifi_supervisor (exponential backoff reconnect)
 
-Progress: [████░░░░░░] 40%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -41,11 +41,11 @@ Progress: [████░░░░░░] 40%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-scaffold | 2 | ~90min | ~45min |
-| 02-connectivity | 2 (so far) | ~11min | ~6min |
+| 02-connectivity | 3 (so far) | ~14min | ~5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~60min), 01-02 (~30min), 02-03 (~4min), 02-02 (~7min)
-- Trend: Phase 2 in progress
+- Last 5 plans: 01-01 (~60min), 01-02 (~30min), 02-03 (~4min), 02-02 (~7min), 02-01 (~3min)
+- Trend: Phase 2 in progress — 3 of 4 plans done
 
 *Updated after each plan completion*
 
@@ -75,6 +75,9 @@ Recent decisions affecting current work:
 - [02-02]: EspMqttConnection moved into pump thread; EspMqttClient in Arc<Mutex<>> — reconnect-aware pattern from esp-idf-svc
 - [02-02]: pump_mqtt_events returns ! (diverging); permanent sleep loop after connection.next() exits to keep thread alive
 - [02-02]: heartbeat uses client.publish() (blocking) from dedicated thread — acceptable because pump keeps outbox moving
+- [02-01]: wifi.start() called only once in wifi_connect — never in supervisor loop (re-init would corrupt driver state)
+- [02-01]: 5-second poll sleep is outer loop sleep; backoff sleep placed before wifi.connect() — ensures wait before every reconnect attempt
+- [02-01]: wait_netif_up() called on reconnect success before resetting backoff — ensures IP assigned before declaring success
 
 ### Pending Todos
 
@@ -90,5 +93,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 02-02-PLAN.md (mqtt.rs created: LWT, pump thread, heartbeat loop)
-Resume file: .planning/phases/02-connectivity/02-04-PLAN.md (human-verify checkpoint — flash and test full connectivity stack)
+Stopped at: Completed 02-01-PLAN.md (wifi.rs created: wifi_connect + wifi_supervisor with exponential backoff reconnect)
+Resume file: .planning/phases/02-connectivity/02-04-PLAN.md (human-verify checkpoint — wire main.rs, cargo build, flash + test full connectivity stack)
