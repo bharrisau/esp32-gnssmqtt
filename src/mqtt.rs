@@ -6,7 +6,9 @@ use esp_idf_svc::mqtt::client::{
 };
 use embedded_svc::mqtt::client::{EventPayload, QoS};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
+use crate::led::LedState;
 
 /// Create an MQTT client with LWT configured.
 ///
@@ -59,19 +61,28 @@ pub fn mqtt_connect(
 
 /// Drive the MQTT event loop forever.
 ///
-/// On every `Connected` event, sends a signal through `subscribe_tx` so that the
-/// subscriber thread can (re-)subscribe. The pump itself NEVER calls any client method —
-/// doing so would deadlock because the C MQTT task holds its internal mutex while
-/// dispatching the event callback (see research pitfall 2).
-pub fn pump_mqtt_events(mut connection: EspMqttConnection, subscribe_tx: Sender<()>) -> ! {
+/// On every `Connected` event, writes LedState::Connected to the shared LED state and
+/// sends a signal through `subscribe_tx` so that the subscriber thread can (re-)subscribe.
+/// On `Disconnected`, writes LedState::Connecting.
+///
+/// The pump itself NEVER calls any client method — doing so would deadlock because the
+/// C MQTT task holds its internal mutex while dispatching the event callback (see research
+/// pitfall 2). Atomic stores are NOT client method calls and are safe here.
+pub fn pump_mqtt_events(
+    mut connection: EspMqttConnection,
+    subscribe_tx: Sender<()>,
+    led_state: Arc<AtomicU8>,
+) -> ! {
     while let Ok(event) = connection.next() {
         match event.payload() {
             EventPayload::Connected(_) => {
                 log::info!("MQTT connected");
+                led_state.store(LedState::Connected as u8, Ordering::Relaxed);
                 let _ = subscribe_tx.send(());
             }
             EventPayload::Disconnected => {
                 log::warn!("MQTT disconnected");
+                led_state.store(LedState::Connecting as u8, Ordering::Relaxed);
             }
             EventPayload::Error(e) => {
                 log::error!("MQTT error: {:?}", e);
