@@ -4,6 +4,7 @@
 //! 1. esp_idf_svc::sys::link_patches() — MUST be first, applies linker patches
 //! 2. EspLogger::initialize_default() — MUST be before any log:: calls
 //! 3. Peripherals::take() — take hardware ownership
+//! 3b-3e. LED state Arc + GPIO15 PinDriver + LED thread spawn
 //! 4. EspSystemEventLoop::take() — required by WiFi
 //! 5. EspDefaultNvsPartition::take() — required by WiFi
 //! 6. wifi::wifi_connect — WiFi BEFORE MQTT (IP required for TCP)
@@ -17,9 +18,12 @@
 //! 14. Main thread: idle loop
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;
+use esp_idf_svc::hal::gpio::PinDriver;
 use esp_idf_svc::hal::prelude::*;
 use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
+use std::sync::Arc;
+use std::sync::atomic::AtomicU8;
 
 mod config;
 mod device_id;
@@ -44,6 +48,25 @@ fn main() {
 
     // Step 3: Take hardware peripherals
     let peripherals = Peripherals::take().expect("peripherals already taken");
+
+    // Step 3b: Create shared LED state — initial state is Connecting
+    let led_state = Arc::new(AtomicU8::new(led::LedState::Connecting as u8));
+
+    // Step 3c: Create GPIO15 output driver for LED (active-low: set_low = LED ON)
+    let led_pin = PinDriver::output(peripherals.pins.gpio15)
+        .expect("GPIO15 PinDriver init failed");
+
+    // Step 3d: Clone led_state for wifi and mqtt threads
+    let led_state_wifi = led_state.clone();
+    let led_state_mqtt = led_state.clone();
+    // led_state itself will be moved into led_task below
+
+    // Step 3e: Spawn LED thread — must be before wifi/mqtt threads start writing state
+    std::thread::Builder::new()
+        .stack_size(8192)
+        .spawn(move || led::led_task(led_pin, led_state))
+        .expect("LED thread spawn failed");
+    log::info!("LED task started");
 
     // Step 4: System event loop (required by WiFi)
     let sysloop = EspSystemEventLoop::take().expect("sysloop already taken");
@@ -78,7 +101,7 @@ fn main() {
     // Step 10: Pump thread — drives connection.next(), never touches client
     std::thread::Builder::new()
         .stack_size(8192)
-        .spawn(move || mqtt::pump_mqtt_events(mqtt_connection, subscribe_tx))
+        .spawn(move || mqtt::pump_mqtt_events(mqtt_connection, subscribe_tx, led_state_mqtt))
         .expect("pump thread spawn failed");
 
     // Step 11: Subscriber thread — subscribes on Connected (initial + broker restart)
@@ -100,7 +123,7 @@ fn main() {
     // Step 13: WiFi supervisor thread (reconnect on drop)
     std::thread::Builder::new()
         .stack_size(8192)
-        .spawn(move || wifi::wifi_supervisor(wifi))
+        .spawn(move || wifi::wifi_supervisor(wifi, led_state_wifi))
         .expect("wifi supervisor spawn failed");
 
     // Step 14: Main thread parks — all work is done in spawned threads
