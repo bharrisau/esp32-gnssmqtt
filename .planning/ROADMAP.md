@@ -60,7 +60,12 @@ Plans:
   1. While the device is attempting to connect to WiFi or MQTT, the LED blinks at a clearly distinct rate (e.g., rapid pulse) that differs from all other states
   2. When both WiFi and MQTT are connected, the LED shows a steady-on or slow-blink pattern that is visually distinct from the connecting pattern
   3. After repeated failed connection attempts (WiFi or MQTT unreachable), the LED shows a recognizable error pattern (e.g., fast blink or off) that differs from both connecting and connected states
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Create src/led.rs (LedState enum + led_task) + update src/wifi.rs (supervisor error threshold) (LED-01, LED-02, LED-03)
+- [ ] 03-02-PLAN.md — Update src/mqtt.rs (pump Connected/Connecting writes) + wire src/main.rs + cargo build (LED-01, LED-02)
+- [ ] 03-03-PLAN.md — Flash to hardware, visual verification of all three LED patterns checkpoint (LED-01, LED-02, LED-03)
 
 ## Progress
 
@@ -71,4 +76,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Scaffold | 2/2 | Complete | 2026-03-03 |
 | 2. Connectivity | 4/4 | Complete | 2026-03-04 |
-| 3. Status LED | 0/TBD | Not started | - |
+| 3. Status LED | 0/3 | In progress | - |
