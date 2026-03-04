@@ -27,9 +27,9 @@ Milestone 1: Foundation — scaffold, WiFi/MQTT connectivity with hardcoded cred
 
 ### Status LED
 
-- [ ] **LED-01**: LED shows a distinct blink pattern while the device is attempting to connect to WiFi or MQTT
-- [ ] **LED-02**: LED shows a steady-on (or slow blink) pattern when WiFi and MQTT are both connected
-- [ ] **LED-03**: LED shows an error pattern (e.g. rapid blink or off) when connectivity cannot be established after repeated retries
+- [x] **LED-01**: LED shows a distinct blink pattern while the device is attempting to connect to WiFi or MQTT
+- [x] **LED-02**: LED shows a steady-on (or slow blink) pattern when WiFi and MQTT are both connected
+- [x] **LED-03**: LED shows an error pattern (e.g. rapid blink or off) when connectivity cannot be established after repeated retries
 
 ## v2 Requirements
 
@@ -82,9 +82,9 @@ Milestone 2: GNSS relay — UART pipeline, NMEA-to-MQTT publishing, and remote U
 | CONN-05 | Phase 2 | Complete (02-02) |
 | CONN-06 | Phase 2 | Complete (02-02) |
 | CONN-07 | Phase 2 | Complete |
-| LED-01 | Phase 3 | Pending |
-| LED-02 | Phase 3 | Pending |
-| LED-03 | Phase 3 | Pending |
+| LED-01 | Phase 3 | Complete |
+| LED-02 | Phase 3 | Complete |
+| LED-03 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 15 total

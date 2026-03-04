@@ -2,13 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-03-04T03:36:25.160Z"
+status: verifying
+stopped_at: Completed 03-01-PLAN.md — LedState enum + led_task + wifi_supervisor wired with Arc<AtomicU8>
+last_updated: "2026-03-04T05:09:23.665Z"
+last_activity: "2026-03-04 — Plan 02-04 complete: main.rs wired with all connectivity modules; all Phase 2 requirements verified on hardware"
 progress:
-  total_phases: 2
+  total_phases: 3
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 9
+  completed_plans: 7
+  percent: 100
 ---
 
 # Project State
@@ -48,6 +51,7 @@ Progress: [██████████] 100% (Phase 2) — Phase 3 not yet pl
 - Trend: Phase 2 complete — 4 of 4 plans done, all CONN requirements hardware-verified
 
 *Updated after each plan completion*
+| Phase 03-status-led P01 | 2 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -80,6 +84,9 @@ Recent decisions affecting current work:
 - [02-01]: wifi.start() called only once in wifi_connect — never in supervisor loop (re-init would corrupt driver state)
 - [02-01]: 5-second poll sleep is outer loop sleep; backoff sleep placed before wifi.connect() — ensures wait before every reconnect attempt
 - [02-01]: wait_netif_up() called on reconnect success before resetting backoff — ensures IP assigned before declaring success
+- [Phase 03-status-led]: Arc<AtomicU8> chosen for LED state — single u8, no lock contention on 50ms LED poll path
+- [Phase 03-status-led]: wifi_supervisor never writes Connected — MQTT pump owns that transition to prevent false green before MQTT is ready
+- [Phase 03-status-led]: elapsed_ms counter over sleep-per-blink — state changes apply within 50ms not at end of blink cycle
 
 ### Pending Todos
 
@@ -94,6 +101,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04
-Stopped at: Completed 02-04-PLAN.md — Phase 2 COMPLETE. main.rs wired with WiFi + MQTT + UART bridge; all CONN-01 through CONN-07 verified on hardware.
-Resume file: .planning/phases/03-gnss/ (Phase 3 planning not yet started — run /gsd:plan-phase for Phase 3)
+Last session: 2026-03-04T05:09:23.661Z
+Stopped at: Completed 03-01-PLAN.md — LedState enum + led_task + wifi_supervisor wired with Arc<AtomicU8>
+Resume file: None
