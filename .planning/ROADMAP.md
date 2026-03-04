@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Scaffold** - Version-pinned project that compiles for ESP32-C6, flashes via espflash, and provides a stable device ID
 - [x] **Phase 2: Connectivity** - Device connects to WiFi and MQTT with hardcoded credentials, publishes heartbeat, reconnects automatically, and bridges USB debug to UM980
-- [ ] **Phase 3: Status LED** - LED reflects connectivity state with distinct blink patterns for connecting, connected, and error states
+- [x] **Phase 3: Status LED** - LED reflects connectivity state with distinct blink patterns for connecting, connected, and error states (completed 2026-03-04)
 
 ## Phase Details
 
@@ -76,4 +76,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Scaffold | 2/2 | Complete | 2026-03-03 |
 | 2. Connectivity | 4/4 | Complete | 2026-03-04 |
-| 3. Status LED | 2/3 | In Progress|  |
+| 3. Status LED | 3/3 | Complete   | 2026-03-04 |
