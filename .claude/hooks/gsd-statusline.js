@@ -97,9 +97,13 @@ function formatDuration(isoString) {
 
 // Read JSON from stdin
 let input = '';
+// Timeout guard: if stdin doesn't close within 3s (e.g. pipe issues on
+// Windows/Git Bash), exit silently instead of hanging. See #775.
+const stdinTimeout = setTimeout(() => process.exit(0), 3000);
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', chunk => input += chunk);
 process.stdin.on('end', async () => {
+  clearTimeout(stdinTimeout);
   try {
     const data = JSON.parse(input);
     const model = data.model?.display_name || 'Claude';
@@ -135,14 +139,15 @@ process.stdin.on('end', async () => {
 
     const [u_session, u_session_reset, u_week, u_week_reset, u_extra] = fs.readFileSync(CACHE_FILE, 'utf8').trim().split('|');
 
-    // Context window display (shows USED percentage scaled to 80% limit)
-    // Claude Code enforces an 80% context limit, so we scale to show 100% at that point
+    // Context window display (shows USED percentage scaled to usable context)
+    // Claude Code reserves ~16.5% for autocompact buffer, so usable context
+    // is 83.5% of the total window. We normalize to show 100% at that point.
+    const AUTO_COMPACT_BUFFER_PCT = 16.5;
     let ctx = '';
     if (remaining != null) {
-      const rem = Math.round(remaining);
-      const rawUsed = Math.max(0, Math.min(100, 100 - rem));
-      // Scale: 80% real usage = 100% displayed
-      const used = Math.min(100, Math.round((rawUsed / 80) * 100));
+      // Normalize: subtract buffer from remaining, scale to usable range
+      const usableRemaining = Math.max(0, ((remaining - AUTO_COMPACT_BUFFER_PCT) / (100 - AUTO_COMPACT_BUFFER_PCT)) * 100);
+      const used = Math.max(0, Math.min(100, Math.round(100 - usableRemaining)));
 
       // Write context metrics to bridge file for the context-monitor PostToolUse hook.
       // The monitor reads this file to inject agent-facing warnings when context is low.
@@ -165,12 +170,12 @@ process.stdin.on('end', async () => {
       const filled = Math.floor(used / 10);
       const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
 
-      // Color based on scaled usage (thresholds adjusted for new scale)
-      if (used < 63) {        // ~50% real
+      // Color based on usable context thresholds
+      if (used < 50) {
         ctx = ` \x1b[32m${bar} ${used}%\x1b[0m`;
-      } else if (used < 81) { // ~65% real
+      } else if (used < 65) {
         ctx = ` \x1b[33m${bar} ${used}%\x1b[0m`;
-      } else if (used < 95) { // ~76% real
+      } else if (used < 80) {
         ctx = ` \x1b[38;5;208m${bar} ${used}%\x1b[0m`;
       } else {
         ctx = ` \x1b[5;31m💀 ${bar} ${used}%\x1b[0m`;
@@ -179,8 +184,9 @@ process.stdin.on('end', async () => {
 
     // Current task from todos
     let task = '';
-    // const homeDir = os.homedir();
-    const todosDir = path.join(homeDir, '.claude', 'todos');
+    // Respect CLAUDE_CONFIG_DIR for custom config directory setups (#870)
+    const claudeDir = process.env.CLAUDE_CONFIG_DIR || path.join(homeDir, '.claude');
+    const todosDir = path.join(claudeDir, 'todos');
     if (session && fs.existsSync(todosDir)) {
       try {
         const files = fs.readdirSync(todosDir)
@@ -202,7 +208,7 @@ process.stdin.on('end', async () => {
 
     // GSD update available?
     let gsdUpdate = '';
-    const cacheFile = path.join(homeDir, '.claude', 'cache', 'gsd-update-check.json');
+    const cacheFile = path.join(claudeDir, 'cache', 'gsd-update-check.json');
     if (fs.existsSync(cacheFile)) {
       try {
         const cache = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
@@ -215,13 +221,13 @@ process.stdin.on('end', async () => {
     // Output
     const dirname = path.basename(dir);
     if (task) {
-      process.stdout.write(`${gsdUpdate}\x1b[2m${model}\x1b[0m │ \x1b[1m${task}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx} | ${cost}`);
+      process.stdout.write(`${gsdUpdate}\x1b[2m${model}\x1b[0m │ \x1b[1m${task}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}`);
     } else {
-      process.stdout.write(`${gsdUpdate}\x1b[2m${model}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx} | ${cost}`);
+      process.stdout.write(`${gsdUpdate}\x1b[2m${model}\x1b[0m │ \x1b[2m${dirname}\x1b[0m${ctx}`);
     }
 
     if (u_session.length > 0) {
-      process.stdout.write(`\n${formatUsage(u_session)}${formatDuration(u_session_reset)} │ ${formatUsage(u_week)}${formatDuration(u_week_reset)} | ${formatUsage(u_extra, "$", "", YELLOW, 2)} | ${tok_in}:${tok_out}`);
+      process.stdout.write(`\n${formatUsage(u_session)}${formatDuration(u_session_reset)} │ ${formatUsage(u_week)}${formatDuration(u_week_reset)} | extra:${formatUsage(u_extra, "$", "", YELLOW, 2)} equiv:${formatUsage(cost, "$", "", YELLOW, 2)}| tokens: ${tok_in}:${tok_out}`);
     }
   } catch (e) {
     // Silent fail - don't break statusline on parse errors
