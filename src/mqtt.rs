@@ -6,6 +6,7 @@ use esp_idf_svc::mqtt::client::{
 };
 use embedded_svc::mqtt::client::{EventPayload, QoS};
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Receiver, Sender};
 
 /// Create an MQTT client with LWT configured.
 ///
@@ -48,6 +49,7 @@ pub fn mqtt_connect(
         }),
         keep_alive_interval: Some(std::time::Duration::from_secs(60)),
         reconnect_timeout: Some(std::time::Duration::from_secs(5)),
+        disable_clean_session: true,
         ..Default::default()
     };
 
@@ -57,25 +59,16 @@ pub fn mqtt_connect(
 
 /// Drive the MQTT event loop forever.
 ///
-/// This function MUST be called in a dedicated thread BEFORE any `client.publish()` or
-/// `client.subscribe()` call. Without this pump running, all client operations block
-/// indefinitely (see research pitfall 2).
-///
-/// On every `Connected` event, re-subscribes to the device config topic. This handles
-/// broker restarts where session state is lost (see research pitfall 4).
-pub fn pump_mqtt_events(
-    mut connection: EspMqttConnection,
-    client: Arc<Mutex<EspMqttClient<'static>>>,
-    device_id: String,
-) -> ! {
+/// On every `Connected` event, sends a signal through `subscribe_tx` so that the
+/// subscriber thread can (re-)subscribe. The pump itself NEVER calls any client method —
+/// doing so would deadlock because the C MQTT task holds its internal mutex while
+/// dispatching the event callback (see research pitfall 2).
+pub fn pump_mqtt_events(mut connection: EspMqttConnection, subscribe_tx: Sender<()>) -> ! {
     while let Ok(event) = connection.next() {
         match event.payload() {
             EventPayload::Connected(_) => {
-                log::info!("MQTT connected — re-subscribing");
-                if let Ok(mut c) = client.lock() {
-                    let topic = format!("gnss/{}/config", device_id);
-                    let _ = c.subscribe(&topic, QoS::AtLeastOnce);
-                }
+                log::info!("MQTT connected");
+                let _ = subscribe_tx.send(());
             }
             EventPayload::Disconnected => {
                 log::warn!("MQTT disconnected");
@@ -83,13 +76,42 @@ pub fn pump_mqtt_events(
             EventPayload::Error(e) => {
                 log::error!("MQTT error: {:?}", e);
             }
-            _ => {}
+            m @ _ => {
+                log::warn!("Unhandled message: {:?}", m);
+            }
         }
     }
 
     // Connection closed — should not happen in normal operation.
-    // Loop forever to keep the thread alive rather than returning.
     log::error!("MQTT pump exited — connection closed");
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(60));
+    }
+}
+
+/// Subscribe to the device config topic on every Connected signal from the pump.
+///
+/// By the time this thread receives a signal, the pump has already called
+/// `connection.next()` again, which releases the C MQTT internal mutex — so
+/// `subscribe()` here is safe (no deadlock).
+///
+/// Handles both initial connection and broker restarts (CONN-04).
+pub fn subscriber_loop(
+    client: Arc<Mutex<EspMqttClient<'static>>>,
+    device_id: String,
+    subscribe_rx: Receiver<()>,
+) -> ! {
+    let topic = format!("gnss/{}/config", device_id);
+    for () in &subscribe_rx {
+        match client.lock() {
+            Err(e) => log::warn!("Subscriber mutex poisoned: {:?}", e),
+            Ok(mut c) => match c.subscribe(&topic, QoS::AtLeastOnce) {
+                Ok(_) => log::info!("Subscribed to {}", topic),
+                Err(e) => log::warn!("Subscribe failed: {:?}", e),
+            },
+        }
+    }
+    log::error!("Subscriber channel closed");
     loop {
         std::thread::sleep(std::time::Duration::from_secs(60));
     }
@@ -107,18 +129,22 @@ pub fn heartbeat_loop(
     device_id: String,
 ) -> ! {
     let topic = format!("gnss/{}/heartbeat", device_id);
+    log::info!("Heartbeat thread started, topic: {}", topic);
 
     // Initial delay — give MQTT time to fully connect before first heartbeat.
     std::thread::sleep(std::time::Duration::from_secs(5));
 
     loop {
-        std::thread::sleep(std::time::Duration::from_secs(30));
+        log::info!("Heartbeat attempting publish...");
 
-        // Use if-let to avoid panicking on mutex poison.
-        if let Ok(mut c) = client.lock() {
-            if let Err(e) = c.publish(&topic, QoS::AtMostOnce, true, b"online") {
-                log::warn!("Heartbeat publish failed: {:?}", e);
-            }
+        match client.lock() {
+            Err(e) => log::warn!("Heartbeat mutex poisoned: {:?}", e),
+            Ok(mut c) =>  match c.enqueue(&topic, QoS::AtMostOnce, true, b"online") {
+                Ok(_) => log::info!("Heartbeat published to {}", topic),
+                Err(e) => log::warn!("Heartbeat publish failed: {:?}", e),
+            },
         }
+
+        std::thread::sleep(std::time::Duration::from_secs(30));
     }
 }

@@ -8,7 +8,7 @@ rustflags = ["--cfg", "espidf_time64"]
 
 [unstable]
 build-std = ["std", "panic_abort"]
-build-std-features = ["panic_immediate_abort"]
+build-std-features = []
 
 [env]
 MCU = "esp32c6"

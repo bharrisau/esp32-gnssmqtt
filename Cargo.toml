@@ -1,3 +1,5 @@
+cargo-features = ["panic-immediate-abort"]
+
 [package]
 name = "esp32-gnssmqtt"
 version = "0.1.0"
@@ -7,6 +9,7 @@ rust-version = "1.77"
 [dependencies]
 log = "0.4"
 anyhow = "1"
+embedded-svc = "=0.28.1"
 esp-idf-svc = { version = "=0.51.0", features = [] }
 esp-idf-hal = "=0.45.2"
 esp-idf-sys = "=0.36.1"
@@ -16,7 +19,9 @@ embuild = "0.33"
 
 [profile.release]
 opt-level = "s"
+panic = "immediate-abort"
 
 [profile.dev]
 debug = true
 opt-level = "z"
+panic = "immediate-abort"

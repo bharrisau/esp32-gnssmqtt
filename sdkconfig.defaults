@@ -7,7 +7,7 @@ CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 
 # Use our custom partition table instead of the ESP-IDF default (single-app at 0x10000)
 CONFIG_PARTITION_TABLE_CUSTOM=y
-CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../../../../../partitions.csv"
 
 # Main task stack — Rust std requires significantly more than the default 3KB
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8000
@@ -15,6 +15,11 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=8000
 # FreeRTOS stack overflow detection — Method 2 (canary bytes at stack end)
 # Checks on every context switch; minimal performance overhead
 CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY=y
+
+# Console: USB-Serial-JTAG as primary console so stdin/stdout both go through
+# the USB-C port that espflash monitor connects to. Without this, stdin reads
+# go to UART0 (not connected on XIAO) and typing in the monitor has no effect.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
 # Log level: INFO (3)
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
