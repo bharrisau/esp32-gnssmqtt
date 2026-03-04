@@ -8,7 +8,8 @@
 //! 4. EspSystemEventLoop::take() — required by WiFi
 //! 5. EspDefaultNvsPartition::take() — required by WiFi
 //! 6. wifi::wifi_connect — WiFi BEFORE MQTT (IP required for TCP)
-//! 7. uart_bridge::spawn_bridge — UART bridge (independent, after WiFi)
+//! 7. gnss::spawn_gnss — GNSS pipeline (UART owner, RX + TX threads)
+//!    uart_bridge::spawn_bridge — stdin bridge → GNSS TX channel
 //! 8. mqtt::mqtt_connect — MQTT AFTER WiFi (TCP must be up)
 //! 9. Create subscribe_tx/rx channel
 //! 10. Spawn pump thread (signals subscriber on Connected)
@@ -27,6 +28,7 @@ use std::sync::atomic::AtomicU8;
 
 mod config;
 mod device_id;
+mod gnss;
 mod led;
 mod mqtt;
 mod uart_bridge;
@@ -80,13 +82,18 @@ fn main() {
         .expect("WiFi connect failed");
     log::info!("WiFi connected");
 
-    // Step 7: UART bridge (UM980 on UART0, GPIO16 TX / GPIO17 RX)
-    uart_bridge::spawn_bridge(
+    // Step 7: GNSS pipeline — exclusive UART ownership, RX + TX threads
+    let (gnss_cmd_tx, nmea_rx) = gnss::spawn_gnss(
         peripherals.uart0,
-        peripherals.pins.gpio16, // TX to UM980
-        peripherals.pins.gpio17, // RX from UM980
+        peripherals.pins.gpio16,  // TX line to UM980
+        peripherals.pins.gpio17,  // RX line from UM980
     )
-    .expect("UART bridge init failed");
+    .expect("GNSS init failed");
+    log::info!("GNSS pipeline started");
+
+    // stdin bridge: forwards typed commands to UM980 via GNSS TX channel
+    uart_bridge::spawn_bridge(gnss_cmd_tx.clone())
+        .expect("UART bridge init failed");
     log::info!("UART bridge started");
 
     // Step 8: MQTT — after WiFi (IP must be up)
@@ -126,8 +133,13 @@ fn main() {
         .spawn(move || wifi::wifi_supervisor(wifi, led_state_wifi))
         .expect("wifi supervisor spawn failed");
 
-    // Step 14: Main thread parks — all work is done in spawned threads
+    // Step 14: Main thread parks — all work is done in spawned threads.
+    // gnss_cmd_tx and nmea_rx are held here:
+    //   gnss_cmd_tx: Phase 6 will clone this to forward MQTT config commands to UM980
+    //   nmea_rx: Phase 5 will consume this to publish NMEA sentences to MQTT
     log::info!("All subsystems started — device operational");
+    let _gnss_cmd_tx = gnss_cmd_tx; // keep Sender alive — TX thread exits if all Senders drop
+    let _nmea_rx = nmea_rx;         // keep Receiver alive — Phase 5 will take this
     loop {
         std::thread::sleep(std::time::Duration::from_secs(60));
     }
