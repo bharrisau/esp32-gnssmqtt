@@ -23,6 +23,7 @@ use esp_idf_svc::nvs::EspDefaultNvsPartition;
 
 mod config;
 mod device_id;
+mod led;
 mod mqtt;
 mod uart_bridge;
 mod wifi;
