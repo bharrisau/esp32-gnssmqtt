@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-03-03T11:44:00Z"
+status: in_progress
+last_updated: "2026-03-04T00:00:00Z"
 progress:
   total_phases: 3
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real time, with zero-touch provisioning and remote reconfiguration of the GNSS module.
-**Current focus:** Phase 2 - Connectivity
+**Current focus:** Phase 3 - GNSS
 
 ## Current Position
 
-Phase: 2 of 3 (Connectivity) — IN PROGRESS
-Plan: 4 of 4 in phase 2 — IN PROGRESS (02-04 next)
-Status: Phase 2 in progress — wifi.rs done (02-01), mqtt.rs done (02-02), uart_bridge done (02-03), Plan 04 (human-verify) next
-Last activity: 2026-03-03 — Plan 02-01 complete: wifi.rs created with wifi_connect and wifi_supervisor (exponential backoff reconnect)
+Phase: 3 of 3 (GNSS) — NOT STARTED
+Plan: 1 of N in phase 3 — NEXT
+Status: Phase 2 COMPLETE — all CONN-01 through CONN-07 verified on hardware. WiFi + MQTT + UART bridge operational on device FFFEB5.
+Last activity: 2026-03-04 — Plan 02-04 complete: main.rs wired with all connectivity modules; all Phase 2 requirements verified on hardware
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████] 100% (Phase 2) — Phase 3 not yet planned
 
 ## Performance Metrics
 
@@ -41,11 +41,11 @@ Progress: [█████░░░░░] 50%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-scaffold | 2 | ~90min | ~45min |
-| 02-connectivity | 3 (so far) | ~14min | ~5min |
+| 02-connectivity | 4 | ~18min | ~5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~60min), 01-02 (~30min), 02-03 (~4min), 02-02 (~7min), 02-01 (~3min)
-- Trend: Phase 2 in progress — 3 of 4 plans done
+- Last 5 plans: 01-02 (~30min), 02-01 (~3min), 02-02 (~7min), 02-03 (~4min), 02-04 (~4min)
+- Trend: Phase 2 complete — 4 of 4 plans done, all CONN requirements hardware-verified
 
 *Updated after each plan completion*
 
@@ -69,12 +69,14 @@ Recent decisions affecting current work:
 - [01-02]: CONFIG_PARTITION_TABLE_CUSTOM=y and CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y required in sdkconfig.defaults
 - [01-02]: Windows build.rs must copy partitions.csv (no symlinks without Developer Mode)
 - [02-03]: Arc<UartDriver> used for thread-safe UART sharing — fallback is Arc<Mutex<UartDriver>> if UartDriver not Send
-- [02-03]: stdin()/stdout() used for USB CDC side — unverified for XIAO ESP32-C6 USB JTAG; Plan 04 checkpoint will confirm
+- [02-03]: stdin()/stdout() used for USB CDC side — VERIFIED working on XIAO ESP32-C6 USB JTAG in Plan 04 hardware test (CONN-07)
 - [02-03]: NON_BLOCK + 10ms sleep in UM980->USB poll thread avoids FreeRTOS watchdog trips
 - [02-02]: lwt_topic String declared before MqttClientConfiguration in same scope to satisfy LwtConfiguration<'a> lifetime
 - [02-02]: EspMqttConnection moved into pump thread; EspMqttClient in Arc<Mutex<>> — reconnect-aware pattern from esp-idf-svc
 - [02-02]: pump_mqtt_events returns ! (diverging); permanent sleep loop after connection.next() exits to keep thread alive
 - [02-02]: heartbeat uses client.publish() (blocking) from dedicated thread — acceptable because pump keeps outbox moving
+- [02-04]: UART bridge wired to uart0 GPIO16 (TX) / GPIO17 (RX) — plan showed uart1/gpio20/gpio21 but real XIAO ESP32-C6 hardware uses uart0/gpio16/gpio17
+- [02-04]: 3-thread MQTT (pump + subscriber_loop + heartbeat) preserved in main.rs — pump NEVER holds client reference, signals subscriber via mpsc channel
 - [02-01]: wifi.start() called only once in wifi_connect — never in supervisor loop (re-init would corrupt driver state)
 - [02-01]: 5-second poll sleep is outer loop sleep; backoff sleep placed before wifi.connect() — ensures wait before every reconnect attempt
 - [02-01]: wait_netif_up() called on reconnect success before resetting backoff — ensures IP assigned before declaring success
@@ -92,6 +94,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-03
-Stopped at: Completed 02-01-PLAN.md (wifi.rs created: wifi_connect + wifi_supervisor with exponential backoff reconnect)
-Resume file: .planning/phases/02-connectivity/02-04-PLAN.md (human-verify checkpoint — wire main.rs, cargo build, flash + test full connectivity stack)
+Last session: 2026-03-04
+Stopped at: Completed 02-04-PLAN.md — Phase 2 COMPLETE. main.rs wired with WiFi + MQTT + UART bridge; all CONN-01 through CONN-07 verified on hardware.
+Resume file: .planning/phases/03-gnss/ (Phase 3 planning not yet started — run /gsd:plan-phase for Phase 3)

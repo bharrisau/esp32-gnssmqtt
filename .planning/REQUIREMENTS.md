@@ -93,4 +93,4 @@ Milestone 2: GNSS relay — UART pipeline, NMEA-to-MQTT publishing, and remote U
 
 ---
 *Requirements defined: 2026-03-03*
-*Last updated: 2026-03-03 after 02-02 completion (CONN-02, CONN-04, CONN-05, CONN-06 marked complete — src/mqtt.rs implemented)*
+*Last updated: 2026-03-04 after 02-04 completion (all CONN-01 through CONN-07 hardware-verified; Phase 2 complete)*

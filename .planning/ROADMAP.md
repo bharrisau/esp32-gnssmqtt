@@ -13,7 +13,7 @@ Milestone 1 (Foundation) builds the full working skeleton of the ESP32-C6 firmwa
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Scaffold** - Version-pinned project that compiles for ESP32-C6, flashes via espflash, and provides a stable device ID
-- [ ] **Phase 2: Connectivity** - Device connects to WiFi and MQTT with hardcoded credentials, publishes heartbeat, reconnects automatically, and bridges USB debug to UM980
+- [x] **Phase 2: Connectivity** - Device connects to WiFi and MQTT with hardcoded credentials, publishes heartbeat, reconnects automatically, and bridges USB debug to UM980
 - [ ] **Phase 3: Status LED** - LED reflects connectivity state with distinct blink patterns for connecting, connected, and error states
 
 ## Phase Details
@@ -49,7 +49,7 @@ Plans:
 - [x] 02-01-PLAN.md — Populate config.rs credentials + create src/wifi.rs (connect + reconnect supervisor) (CONN-01, CONN-03)
 - [x] 02-02-PLAN.md — Create src/mqtt.rs (LWT, pump thread, heartbeat) (CONN-02, CONN-04, CONN-05, CONN-06)
 - [x] 02-03-PLAN.md — Create src/uart_bridge.rs (UART0/USB CDC <-> UART1/UM980 bridge) (CONN-07)
-- [ ] 02-04-PLAN.md — Wire main.rs, cargo build, flash + hardware verification checkpoint (all CONN)
+- [x] 02-04-PLAN.md — Wire main.rs, cargo build, flash + hardware verification checkpoint (all CONN)
 
 ### Phase 3: Status LED
 **Goal**: The status LED communicates connectivity state through distinct blink patterns, giving an operator standing next to the device clear visual feedback without needing a serial monitor
@@ -70,5 +70,5 @@ Phases execute in numeric order: 1 → 2 → 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scaffold | 2/2 | Complete | 2026-03-03 |
-| 2. Connectivity | 3/4 | In Progress|  |
+| 2. Connectivity | 4/4 | Complete | 2026-03-04 |
 | 3. Status LED | 0/TBD | Not started | - |
