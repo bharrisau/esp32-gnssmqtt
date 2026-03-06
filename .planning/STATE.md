@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: GNSS Relay
 status: verifying
-stopped_at: Completed 04-01-PLAN.md — src/gnss.rs UART hub created with spawn_gnss, RX/TX threads
-last_updated: "2026-03-04T12:43:27.010Z"
+stopped_at: Completed 04-02 tasks 1-2 — awaiting hardware verification at Task 3 checkpoint
+last_updated: "2026-03-06T13:17:12.979Z"
 last_activity: "2026-03-04 — Plan 02-04 complete: main.rs wired with all connectivity modules; all Phase 2 requirements verified on hardware"
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
   percent: 100
 ---
 
@@ -55,6 +55,7 @@ Progress: [██████████] 100% (Phase 2) — Phase 3 not yet pl
 | Phase 03-status-led P03-02 | 10 | 2 tasks | 2 files |
 | Phase 03-status-led P03-03 | 15 | 2 tasks | 0 files |
 | Phase 04-uart-pipeline P01 | 2 | 1 tasks | 1 files |
+| Phase 04-uart-pipeline P02 | 5 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,9 @@ Recent decisions affecting current work:
 - [Phase 03-status-led]: LED-03 error burst accepted via code inspection + WiFi reconnect test — triggering 3x max-backoff on hardware requires sustained AP disable (~3 min) which was not performed
 - [Phase 04-uart-pipeline]: Arc<UartDriver> chosen over Arc<Mutex<UartDriver>> for GNSS thread sharing — read/write take &self, no Mutex needed
 - [Phase 04-uart-pipeline]: 512-byte line_buf in RX thread covers UM980 proprietary sentences exceeding standard 82-byte NMEA limit
+- [Phase 04-uart-pipeline]: uart_bridge refactored to Sender<String> parameter — UART ownership exclusively in gnss.rs
+- [Phase 04-uart-pipeline]: gnss_cmd_tx.clone() to uart_bridge, original retained in main.rs for Phase 6
+- [Phase 04-uart-pipeline]: Explicit _gnss_cmd_tx and _nmea_rx bindings in idle loop document Phase 5/6 handoff points
 
 ### Pending Todos
 
@@ -109,6 +113,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T12:43:27.006Z
-Stopped at: Completed 04-01-PLAN.md — src/gnss.rs UART hub created with spawn_gnss, RX/TX threads
+Last session: 2026-03-06T13:17:12.974Z
+Stopped at: Completed 04-02 tasks 1-2 — awaiting hardware verification at Task 3 checkpoint
 Resume file: None
