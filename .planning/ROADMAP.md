@@ -33,6 +33,11 @@ Archive: `.planning/milestones/v1.0-ROADMAP.md`
     - [ ] 05-01-PLAN.md — Switch gnss.rs to sync_channel(64) with try_send, create src/nmea_relay.rs with spawn_relay()
     - [ ] 05-02-PLAN.md — Wire nmea_relay into main.rs Step 14 + hardware verification on device FFFEB5
 - [ ] Phase 6: Remote Config — subscribe to `gnss/{device_id}/config`, forward commands to UM980 (CONF-01 through CONF-03)
+  - **Goal:** Subscribe to `gnss/{device_id}/config` (QoS 1), parse payload (JSON or plain text), apply hash deduplication, and forward each command line-by-line to the UM980 via gnss_cmd_tx with a configurable per-command delay.
+  - **Plans:** 2 plans
+  - Plans:
+    - [ ] 06-01-PLAN.md — Create src/config_relay.rs (spawn_config_relay, djb2 hash, payload parser) + extend pump_mqtt_events with config_tx routing
+    - [ ] 06-02-PLAN.md — Wire config relay into main.rs Step 15 + hardware verification on device FFFEB5
 
 ## Progress
 
@@ -43,4 +48,4 @@ Archive: `.planning/milestones/v1.0-ROADMAP.md`
 | 3. Status LED | v1.0 | 3/3 | Complete | 2026-03-04 |
 | 4. UART Pipeline | v1.1 | 2/2 | Complete | 2026-03-06 |
 | 5. NMEA Relay | 1/2 | In Progress|  | — |
-| 6. Remote Config | v1.1 | 0/? | Not started | — |
+| 6. Remote Config | v1.1 | 0/2 | Not started | — |
