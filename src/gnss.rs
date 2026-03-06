@@ -8,7 +8,7 @@
 //!   into complete NMEA sentences (newline-terminated), mirrors every raw
 //!   sentence to `stdout` for `espflash monitor` visibility, and forwards a
 //!   `(sentence_type, raw_sentence)` tuple to the caller via an
-//!   `mpsc::Sender<(String, String)>`.
+//!   `mpsc::SyncSender<(String, String)>` (bounded, 64 slots).
 //!
 //! * **TX thread** — blocks on an `mpsc::Receiver<String>` and writes each
 //!   received command line to the UART followed by `\r\n` (UM980 protocol
@@ -26,7 +26,7 @@ use esp_idf_svc::hal::uart::{config::Config, Uart, UartDriver};
 use esp_idf_svc::hal::units::Hertz;
 use std::io::Write;
 use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, Sender, TrySendError};
 
 /// Spawn the GNSS UART hub.
 ///
@@ -61,7 +61,8 @@ pub fn spawn_gnss(
     let uart = Arc::new(uart);
 
     // Channel: NMEA sentences from RX thread to caller (Phase 5 consumer).
-    let (nmea_tx, nmea_rx) = mpsc::channel::<(String, String)>();
+    // Bounded to 64 so the RX thread can drop sentences without blocking UART reads.
+    let (nmea_tx, nmea_rx) = mpsc::sync_channel::<(String, String)>(64);
 
     // Channel: command strings from caller to TX thread.
     let (cmd_tx, cmd_rx) = mpsc::channel::<String>();
@@ -104,7 +105,15 @@ pub fn spawn_gnss(
                                             .next()
                                             .unwrap_or("UNKNOWN")
                                             .to_string();
-                                        let _ = nmea_tx.send((sentence_type, s.to_string()));
+                                        match nmea_tx.try_send((sentence_type, s.to_string())) {
+                                            Ok(_) => {}
+                                            Err(TrySendError::Full(_)) => {
+                                                log::warn!("NMEA: relay channel full — sentence dropped");
+                                            }
+                                            Err(TrySendError::Disconnected(_)) => {
+                                                log::error!("NMEA: relay channel disconnected");
+                                            }
+                                        }
                                     }
                                 } else if end > 0 {
                                     // Non-NMEA, non-empty line — log and drop.
