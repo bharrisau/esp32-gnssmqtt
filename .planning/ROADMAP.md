@@ -42,5 +42,5 @@ Archive: `.planning/milestones/v1.0-ROADMAP.md`
 | 2. Connectivity | v1.0 | 4/4 | Complete | 2026-03-04 |
 | 3. Status LED | v1.0 | 3/3 | Complete | 2026-03-04 |
 | 4. UART Pipeline | v1.1 | 2/2 | Complete | 2026-03-06 |
-| 5. NMEA Relay | v1.1 | 0/2 | Planned | — |
+| 5. NMEA Relay | 1/2 | In Progress|  | — |
 | 6. Remote Config | v1.1 | 0/? | Not started | — |

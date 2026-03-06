@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: GNSS Relay
-status: complete
-stopped_at: Completed 04-02-PLAN.md — hardware verification approved, SUMMARY.md updated
-last_updated: "2026-03-07T00:00:00Z"
-last_activity: "2026-03-07 — Plan 04-02 complete: full UART pipeline hardware-verified on device FFFEB5; UART-01/02/03 confirmed"
+status: verifying
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-06T22:43:56.844Z"
+last_activity: "2026-03-07 — Plan 04-02 complete: uart_bridge refactored TX-only, main.rs wired to gnss::spawn_gnss, hardware-verified"
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 4
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 13
+  completed_plans: 12
   percent: 100
 ---
 
@@ -56,6 +56,7 @@ Progress: [██████████] 100% (Phase 2) — Phase 3 not yet pl
 | Phase 03-status-led P03-03 | 15 | 2 tasks | 0 files |
 | Phase 04-uart-pipeline P01 | 2 | 1 tasks | 1 files |
 | Phase 04-uart-pipeline P02 | 5 | 2 tasks | 2 files |
+| Phase 05-nmea-relay P01 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,9 @@ Recent decisions affecting current work:
 - [Phase 04-uart-pipeline]: uart_bridge refactored to Sender<String> parameter — UART ownership exclusively in gnss.rs
 - [Phase 04-uart-pipeline]: gnss_cmd_tx.clone() to uart_bridge, original retained in main.rs for Phase 6
 - [Phase 04-uart-pipeline]: Explicit _gnss_cmd_tx and _nmea_rx bindings in idle loop document Phase 5/6 handoff points
+- [Phase 05-nmea-relay]: sync_channel(64) chosen over unbounded channel — RX thread must not block on UART reads when relay is slow
+- [Phase 05-nmea-relay]: QoS::AtMostOnce (QoS 0) / retain=false for NMEA relay — real-time sentences, retransmission of stale positions is harmful
+- [Phase 05-nmea-relay]: Mutex acquired per-sentence in nmea_relay — released each iteration to prevent heartbeat/subscriber thread starvation at 10+ Hz
 
 ### Pending Todos
 
@@ -113,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-06T21:59:05.482Z
-Stopped at: Completed 04-02-PLAN.md — hardware verification approved, SUMMARY.md updated
+Last session: 2026-03-06T22:43:56.840Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
