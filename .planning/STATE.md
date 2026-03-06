@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: GNSS Relay
 status: verifying
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-03-06T23:05:26.935Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-06T23:33:16.513Z"
 last_activity: "2026-03-07 — Plan 04-02 complete: uart_bridge refactored TX-only, main.rs wired to gnss::spawn_gnss, hardware-verified"
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 5
-  total_plans: 13
-  completed_plans: 13
+  total_plans: 15
+  completed_plans: 14
   percent: 100
 ---
 
@@ -58,6 +58,7 @@ Progress: [██████████] 100% (Phase 2) — Phase 3 not yet pl
 | Phase 04-uart-pipeline P02 | 5 | 2 tasks | 2 files |
 | Phase 05-nmea-relay P01 | 2 | 2 tasks | 2 files |
 | Phase 05-nmea-relay P02 | 10 | 2 tasks | 1 files |
+| Phase 06-remote-config P01 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,7 @@ Recent decisions affecting current work:
 - [Phase 05-nmea-relay]: Mutex acquired per-sentence in nmea_relay — released each iteration to prevent heartbeat/subscriber thread starvation at 10+ Hz
 - [Phase 05-nmea-relay]: nmea_rx moved into spawn_relay at Step 14 — placeholder _nmea_rx removed, compiler enforces single consumer
 - [Phase 05-nmea-relay]: Hardware tested at 10 msg/sec — sync_channel(64) sufficient, no relay channel full warnings at normal UM980 NMEA output rate
+- [Phase 06-remote-config]: djb2 hash chosen for payload deduplication — non-cryptographic, adequate for retained MQTT messages; 100ms default per-command delay overridable via delay_ms JSON field; gnss_cmd_tx send failure logs + abandons (no panic)
 
 ### Pending Todos
 
@@ -120,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-06T22:57:36.869Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-03-06T23:33:16.510Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None
