@@ -16,7 +16,8 @@
 //! 11. Spawn subscriber thread (subscribes on Connected signal)
 //! 12. Spawn heartbeat thread
 //! 13. Spawn wifi supervisor thread
-//! 14. Main thread: idle loop
+//! 14. NMEA relay: spawn_relay(mqtt_client clone, device_id clone, nmea_rx)
+//! 15. Config relay: spawn_config_relay(gnss_cmd_tx clone, config_rx)
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::gpio::PinDriver;
@@ -31,6 +32,7 @@ mod device_id;
 mod gnss;
 mod led;
 mod mqtt;
+mod config_relay;
 mod nmea_relay;
 mod uart_bridge;
 mod wifi;
@@ -106,10 +108,13 @@ fn main() {
     // Step 9: mpsc channel — pump signals subscriber on every Connected event
     let (subscribe_tx, subscribe_rx) = std::sync::mpsc::channel::<()>();
 
+    // Step 9b: Config relay channel — pump sends received MQTT payloads here
+    let (config_tx, config_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+
     // Step 10: Pump thread — drives connection.next(), never touches client
     std::thread::Builder::new()
         .stack_size(8192)
-        .spawn(move || mqtt::pump_mqtt_events(mqtt_connection, subscribe_tx, led_state_mqtt))
+        .spawn(move || mqtt::pump_mqtt_events(mqtt_connection, subscribe_tx, config_tx, led_state_mqtt))
         .expect("pump thread spawn failed");
 
     // Step 11: Subscriber thread — subscribes on Connected (initial + broker restart)
@@ -140,6 +145,12 @@ fn main() {
     nmea_relay::spawn_relay(mqtt_client.clone(), device_id.clone(), nmea_rx)
         .expect("NMEA relay thread spawn failed");
     log::info!("NMEA relay started");
+
+    // Step 15: Config relay — receives MQTT config payloads from pump, forwards to UM980 via gnss_cmd_tx.
+    // gnss_cmd_tx.clone() is passed here; the original is kept alive in the idle loop below.
+    config_relay::spawn_config_relay(gnss_cmd_tx.clone(), config_rx)
+        .expect("Config relay thread spawn failed");
+    log::info!("Config relay started");
 
     log::info!("All subsystems started — device operational");
     let _gnss_cmd_tx = gnss_cmd_tx; // keep Sender alive — TX thread exits if all Senders drop
