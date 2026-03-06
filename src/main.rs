@@ -31,6 +31,7 @@ mod device_id;
 mod gnss;
 mod led;
 mod mqtt;
+mod nmea_relay;
 mod uart_bridge;
 mod wifi;
 
@@ -133,13 +134,15 @@ fn main() {
         .spawn(move || wifi::wifi_supervisor(wifi, led_state_wifi))
         .expect("wifi supervisor spawn failed");
 
-    // Step 14: Main thread parks — all work is done in spawned threads.
-    // gnss_cmd_tx and nmea_rx are held here:
-    //   gnss_cmd_tx: Phase 6 will clone this to forward MQTT config commands to UM980
-    //   nmea_rx: Phase 5 will consume this to publish NMEA sentences to MQTT
+    // Step 14: NMEA relay — consumes nmea_rx, publishes each sentence to MQTT.
+    // nmea_rx is moved into spawn_relay — do NOT retain a reference here.
+    // gnss_cmd_tx is kept alive here; Phase 6 will clone it for MQTT config forwarding.
+    nmea_relay::spawn_relay(mqtt_client.clone(), device_id.clone(), nmea_rx)
+        .expect("NMEA relay thread spawn failed");
+    log::info!("NMEA relay started");
+
     log::info!("All subsystems started — device operational");
     let _gnss_cmd_tx = gnss_cmd_tx; // keep Sender alive — TX thread exits if all Senders drop
-    let _nmea_rx = nmea_rx;         // keep Receiver alive — Phase 5 will take this
     loop {
         std::thread::sleep(std::time::Duration::from_secs(60));
     }
