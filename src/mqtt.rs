@@ -65,12 +65,16 @@ pub fn mqtt_connect(
 /// sends a signal through `subscribe_tx` so that the subscriber thread can (re-)subscribe.
 /// On `Disconnected`, writes LedState::Connecting.
 ///
+/// On `Received`, copies `data` to a Vec and sends it through `config_tx` to the config
+/// relay thread. Using an mpsc channel send here is safe — it is NOT a client method call.
+///
 /// The pump itself NEVER calls any client method — doing so would deadlock because the
 /// C MQTT task holds its internal mutex while dispatching the event callback (see research
-/// pitfall 2). Atomic stores are NOT client method calls and are safe here.
+/// pitfall 2). Atomic stores and mpsc sends are NOT client method calls and are safe here.
 pub fn pump_mqtt_events(
     mut connection: EspMqttConnection,
     subscribe_tx: Sender<()>,
+    config_tx: Sender<Vec<u8>>,   // NEW — routes received payloads to config relay
     led_state: Arc<AtomicU8>,
 ) -> ! {
     while let Ok(event) = connection.next() {
@@ -86,6 +90,13 @@ pub fn pump_mqtt_events(
             }
             EventPayload::Error(e) => {
                 log::error!("MQTT error: {:?}", e);
+            }
+            EventPayload::Received { data, .. } => {
+                // data: &[u8] — MUST copy before this arm returns; MQTT stack reuses buffer
+                match config_tx.send(data.to_vec()) {
+                    Ok(_) => {}
+                    Err(e) => log::warn!("Config relay channel closed: {:?}", e),
+                }
             }
             m @ _ => {
                 log::warn!("Unhandled message: {:?}", m);
