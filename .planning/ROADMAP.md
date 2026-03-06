@@ -27,6 +27,11 @@ Archive: `.planning/milestones/v1.0-ROADMAP.md`
     - [ ] 04-01-PLAN.md — Create gnss.rs: exclusive UartDriver owner with RX thread (sentence assembly + stdout mirror) and TX thread (command write)
     - [ ] 04-02-PLAN.md — Refactor uart_bridge.rs to TX-only + wire main.rs Step 7 with gnss::spawn_gnss
 - [ ] Phase 5: NMEA Relay — publish each sentence type to `gnss/{device_id}/nmea/{TYPE}` (NMEA-01, NMEA-02)
+  - **Goal:** Consume (sentence_type, raw_sentence) tuples from gnss::spawn_gnss and publish each sentence's raw bytes to MQTT topic gnss/{device_id}/nmea/{sentence_type} at QoS 0 with a bounded 64-sentence channel.
+  - **Plans:** 2 plans
+  - Plans:
+    - [ ] 05-01-PLAN.md — Switch gnss.rs to sync_channel(64) with try_send, create src/nmea_relay.rs with spawn_relay()
+    - [ ] 05-02-PLAN.md — Wire nmea_relay into main.rs Step 14 + hardware verification on device FFFEB5
 - [ ] Phase 6: Remote Config — subscribe to `gnss/{device_id}/config`, forward commands to UM980 (CONF-01 through CONF-03)
 
 ## Progress
@@ -36,6 +41,6 @@ Archive: `.planning/milestones/v1.0-ROADMAP.md`
 | 1. Scaffold | v1.0 | 2/2 | Complete | 2026-03-03 |
 | 2. Connectivity | v1.0 | 4/4 | Complete | 2026-03-04 |
 | 3. Status LED | v1.0 | 3/3 | Complete | 2026-03-04 |
-| 4. UART Pipeline | 2/2 | Complete   | 2026-03-06 | — |
-| 5. NMEA Relay | v1.1 | 0/? | Not started | — |
+| 4. UART Pipeline | v1.1 | 2/2 | Complete | 2026-03-06 |
+| 5. NMEA Relay | v1.1 | 0/2 | Planned | — |
 | 6. Remote Config | v1.1 | 0/? | Not started | — |
