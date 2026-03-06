@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: GNSS Relay
-status: verifying
-stopped_at: Completed 04-02 tasks 1-2 — awaiting hardware verification at Task 3 checkpoint
-last_updated: "2026-03-06T13:17:12.979Z"
-last_activity: "2026-03-04 — Plan 02-04 complete: main.rs wired with all connectivity modules; all Phase 2 requirements verified on hardware"
+status: complete
+stopped_at: Completed 04-02-PLAN.md — hardware verification approved, SUMMARY.md updated
+last_updated: "2026-03-07T00:00:00Z"
+last_activity: "2026-03-07 — Plan 04-02 complete: full UART pipeline hardware-verified on device FFFEB5; UART-01/02/03 confirmed"
 progress:
   total_phases: 4
   completed_phases: 4
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 ## Current Position
 
-Phase: 3 of 3 (GNSS) — NOT STARTED
-Plan: 1 of N in phase 3 — NEXT
-Status: Phase 2 COMPLETE — all CONN-01 through CONN-07 verified on hardware. WiFi + MQTT + UART bridge operational on device FFFEB5.
-Last activity: 2026-03-04 — Plan 02-04 complete: main.rs wired with all connectivity modules; all Phase 2 requirements verified on hardware
+Phase: 4 of 4 (04-uart-pipeline) — COMPLETE
+Plan: 2 of 2 in phase 04 — COMPLETE
+Status: Phase 04 COMPLETE — all UART-01 through UART-03 verified on hardware. Full GNSS UART pipeline operational on device FFFEB5.
+Last activity: 2026-03-07 — Plan 04-02 complete: uart_bridge refactored TX-only, main.rs wired to gnss::spawn_gnss, hardware-verified
 
 Progress: [██████████] 100% (Phase 2) — Phase 3 not yet planned
 
@@ -113,6 +113,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-06T13:17:12.974Z
-Stopped at: Completed 04-02 tasks 1-2 — awaiting hardware verification at Task 3 checkpoint
+Last session: 2026-03-06T21:59:05.482Z
+Stopped at: Completed 04-02-PLAN.md — hardware verification approved, SUMMARY.md updated
 Resume file: None
