@@ -4,7 +4,7 @@ milestone: v1.1
 milestone_name: GNSS Relay
 status: verifying
 stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-03-06T22:57:36.873Z"
+last_updated: "2026-03-06T23:05:26.935Z"
 last_activity: "2026-03-07 — Plan 04-02 complete: uart_bridge refactored TX-only, main.rs wired to gnss::spawn_gnss, hardware-verified"
 progress:
   total_phases: 5
