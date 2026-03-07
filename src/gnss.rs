@@ -46,6 +46,12 @@ pub type RtcmFrame = (u16, Box<[u8; 1029]>, usize);
 enum RxState {
     Idle,
     NmeaLine { buf: [u8; 512], len: usize },
+    // UM980 query responses: begin with '#', end with NMEA-style checksum + \r\n.
+    // Forwarded to nmea_tx as ("response", raw) → MQTT gnss/{id}/nmea/response.
+    HashLine { buf: [u8; 512], len: usize },
+    // Free-text output that is neither NMEA ('$'), query response ('#'), nor RTCM (0xD3).
+    // Mirrored to stdout only.
+    FreeLine { buf: [u8; 512], len: usize },
     RtcmHeader { buf: [u8; 3], len: usize },
     // PITFALL: [u8; 1029] on stack risks overflow at 8192 stack size.
     // Use Box<[u8; 1029]> to heap-allocate once. Stack frame is 256 (read_buf)
@@ -189,8 +195,18 @@ pub fn spawn_gnss(
                                         RxState::NmeaLine { buf, len: 1 }
                                     } else if byte == 0xD3 {
                                         RxState::RtcmHeader { buf: [0xD3, 0, 0], len: 1 }
+                                    } else if byte == b'#' {
+                                        // UM980 query response line
+                                        let mut buf = [0u8; 512];
+                                        buf[0] = b'#';
+                                        RxState::HashLine { buf, len: 1 }
+                                    } else if byte == b'\r' || byte == b'\n' {
+                                        RxState::Idle // bare line endings between responses: skip
                                     } else {
-                                        RxState::Idle // non-frame byte: stay idle (resync)
+                                        // Other free-text (version banners, etc.) — stdout only
+                                        let mut buf = [0u8; 512];
+                                        buf[0] = byte;
+                                        RxState::FreeLine { buf, len: 1 }
                                     }
                                 }
 
@@ -236,6 +252,59 @@ pub fn spawn_gnss(
                                         RxState::NmeaLine { buf, len }
                                     } else {
                                         log::warn!("GNSS: NMEA line buffer overflow, discarding");
+                                        RxState::Idle
+                                    }
+                                }
+
+                                RxState::HashLine { mut buf, mut len } => {
+                                    if byte == b'\n' {
+                                        let end = if len > 0 && buf[len - 1] == b'\r' { len - 1 } else { len };
+                                        if end > 0 {
+                                            let _ = std::io::stdout().write_all(&buf[..end]);
+                                            let _ = std::io::stdout().write_all(b"\n");
+                                            if let Ok(s) = std::str::from_utf8(&buf[..end]) {
+                                                match nmea_tx.try_send(("response".to_string(), s.to_string())) {
+                                                    Ok(_) => {}
+                                                    Err(TrySendError::Full(_)) => {
+                                                        NMEA_DROPS.fetch_add(1, Ordering::Relaxed);
+                                                        log::warn!("GNSS: query response channel full — dropped");
+                                                    }
+                                                    Err(TrySendError::Disconnected(_)) => {
+                                                        log::error!("GNSS: query response channel disconnected");
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        RxState::Idle
+                                    } else if len < buf.len() {
+                                        buf[len] = byte;
+                                        len += 1;
+                                        RxState::HashLine { buf, len }
+                                    } else {
+                                        log::warn!("GNSS: query response buffer overflow, discarding");
+                                        RxState::Idle
+                                    }
+                                }
+
+                                RxState::FreeLine { mut buf, mut len } => {
+                                    if byte == b'\n' {
+                                        // Strip trailing \r if present
+                                        let end = if len > 0 && buf[len - 1] == b'\r' {
+                                            len - 1
+                                        } else {
+                                            len
+                                        };
+                                        if end > 0 {
+                                            let _ = std::io::stdout().write_all(&buf[..end]);
+                                            let _ = std::io::stdout().write_all(b"\n");
+                                        }
+                                        RxState::Idle
+                                    } else if len < buf.len() {
+                                        buf[len] = byte;
+                                        len += 1;
+                                        RxState::FreeLine { buf, len }
+                                    } else {
+                                        log::warn!("GNSS: free-text line buffer overflow, discarding");
                                         RxState::Idle
                                     }
                                 }
@@ -357,6 +426,7 @@ pub fn spawn_gnss(
             loop {
                 match cmd_rx.recv_timeout(crate::config::RELAY_RECV_TIMEOUT) {
                     Ok(line) => {
+                        log::info!("Send: {}", line);
                         if let Err(e) = uart_tx.write(line.as_bytes()) {
                             let n = UART_TX_ERRORS.fetch_add(1, Ordering::Relaxed) + 1;
                             log::warn!("GNSS TX: write error #{}: {:?}", n, e);
