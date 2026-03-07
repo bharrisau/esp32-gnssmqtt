@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Reliability Hardening
 status: completed
-stopped_at: Completed 10-01 (stack HWM log at all thread entry points)
-last_updated: "2026-03-07T11:18:49.002Z"
+stopped_at: Completed 10-02 (RTCM buffer pool; zero per-frame heap allocation)
+last_updated: "2026-03-07T11:24:45.421Z"
 last_activity: "2026-03-07 — 09-02 executed: recv_timeout loops on all 6 channels, WiFi consecutive_failures counter"
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 10
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -56,6 +56,7 @@ Key v1.3 decisions (Phase 9):
 - [Phase 09-02]: Timeout arm is no-op (continue) in all recv_timeout loops — Phase 11 will feed watchdog heartbeat counters here without structural changes
 - [Phase 09-02]: Dead-end park loop after break preserves -> ! semantics on all affected threads
 - [Phase 10-memory-diagnostics]: esp_idf_svc::sys full path for HWM calls — no new use imports needed, direct Cargo.toml dep accessible via full path in Rust 2021
+- [Phase 10-memory-diagnostics]: RTCM_POOL_SIZE=4 buffers (4116 bytes) allocated once at spawn_gnss init; pool exhaustion drops frame with warn log; buffer returned on all error paths
 
 ### Pending Todos
 
@@ -68,7 +69,7 @@ Key v1.3 decisions (Phase 9):
 
 ## Session Continuity
 
-Last session: 2026-03-07T11:18:48.998Z
-Stopped at: Completed 10-01 (stack HWM log at all thread entry points)
+Last session: 2026-03-07T11:24:45.417Z
+Stopped at: Completed 10-02 (RTCM buffer pool; zero per-frame heap allocation)
 Resume file: None
 Next action: `/gsd:execute-phase <next-phase>` — Phase 10 or as per ROADMAP.md

@@ -13,7 +13,7 @@
 
 ### Memory
 
-- [ ] **HARD-03**: RTCM frame delivery uses a pre-allocated buffer pool at startup; no per-frame `Vec` allocation in steady state
+- [x] **HARD-03**: RTCM frame delivery uses a pre-allocated buffer pool at startup; no per-frame `Vec` allocation in steady state
 
 ### Stack / Diagnostics
 
@@ -68,7 +68,7 @@
 | HARD-02 | Phase 9 | Complete (09-01) |
 | HARD-05 | Phase 9 | Complete (09-02) |
 | HARD-06 | Phase 9 | Complete (09-02) |
-| HARD-03 | Phase 10 | Pending |
+| HARD-03 | Phase 10 | Complete |
 | HARD-04 | Phase 10 | Complete |
 | WDT-01  | Phase 11 | Pending |
 | WDT-02  | Phase 11 | Pending |

@@ -42,7 +42,7 @@ Archive: `.planning/milestones/v1.1-ROADMAP.md`
 ### v1.3 Reliability Hardening
 
 - [x] **Phase 9: Channel + Loop Hardening** — Bound all channels, log UART TX errors, cap all loops and blocking receives (2 plans)
-- [ ] **Phase 10: Memory + Diagnostics** — Pre-allocate RTCM buffer pool; log stack HWM for all threads at startup
+- [x] **Phase 10: Memory + Diagnostics** — Pre-allocate RTCM buffer pool; log stack HWM for all threads at startup (completed 2026-03-07)
 - [ ] **Phase 11: Thread Watchdog** — Heartbeat counter fed by critical threads; supervisor reboots on missed beats
 - [ ] **Phase 12: Resilience** — Auto-reboot after extended WiFi disconnection or MQTT unavailability
 - [ ] **Phase 13: Health Telemetry** — Periodic MQTT status publish with uptime, heap, and drop counters
@@ -153,7 +153,7 @@ Plans:
 | 7. RTCM Relay | v1.2 | 3/3 | Complete | 2026-03-07 |
 | 8. OTA | v1.2 | 3/3 | Complete | 2026-03-07 |
 | 9. Channel + Loop Hardening | v1.3 | 2/2 | Complete | 2026-03-07 |
-| 10. Memory + Diagnostics | 1/2 | In Progress|  | - |
+| 10. Memory + Diagnostics | 2/2 | Complete   | 2026-03-07 | - |
 | 11. Thread Watchdog | v1.3 | 0/? | Not started | - |
 | 12. Resilience | v1.3 | 0/? | Not started | - |
 | 13. Health Telemetry | v1.3 | 0/? | Not started | - |
