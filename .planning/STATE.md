@@ -5,9 +5,9 @@ milestone_name: Reliability Hardening
 status: in_progress
 stopped_at: null
 last_updated: "2026-03-07T00:00:00.000Z"
-last_activity: 2026-03-07 — Milestone v1.3 started
+last_activity: 2026-03-07 — Roadmap created; 5 phases defined (9-13)
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Core value:** NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real time, with remote reconfiguration of the GNSS module via MQTT.
-**Current focus:** v1.3 Reliability Hardening — defining requirements
+**Current focus:** v1.3 Reliability Hardening — roadmap defined, ready to plan Phase 9
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 9 — Channel + Loop Hardening (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-03-07 — Milestone v1.3 started
+Status: Roadmap created; awaiting plan-phase
+Last activity: 2026-03-07 — Roadmap created (Phases 9-13)
+
+```
+v1.3 Progress: [          ] 0/5 phases complete
+```
 
 ## Accumulated Context
 
@@ -53,6 +57,6 @@ Key v1.2 decisions carried forward:
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Starting milestone v1.3 Reliability Hardening
+Stopped at: Roadmap created for v1.3 (Phases 9-13)
 Resume file: None
-Next action: Define requirements, create roadmap, then /gsd:plan-phase [N]
+Next action: `/gsd:plan-phase 9` — Channel + Loop Hardening (HARD-01, HARD-02, HARD-05, HARD-06)

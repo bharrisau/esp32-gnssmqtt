@@ -5,6 +5,7 @@
 - ✅ **v1.0 Foundation** — Phases 1-3 (shipped 2026-03-04)
 - ✅ **v1.1 GNSS Relay** — Phases 4-6 (shipped 2026-03-07)
 - ✅ **v1.2 Observations + OTA** — Phases 7-8 (shipped 2026-03-07)
+- 🔧 **v1.3 Reliability Hardening** — Phases 9-13 (in progress)
 
 ## Phases
 
@@ -38,6 +39,14 @@ Archive: `.planning/milestones/v1.1-ROADMAP.md`
 
 </details>
 
+### v1.3 Reliability Hardening
+
+- [ ] **Phase 9: Channel + Loop Hardening** — Bound all channels, log UART TX errors, cap all loops and blocking receives
+- [ ] **Phase 10: Memory + Diagnostics** — Pre-allocate RTCM buffer pool; log stack HWM for all threads at startup
+- [ ] **Phase 11: Thread Watchdog** — Heartbeat counter fed by critical threads; supervisor reboots on missed beats
+- [ ] **Phase 12: Resilience** — Auto-reboot after extended WiFi disconnection or MQTT unavailability
+- [ ] **Phase 13: Health Telemetry** — Periodic MQTT status publish with uptime, heap, and drop counters
+
 ## Phase Details
 
 ### Phase 7: RTCM Relay
@@ -52,9 +61,9 @@ Archive: `.planning/milestones/v1.1-ROADMAP.md`
 **Plans**: 3 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Fix mqtt.rs topic routing bug and bump MQTT output buffer to 2048 bytes
-- [ ] 07-02-PLAN.md — Replace gnss.rs line-buffer with RxState state machine; create rtcm_relay.rs
-- [ ] 07-03-PLAN.md — Wire rtcm_relay into main.rs; final compile integration
+- [x] 07-01-PLAN.md — Fix mqtt.rs topic routing bug and bump MQTT output buffer to 2048 bytes
+- [x] 07-02-PLAN.md — Replace gnss.rs line-buffer with RxState state machine; create rtcm_relay.rs
+- [x] 07-03-PLAN.md — Wire rtcm_relay into main.rs; final compile integration
 
 ### Phase 8: OTA
 **Goal**: An operator can remotely update firmware by publishing a URL to an MQTT topic; the device downloads, flashes, and reboots into new firmware with automatic rollback if the new firmware fails to confirm itself
@@ -68,9 +77,60 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Redesign partitions.csv for dual-slot OTA; add rollback + watchdog sdkconfig; add sha2 dependency
-- [ ] 08-02-PLAN.md — Implement src/ota.rs: HTTP download, SHA-256 verify, EspOta flash, status publish, restart
-- [ ] 08-03-PLAN.md — Wire ota into main.rs and mqtt.rs: mark_valid call, ota channel, trigger routing, subscription
+- [x] 08-01-PLAN.md — Redesign partitions.csv for dual-slot OTA; add rollback + watchdog sdkconfig; add sha2 dependency
+- [x] 08-02-PLAN.md — Implement src/ota.rs: HTTP download, SHA-256 verify, EspOta flash, status publish, restart
+- [x] 08-03-PLAN.md — Wire ota into main.rs and mqtt.rs: mark_valid call, ota channel, trigger routing, subscription
+
+### Phase 9: Channel + Loop Hardening
+**Goal**: All inter-thread communication channels have explicit, documented bounds; all loops and blocking calls have finite timeouts so the firmware cannot silently hang or spin forever
+**Depends on**: Phase 8 (v1.2 complete)
+**Requirements**: HARD-01, HARD-02, HARD-05, HARD-06
+**Success Criteria** (what must be TRUE):
+  1. Every `sync_channel` call in the codebase has a capacity value accompanied by a comment explaining the chosen size; no unbounded channels exist
+  2. A UART TX write failure emits a log message and increments a per-failure error counter rather than being silently discarded via `let _ = ...`
+  3. Every retry or init-sequence loop contains an explicit maximum iteration count or deadline; exceeding the limit logs an error and exits the loop cleanly rather than spinning indefinitely
+  4. Every blocking channel receive uses `recv_timeout()` with a documented duration; no unbounded `recv()` or `lock()` call exists on any hot-path thread
+**Plans**: TBD
+
+### Phase 10: Memory + Diagnostics
+**Goal**: RTCM frame delivery uses a pre-allocated buffer pool with zero per-frame heap allocation in steady state, and stack headroom for every thread is visible at startup
+**Depends on**: Phase 9
+**Requirements**: HARD-03, HARD-04
+**Success Criteria** (what must be TRUE):
+  1. At startup, the log shows a stack high-water mark (HWM) line for each spawned thread (GNSS RX, MQTT pump, NMEA relay, RTCM relay, config relay, watchdog supervisor, status publisher)
+  2. RTCM frame buffers are allocated once at init into a fixed-size pool; no `Vec::new()` or heap allocation occurs per received RTCM frame during normal relay operation
+  3. The pool exhaustion path (all buffers in use) drops the incoming frame and logs a warning rather than allocating dynamically or panicking
+**Plans**: TBD
+
+### Phase 11: Thread Watchdog
+**Goal**: Critical threads are supervised so that a silent hang — a thread that stops progressing without panicking — triggers an automatic device reboot
+**Depends on**: Phase 10
+**Requirements**: WDT-01, WDT-02
+**Success Criteria** (what must be TRUE):
+  1. GNSS RX thread and MQTT pump thread each update a shared atomic counter (or equivalent heartbeat) at intervals no greater than 5 seconds during normal operation
+  2. A watchdog supervisor thread detects when any critical thread has failed to update its heartbeat for 3 consecutive check intervals and calls `esp_restart()`
+  3. If the watchdog supervisor thread itself stops (e.g., due to a bug), the hardware watchdog timer (already configured in sdkconfig) eventually reboots the device
+**Plans**: TBD
+
+### Phase 12: Resilience
+**Goal**: The device recovers from extended connectivity loss without manual intervention by rebooting itself after configurable disconnection timeouts
+**Depends on**: Phase 11
+**Requirements**: RESIL-01, RESIL-02
+**Success Criteria** (what must be TRUE):
+  1. If WiFi remains disconnected for 10 minutes (configurable constant), `wifi_supervisor` calls `esp_restart()`; the reboot is logged before it occurs
+  2. If WiFi is connected but MQTT remains disconnected for 5 minutes (configurable constant), the MQTT pump signals a reboot; the reboot is logged before it occurs
+  3. After a reboot triggered by either timeout, the device reconnects normally — demonstrating the restart resolved the stuck state rather than making it permanent
+**Plans**: TBD
+
+### Phase 13: Health Telemetry
+**Goal**: Operators can observe device health remotely via a periodic MQTT status message containing uptime, free heap, and message drop counters
+**Depends on**: Phase 12
+**Requirements**: METR-01, METR-02
+**Success Criteria** (what must be TRUE):
+  1. Every 60 seconds, the device publishes a JSON payload `{"uptime_s":N,"heap_free":N,"nmea_drops":N,"rtcm_drops":N}` to `gnss/{device_id}/status` at QoS 0
+  2. The `nmea_drops` and `rtcm_drops` counters are backed by atomics that are incremented at each `TrySendError::Full` site in gnss.rs; the values in the status message reflect all drops since last boot
+  3. The status publisher does not interfere with NMEA/RTCM relay throughput — publishing occurs on its own thread or timer, not inline in the relay hot path
+**Plans**: TBD
 
 ## Progress
 
@@ -83,4 +143,9 @@ Plans:
 | 5. NMEA Relay | v1.1 | 2/2 | Complete | 2026-03-07 |
 | 6. Remote Config | v1.1 | 2/2 | Complete | 2026-03-07 |
 | 7. RTCM Relay | v1.2 | 3/3 | Complete | 2026-03-07 |
-| 8. OTA | v1.2 | Complete    | 2026-03-07 | 2026-03-07 |
+| 8. OTA | v1.2 | 3/3 | Complete | 2026-03-07 |
+| 9. Channel + Loop Hardening | v1.3 | 0/? | Not started | - |
+| 10. Memory + Diagnostics | v1.3 | 0/? | Not started | - |
+| 11. Thread Watchdog | v1.3 | 0/? | Not started | - |
+| 12. Resilience | v1.3 | 0/? | Not started | - |
+| 13. Health Telemetry | v1.3 | 0/? | Not started | - |

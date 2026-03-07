@@ -64,24 +64,24 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HARD-01 | TBD | Pending |
-| HARD-02 | TBD | Pending |
-| HARD-03 | TBD | Pending |
-| HARD-04 | TBD | Pending |
-| HARD-05 | TBD | Pending |
-| HARD-06 | TBD | Pending |
-| WDT-01  | TBD | Pending |
-| WDT-02  | TBD | Pending |
-| RESIL-01 | TBD | Pending |
-| RESIL-02 | TBD | Pending |
-| METR-01 | TBD | Pending |
-| METR-02 | TBD | Pending |
+| HARD-01 | Phase 9 | Pending |
+| HARD-02 | Phase 9 | Pending |
+| HARD-05 | Phase 9 | Pending |
+| HARD-06 | Phase 9 | Pending |
+| HARD-03 | Phase 10 | Pending |
+| HARD-04 | Phase 10 | Pending |
+| WDT-01  | Phase 11 | Pending |
+| WDT-02  | Phase 11 | Pending |
+| RESIL-01 | Phase 12 | Pending |
+| RESIL-02 | Phase 12 | Pending |
+| METR-01 | Phase 13 | Pending |
+| METR-02 | Phase 13 | Pending |
 
 **Coverage:**
 - v1.3 requirements: 12 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 12
+- Mapped to phases: 12
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-07*
-*Last updated: 2026-03-07 after initial definition*
+*Last updated: 2026-03-07 after roadmap creation (Phases 9-13)*
