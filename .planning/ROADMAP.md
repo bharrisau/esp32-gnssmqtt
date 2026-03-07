@@ -143,10 +143,13 @@ Plans:
 **Depends on**: Phase 12
 **Requirements**: METR-01, METR-02
 **Success Criteria** (what must be TRUE):
-  1. Every 60 seconds, the device publishes a JSON payload `{"uptime_s":N,"heap_free":N,"nmea_drops":N,"rtcm_drops":N}` to `gnss/{device_id}/status` at QoS 0
+  1. Every 30 seconds, the device publishes a JSON payload `{"uptime_s":N,"heap_free":N,"nmea_drops":N,"rtcm_drops":N,"uart_tx_errors":N}` to `gnss/{device_id}/heartbeat` at QoS 0
   2. The `nmea_drops` and `rtcm_drops` counters are backed by atomics that are incremented at each `TrySendError::Full` site in gnss.rs; the values in the status message reflect all drops since last boot
-  3. The status publisher does not interfere with NMEA/RTCM relay throughput — publishing occurs on its own thread or timer, not inline in the relay hot path
-**Plans**: TBD
+  3. On reconnect, a retained "online" message is published to `gnss/{device_id}/status` to clear the LWT "offline" retained message
+**Plans**: 1 plan
+
+Plans:
+- [ ] 13-01-PLAN.md — Add NMEA/RTCM drop atomics to gnss.rs; extend heartbeat_loop with retained online + JSON health payload (METR-01, METR-02)
 
 ## Progress
 
@@ -164,4 +167,4 @@ Plans:
 | 10. Memory + Diagnostics | 2/2 | Complete    | 2026-03-07 | - |
 | 11. Thread Watchdog | 2/2 | Complete    | 2026-03-07 | - |
 | 12. Resilience | 2/2 | Complete    | 2026-03-07 | - |
-| 13. Health Telemetry | v1.3 | 0/? | Not started | - |
+| 13. Health Telemetry | v1.3 | 0/1 | Not started | - |
