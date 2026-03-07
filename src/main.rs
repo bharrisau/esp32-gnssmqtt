@@ -40,6 +40,7 @@ mod nmea_relay;
 mod rtcm_relay;
 mod ota;
 mod uart_bridge;
+mod watchdog;
 mod wifi;
 
 fn main() {
