@@ -62,7 +62,12 @@ Plans:
   2. MQTT heartbeat continues publishing during OTA download (pump event loop is not blocked by the HTTP transfer)
   3. When a new firmware boot completes without calling `mark_running_slot_valid()` within the watchdog window, the device reboots back into the previous firmware slot on the next boot
   4. OTA can be triggered a second time immediately after a successful update (trigger topic cleared; no retained re-trigger on reconnect)
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 08-01-PLAN.md — Redesign partitions.csv for dual-slot OTA; add rollback + watchdog sdkconfig; add sha2 dependency
+- [ ] 08-02-PLAN.md — Implement src/ota.rs: HTTP download, SHA-256 verify, EspOta flash, status publish, restart
+- [ ] 08-03-PLAN.md — Wire ota into main.rs and mqtt.rs: mark_valid call, ota channel, trigger routing, subscription
 
 ## Progress
 
@@ -74,5 +79,5 @@ Plans:
 | 4. UART Pipeline | v1.1 | 2/2 | Complete | 2026-03-06 |
 | 5. NMEA Relay | v1.1 | 2/2 | Complete | 2026-03-07 |
 | 6. Remote Config | v1.1 | 2/2 | Complete | 2026-03-07 |
-| 7. RTCM Relay | 3/3 | Complete    | 2026-03-07 | - |
-| 8. OTA | v1.2 | 0/? | Not started | - |
+| 7. RTCM Relay | v1.2 | 3/3 | Complete | 2026-03-07 |
+| 8. OTA | v1.2 | 0/3 | Not started | - |
