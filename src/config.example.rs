@@ -57,3 +57,8 @@ pub const WIFI_DISCONNECT_REBOOT_TIMEOUT: std::time::Duration =
 /// state not self-resolved by WiFi reconnect logic.
 /// For dev testing, set to 30 — restore to 300 before final commit.
 pub const MQTT_DISCONNECT_REBOOT_SECS: u32 = 5 * 60;
+
+/// Heartbeat publish interval in seconds.
+/// Default: 30s (existing cadence). Lower values increase broker message rate.
+/// Applies to the JSON health snapshot published to gnss/{device_id}/heartbeat.
+pub const HEARTBEAT_INTERVAL_SECS: u64 = 30;
