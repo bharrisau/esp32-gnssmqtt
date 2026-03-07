@@ -161,7 +161,7 @@ Plans:
 | 11. Thread Watchdog | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 12. Resilience | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 13. Health Telemetry | v1.3 | 1/1 | Complete | 2026-03-08 |
-| 14. Quick Additions | 2/2 | Complete   | 2026-03-07 | - |
+| 14. Quick Additions | 2/2 | Complete    | 2026-03-07 | - |
 | 15. Provisioning | v2.0 | 0/3 | Not started | - |
 | 16. Remote Logging | v2.0 | 0/2 | Not started | - |
 | 17. NTRIP Client | v2.0 | 0/2 | Not started | - |
