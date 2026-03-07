@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Observations + OTA
 status: planning
-stopped_at: "Checkpoint: 08-01 Task 3 — hardware USB reflash required before OTA partition takes effect"
-last_updated: "2026-03-07T04:07:28.334Z"
+stopped_at: Completed 08-01 OTA prerequisites — hardware checkpoint approved, ready for 08-02
+last_updated: "2026-03-07T05:05:56.287Z"
 last_activity: 2026-03-07 — Roadmap created; Phase 7 and Phase 8 defined
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -20,17 +20,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Core value:** NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real time, with remote reconfiguration of the GNSS module via MQTT.
-**Current focus:** v1.2 Observations + OTA — Phase 7 (RTCM relay)
+**Current focus:** v1.2 Observations + OTA — Phase 8 (OTA)
 
 ## Current Position
 
-Phase: 7 — RTCM Relay (not started)
-Plan: —
-Status: Ready to plan
-Last activity: 2026-03-07 — Roadmap created; Phase 7 and Phase 8 defined
+Phase: 8 — OTA (in progress)
+Plan: 08-02 (next)
+Status: Plan 08-01 complete; ready for 08-02
+Last activity: 2026-03-07 — OTA prerequisites complete, hardware reflash verified
 
 ```
-v1.2 progress: [          ] 0% (0/2 phases)
+v1.2 progress: [████████░░] 87% (13/15 plans complete)
 ```
 
 ## Accumulated Context
@@ -53,7 +53,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ### Blockers/Concerns
 
-- [Phase 8 PREREQUISITE]: `partitions.csv` redesign requires `espflash erase-flash` + USB reflash before any OTA code is testable — existing factory partition leaves zero room for OTA slots. This is the first act of Phase 8, not an optional step.
+- [Phase 8 PREREQUISITE RESOLVED]: `partitions.csv` redesign + USB reflash complete — device boots cleanly from ota_0. OTA code is now testable.
 - [Phase 8 PITFALL]: `mark_running_slot_valid()` must be called early in `main()` after UART init succeeds on every boot — omitting it causes rollback on every reboot when `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`.
 - [Phase 8 PITFALL]: OTA download must run in independent `ota.rs` thread — running inside MQTT pump blocks `connection.next()`, causes keep-alive timeout and broker disconnect.
 - [Phase 8 PITFALL]: Watchdog fires during OTA partition erase (4-8 seconds); use sequential erase mode from the start.
@@ -62,7 +62,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-07T04:07:28.331Z
-Stopped at: Checkpoint: 08-01 Task 3 — hardware USB reflash required before OTA partition takes effect
+Last session: 2026-03-07T05:05:56.284Z
+Stopped at: Completed 08-01 OTA prerequisites — hardware checkpoint approved, ready for 08-02
 Resume file: None
-Next action: `/gsd:plan-phase 7`
+Next action: `/gsd:execute-plan 08-02`

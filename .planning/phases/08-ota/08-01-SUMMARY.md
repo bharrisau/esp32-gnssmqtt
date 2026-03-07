@@ -52,14 +52,14 @@ completed: 2026-03-07
 
 # Phase 8 Plan 01: OTA Prerequisites Summary
 
-**Dual-slot OTA partition table (otadata + ota_0 + ota_1, 1.875MB each) plus rollback config and sha2 crate — firmware compiles clean, hardware reflash pending**
+**Dual-slot OTA partition table (otadata + ota_0 + ota_1, 1.875MB each) plus rollback config and sha2 crate — firmware compiles clean and device boots cleanly from ota_0 after USB reflash**
 
 ## Performance
 
 - **Duration:** ~8 min
 - **Started:** 2026-03-07T04:00:00Z
 - **Completed:** 2026-03-07T04:06:16Z
-- **Tasks:** 2 of 3 complete (Task 3 is checkpoint:human-verify — hardware USB reflash)
+- **Tasks:** 3 of 3 complete
 - **Files modified:** 3
 
 ## Accomplishments
@@ -74,8 +74,7 @@ Each task was committed atomically:
 
 1. **Task 1: Redesign partitions.csv for dual-slot OTA layout** - `aee957e` (feat)
 2. **Task 2: Add rollback config + watchdog extension + sha2 dependency** - `dbd3ee1` (feat)
-
-_Task 3 (checkpoint:human-verify) requires hardware USB reflash — not automatable._
+3. **Task 3: Checkpoint — Verify hardware boots cleanly from ota_0 after USB reflash** - human-verified (approved)
 
 ## Files Created/Modified
 
@@ -100,16 +99,11 @@ None — `cargo build --release` succeeded on first attempt with sha2 and the sd
 
 ## User Setup Required
 
-**Hardware action required at checkpoint.** Connect XIAO ESP32-C6 over USB and run:
-
-1. `espflash erase-flash`
-2. `cargo build --release && espflash flash --release --monitor`
-
-Confirm in serial log: clean boot, "=== esp32-gnssmqtt booting ===", WiFi connects, MQTT connects, LED goes solid, no "Task watchdog" panic.
+**Hardware checkpoint completed.** User confirmed device boots cleanly from ota_0 after `espflash erase-flash` + `espflash flash --release --monitor`. Serial log showed clean boot, WiFi connected, MQTT connected, no watchdog panic.
 
 ## Next Phase Readiness
 
-After hardware checkpoint passes:
+Hardware checkpoint passed — device confirmed booting cleanly from ota_0:
 - Phase 08-02 can implement `ota.rs` module (OTA download + write + SHA-256 verification loop)
 - `mark_running_slot_valid()` must be called early in `main()` after MQTT connects — documented as Phase 8 pitfall in STATE.md
 - OTA thread must run independently of MQTT pump — documented pattern in RESEARCH.md
