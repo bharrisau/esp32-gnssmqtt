@@ -37,22 +37,27 @@ GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker
 - ✓ Auto-reboot after 10min WiFi disconnect or 5min MQTT disconnect while WiFi up — v1.3
 - ✓ JSON health heartbeat (`uptime_s`, `heap_free`, `nmea_drops`, `rtcm_drops`, `uart_tx_errors`) to `/heartbeat` every 30s — v1.3
 - ✓ Retained `"online"` published to `/status` on every MQTT reconnect (clears LWT) — v1.3
+- ✓ UM980 `#`-prefixed query responses routed to `gnss/{device_id}/nmea/response` — post-v1.3
+- ✓ Free-text UM980 output mirrored to stdout for espflash monitor visibility — post-v1.3
 
 ### Active
 
-- [ ] UM980 `#`-prefixed query responses routed to `gnss/{device_id}/nmea/response` (shipped post-v1.3, candidate for v1.4)
-- [ ] Free-text UM980 output mirrored to stdout for espflash monitor visibility (shipped post-v1.3)
+- [ ] BLE/SoftAP WiFi provisioning — credentials without recompile
+- [ ] NTRIP client — fetch RTCM3 corrections from caster over WiFi, forward to UM980 UART
+- [ ] MQTT `/command` topic — forward arbitrary UM980 commands remotely (replaces stdin bridge)
+- [ ] Remote log streaming — ESP-IDF log output published to MQTT topic
+- [ ] Remote reboot trigger — added to existing OTA endpoint
+- [ ] SNTP time sync — accurate wall-clock timestamps in logs
+- [ ] Fix quality in heartbeat — GGA fix type, satellite count, HDOP added to 30s heartbeat
+- [ ] Multi-AP failover — device tries list of configured SSIDs on connection failure
 
 ### Out of Scope
 
-- BLE provisioning — deferred; hardcoded credentials sufficient for development
-- Web portal (SoftAP) provisioning — depends on BLE provisioning
 - TLS/mTLS for MQTT — separate milestone
 - Full NMEA field parsing — firmware relays, consumers parse downstream
 - Local NMEA buffering across power cycles — real-time relay only
 - JSON-wrapped NMEA publish — raw NMEA preferred
 - Multi-broker publishing — single broker only
-- Remote log streaming — high complexity, deferred to v2
 
 ## Context
 
@@ -95,5 +100,19 @@ GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker
 | Separate `status_tx` channel for heartbeat "online" publish | MQTT callback signals both subscriber and heartbeat on Connected; heartbeat re-publishes retained online on every reconnect | ✓ Good — LWT cleared correctly on all reconnects |
 | `RxState` four-state machine with `FreeLine`/`HashLine` | UM980 sends `#`-prefixed query responses and free-text; state machine cleanly routes each to appropriate sink | ✓ Good — no bytes silently discarded |
 
+## Current Milestone: v2.0 Field Deployment
+
+**Goal:** Enable unattended outdoor RTK operation with remote provisioning, NTRIP corrections, remote logging, and command relay.
+
+**Target features:**
+- BLE/SoftAP WiFi provisioning (no recompile needed)
+- NTRIP client (fetch RTCM3 corrections, forward to UM980)
+- MQTT `/command` topic (remote UM980 command relay)
+- Remote log streaming over MQTT
+- Remote reboot trigger (added to OTA endpoint)
+- SNTP time sync (accurate log timestamps)
+- Fix quality in heartbeat (GGA fix type, sat count, HDOP)
+- Multi-AP failover (try list of SSIDs on connection failure)
+
 ---
-*Last updated: 2026-03-08 after v1.3 milestone*
+*Last updated: 2026-03-08 after v2.0 milestone start*
