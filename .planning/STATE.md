@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Reliability Hardening
 status: completed
-stopped_at: "Completed 11-01 (watchdog module: heartbeat counters + supervisor thread)"
-last_updated: "2026-03-07T12:17:58.451Z"
+stopped_at: "Completed 11-02 (watchdog wiring: heartbeat counters, supervisor spawn, TWDT panic)"
+last_updated: "2026-03-07T12:23:17.159Z"
 last_activity: "2026-03-07 — 09-02 executed: recv_timeout loops on all 6 channels, WiFi consecutive_failures counter"
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 12
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # Project State
@@ -59,6 +59,9 @@ Key v1.3 decisions (Phase 9):
 - [Phase 10-memory-diagnostics]: RTCM_POOL_SIZE=4 buffers (4116 bytes) allocated once at spawn_gnss init; pool exhaustion drops frame with warn log; buffer returned on all error paths
 - [Phase 11-01]: spawn_supervisor() call deferred to Plan 02 — module declaration only in Plan 01 so Plan 02 compiler errors are isolated to wiring
 - [Phase 11-01]: 4096-byte stack for watchdog supervisor: no I/O or buffers, only loop + arithmetic + log
+- [Phase 11-thread-watchdog]: Heartbeat in GNSS RX at top of loop{} not inside match arm — UART stall returning Ok(0) would freeze counter if inside Ok(n) arm
+- [Phase 11-thread-watchdog]: spawn_supervisor() as Step 18 (last spawn) — supervisor first check occurs after all monitored threads are live
+- [Phase 11-thread-watchdog]: CONFIG_ESP_TASK_WDT_PANIC=y in sdkconfig.defaults — hardware TWDT reboots if supervisor itself hangs (WDT-02 criterion 3)
 
 ### Pending Todos
 
@@ -71,7 +74,7 @@ Key v1.3 decisions (Phase 9):
 
 ## Session Continuity
 
-Last session: 2026-03-07T12:17:41.247Z
-Stopped at: Completed 11-01 (watchdog module: heartbeat counters + supervisor thread)
+Last session: 2026-03-07T12:23:17.155Z
+Stopped at: Completed 11-02 (watchdog wiring: heartbeat counters, supervisor spawn, TWDT panic)
 Resume file: None
 Next action: `/gsd:execute-phase <next-phase>` — Phase 10 or as per ROADMAP.md
