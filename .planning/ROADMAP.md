@@ -104,7 +104,11 @@ Plans:
   1. At startup, the log shows a stack high-water mark (HWM) line for each spawned thread (GNSS RX, MQTT pump, NMEA relay, RTCM relay, config relay, watchdog supervisor, status publisher)
   2. RTCM frame buffers are allocated once at init into a fixed-size pool; no `Vec::new()` or heap allocation occurs per received RTCM frame during normal relay operation
   3. The pool exhaustion path (all buffers in use) drops the incoming frame and logs a warning rather than allocating dynamically or panicking
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — Add uxTaskGetStackHighWaterMark log at entry of all 11 spawned threads (HARD-04)
+- [ ] 10-02-PLAN.md — Replace Vec<u8> RTCM channel with Box pool; update gnss.rs, rtcm_relay.rs, main.rs (HARD-03)
 
 ### Phase 11: Thread Watchdog
 **Goal**: Critical threads are supervised so that a silent hang — a thread that stops progressing without panicking — triggers an automatic device reboot
@@ -149,7 +153,7 @@ Plans:
 | 7. RTCM Relay | v1.2 | 3/3 | Complete | 2026-03-07 |
 | 8. OTA | v1.2 | 3/3 | Complete | 2026-03-07 |
 | 9. Channel + Loop Hardening | v1.3 | 2/2 | Complete | 2026-03-07 |
-| 10. Memory + Diagnostics | v1.3 | 0/? | Not started | - |
+| 10. Memory + Diagnostics | v1.3 | 0/2 | Not started | - |
 | 11. Thread Watchdog | v1.3 | 0/? | Not started | - |
 | 12. Resilience | v1.3 | 0/? | Not started | - |
 | 13. Health Telemetry | v1.3 | 0/? | Not started | - |
