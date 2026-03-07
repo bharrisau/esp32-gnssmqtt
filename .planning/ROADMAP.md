@@ -118,7 +118,11 @@ Plans:
   1. GNSS RX thread and MQTT pump thread each update a shared atomic counter (or equivalent heartbeat) at intervals no greater than 5 seconds during normal operation
   2. A watchdog supervisor thread detects when any critical thread has failed to update its heartbeat for 3 consecutive check intervals and calls `esp_restart()`
   3. If the watchdog supervisor thread itself stops (e.g., due to a bug), the hardware watchdog timer (already configured in sdkconfig) eventually reboots the device
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 11-01-PLAN.md — Create watchdog.rs module with AtomicU32 counters + supervisor loop; add WDT config constants (WDT-01, WDT-02)
+- [ ] 11-02-PLAN.md — Wire heartbeat fetch_add into GNSS RX loop and MQTT pump; spawn supervisor in main.rs; enable TWDT panic (WDT-01, WDT-02)
 
 ### Phase 12: Resilience
 **Goal**: The device recovers from extended connectivity loss without manual intervention by rebooting itself after configurable disconnection timeouts
@@ -154,6 +158,6 @@ Plans:
 | 8. OTA | v1.2 | 3/3 | Complete | 2026-03-07 |
 | 9. Channel + Loop Hardening | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 10. Memory + Diagnostics | 2/2 | Complete    | 2026-03-07 | - |
-| 11. Thread Watchdog | v1.3 | 0/? | Not started | - |
+| 11. Thread Watchdog | v1.3 | 0/2 | Not started | - |
 | 12. Resilience | v1.3 | 0/? | Not started | - |
 | 13. Health Telemetry | v1.3 | 0/? | Not started | - |
