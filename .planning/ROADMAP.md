@@ -46,7 +46,12 @@ Archive: `.planning/milestones/v1.1-ROADMAP.md`
   2. Frames with CRC-24Q failures are silently dropped and the byte-stream re-syncs to the next valid 0xD3 preamble or `$` start without operator intervention
   3. MSM7 frames (up to 1029 bytes) are published without truncation or MQTT buffer overflow
   4. A retained `/config` payload is NOT forwarded to the UM980 when an `/ota/trigger` message arrives (topic discrimination fix verifiable by inspection of UM980 UART TX)
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Fix mqtt.rs topic routing bug and bump MQTT output buffer to 2048 bytes
+- [ ] 07-02-PLAN.md — Replace gnss.rs line-buffer with RxState state machine; create rtcm_relay.rs
+- [ ] 07-03-PLAN.md — Wire rtcm_relay into main.rs; final compile integration
 
 ### Phase 8: OTA
 **Goal**: An operator can remotely update firmware by publishing a URL to an MQTT topic; the device downloads, flashes, and reboots into new firmware with automatic rollback if the new firmware fails to confirm itself
@@ -69,5 +74,5 @@ Archive: `.planning/milestones/v1.1-ROADMAP.md`
 | 4. UART Pipeline | v1.1 | 2/2 | Complete | 2026-03-06 |
 | 5. NMEA Relay | v1.1 | 2/2 | Complete | 2026-03-07 |
 | 6. Remote Config | v1.1 | 2/2 | Complete | 2026-03-07 |
-| 7. RTCM Relay | v1.2 | 0/? | Not started | - |
+| 7. RTCM Relay | v1.2 | 0/3 | Not started | - |
 | 8. OTA | v1.2 | 0/? | Not started | - |
