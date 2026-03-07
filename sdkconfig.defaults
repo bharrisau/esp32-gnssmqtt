@@ -7,7 +7,7 @@ CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 
 # Use our custom partition table instead of the ESP-IDF default (single-app at 0x10000)
 CONFIG_PARTITION_TABLE_CUSTOM=y
-CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../../../../../partitions.csv"
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
 # Main task stack — Rust std requires significantly more than the default 3KB
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8000
