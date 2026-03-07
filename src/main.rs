@@ -26,6 +26,7 @@ use esp_idf_svc::hal::gpio::PinDriver;
 use esp_idf_svc::hal::prelude::*;
 use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
+use esp_idf_svc::sntp;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU8;
 
@@ -90,6 +91,13 @@ fn main() {
     let wifi = wifi::wifi_connect(peripherals.modem, sysloop.clone(), nvs)
         .expect("WiFi connect failed");
     log::info!("WiFi connected");
+
+    // Step 6.5: SNTP — start background time sync after WiFi is up.
+    // _sntp MUST remain in main() scope for the firmware lifetime.
+    // Dropping it calls sntp_stop(), reverting timestamps to boot-relative ms.
+    // new_default() returns immediately; first NTP response arrives within 1-5s.
+    let _sntp = sntp::EspSntp::new_default().expect("SNTP init failed");
+    log::info!("SNTP initialized — wall-clock time will sync in background");
 
     // Step 7: GNSS pipeline — exclusive UART ownership, RX + TX threads
     // spawn_gnss returns (cmd_tx, nmea_rx, rtcm_rx, free_pool_tx); rtcm_rx + free_pool_tx wired to rtcm_relay below.
