@@ -1,266 +1,205 @@
 # Project Research Summary
 
-**Project:** esp32-gnssmqtt
-**Domain:** Embedded Rust firmware — ESP32-C6 GNSS-to-MQTT bridge with BLE provisioning
-**Researched:** 2026-03-03
-**Confidence:** MEDIUM
+**Project:** esp32-gnssmqtt — v1.2 milestone (RTCM binary relay + OTA firmware update)
+**Domain:** Embedded Rust firmware — ESP32-C6 GNSS-to-MQTT bridge
+**Researched:** 2026-03-07
+**Confidence:** HIGH
 
 ## Executive Summary
 
-This project is a purpose-built embedded firmware for the ESP32-C6 that reads NMEA sentences from a UM980 RTK GNSS module over UART and relays them to an MQTT broker over WiFi, with BLE-based zero-touch provisioning on first boot. The correct implementation approach is `esp-idf-hal` + `esp-idf-svc` on the IDF std path — not bare-metal Embassy or esp-hal. This decision is non-negotiable: WiFi, BLE, NVS, and MQTT are all only mature in the IDF-backed stack for the ESP32-C6. The firmware uses FreeRTOS tasks via `std::thread`, channel-based decoupling between the UART reader and MQTT publisher, and an NVS-gated boot branch that switches between provisioning mode and operational mode. The architecture is well-understood and the patterns are established.
+This milestone adds two new capabilities to the existing v1.1 firmware: relaying binary RTCM3 correction frames from the UM980 GNSS receiver over MQTT, and enabling remote OTA firmware updates triggered via MQTT. Both capabilities are additive to the working v1.1 codebase and require no crate version bumps — all necessary APIs (`esp_idf_svc::ota`, `esp_idf_svc::http::client`) are already present in the pinned stack (esp-idf-svc =0.51.0, esp-idf-hal =0.45.2, esp-idf-sys =0.36.1, ESP-IDF v5.3.3), verified by direct source inspection of the local cargo cache. The RTCM relay is purely a UART parsing and MQTT publishing concern. OTA requires a structural change to the flash partition table that must be performed via USB reflash and cannot be bootstrapped over the air on the first deployment.
 
-The recommended phase order follows hard component dependencies: project scaffold and toolchain first (the most dangerous phase if skipped), then BLE provisioning (highest complexity table-stakes feature), then WiFi and MQTT connectivity, then the UART-to-MQTT NMEA relay pipeline, and finally hardening and reconnect logic. Deferring anything from this ordering — especially BLE provisioning — creates rework. The architecture is purposefully simple: one binary crate, one thread per component, bounded channels for backpressure, and a single long-lived MQTT client instance.
+The recommended implementation order is RTCM relay first, OTA second. RTCM relay requires no partition table changes and its central change — refactoring the `gnss.rs` RX thread from a line-based parser to a dual-mode state machine — is also the prerequisite for the MQTT topic discrimination fix that OTA depends on. Completing RTCM relay first validates the state machine, the binary MQTT publish path, and the pump routing before the higher-risk OTA partition work begins. The two phases have no circular dependencies and can be shipped independently.
 
-The primary risks are all front-loaded: wrong framework selection causes a full rewrite; toolchain version mismatches produce opaque linker failures; BLE GATT server API stability on ESP32-C6 is lower confidence than the rest of the stack. None of these risks are blockers — they are well-understood failure modes with documented mitigations. The two areas that require explicit verification before writing code are (1) the current `esp-idf-hal`/`esp-idf-svc`/`esp-idf-sys` coordinated versions and (2) the BLE GATT server API surface in `esp-idf-svc`, which was the most volatile part of the Rust IDF ecosystem as of mid-2025.
-
----
+The primary risks are structural and well-understood. On the OTA side: the existing partition table allocates the entire 4MB flash to a single factory partition, leaving zero room for OTA slots; rollback requires an explicit `mark_running_slot_valid()` call that must not be omitted; and the OTA download task must run independently of the MQTT pump thread. On the RTCM side: the existing 512-byte NMEA line buffer is insufficient for MSM7 frames (up to 1029 bytes) and the current line-based parser will corrupt RTCM binary data and lose NMEA sync when RTCM output is enabled on the UM980. Both sets of risks have concrete mitigations documented in research and are straightforward to address with the correct implementation sequence.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The stack is the Espressif-official Rust IDF trio: `esp-idf-hal` (peripheral drivers), `esp-idf-svc` (WiFi, BLE, MQTT, NVS services), and `esp-idf-sys` (bindgen layer to IDF C). These three crates must be version-coordinated — use the `esp-idf-template` scaffolding to get a known-good pinned set. The Rust toolchain requires the `esp` channel (RISC-V target `riscv32imc-esp-espidf`) installed via `espup`. ESP-IDF v5.2.x or v5.3.x is required; IDF v4.x does not support the ESP32-C6. Concurrency is `std::thread` mapped to FreeRTOS tasks — no async executor, no tokio, no Embassy.
+The existing pinned stack requires no version changes for this milestone. Two configuration changes are required: `MqttClientConfiguration::out_buffer_size` raised to 2048 bytes (RTCM frames up to 1029 bytes exceed the default 1024-byte MQTT outbox buffer), and `partitions.csv` redesigned to replace the single `factory` partition with `otadata + ota_0 + ota_1`. One Cargo.toml change is likely needed: add `features = ["ota"]` to the `esp-idf-svc` entry (the feature gating is referenced in documentation; STACK.md found evidence it may be unconditional from lib.rs — verify by reading the local Cargo.toml before implementing). Two sdkconfig.defaults additions are required: `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` and `CONFIG_ESP_HTTPS_OTA_ALLOW_HTTP=y`.
 
-See `.planning/research/STACK.md` for full rationale, alternatives considered, version compatibility table, and project setup commands.
+**Core technologies (existing — unchanged):**
+- `esp-idf-svc =0.51.0` — OTA, HTTP client, MQTT; all needed APIs verified in local source
+- `esp-idf-hal =0.45.2` — UART driver (unchanged); no new HAL features needed
+- `EspMqttClient::enqueue(topic, QoS, retain, &[u8])` — already used; binary payloads identical to text
 
-**Core technologies:**
-- `esp-idf-hal` (~0.44): Peripheral drivers (UART, GPIO, timers) — the only mature HAL for ESP32-C6 with IDF backend
-- `esp-idf-svc` (~0.49): All services (WiFi, BLE GATT, NVS, MQTT client, HTTP server) — official Espressif crate, covers all project requirements in one dependency
-- `esp-idf-sys` (~0.37): Bindgen FFI layer; used transitively; do not call directly
-- `EspMqttClient` (from esp-idf-svc): Native IDF MQTT 3.1.1 client — preferred over `rumqttc` (requires tokio) or `mqttrs` (requires manual transport)
-- Custom GATT server via `esp-idf-svc::bt`: BLE provisioning — preferred over Espressif Unified Provisioning because MQTT credentials need provisioning alongside WiFi credentials and the standard protocol is WiFi-only
-- `EspNvs` (from esp-idf-svc): Flash credential storage — wear-leveled, atomic, correct for this use case
-- `espup` + `espflash` + `cargo-generate`: Development toolchain for project scaffold, flash, and serial monitor
-- Blocking UART on dedicated thread: Simpler and adequate at 115200 baud; avoid async UART (adds Embassy dependency, less tested on C6)
+**New additions (configuration, not crates):**
+- Hand-written CRC-24Q state machine (~50 lines, polynomial 0x864CFB) — relays raw RTCM frames; no parsing crate
+- `partitions.csv` redesign — otadata (0x2000) + ota_0 (0x1E0000) + ota_1 (0x1E0000); verified to fit 4MB flash
+- `MqttClientConfiguration::out_buffer_size = 2048` — one-line change in MQTT init
+
+**What not to add:**
+- No `rtcm` or `rtcm3` parsing crate — relay is opaque frame forwarding, not RTCM field decoding
+- No SHA-256 crate for pre-write download verification — full binary (~1MB) cannot fit in ESP32-C6 heap (~320KB available); rely on ESP-IDF built-in image validation (`esp_ota_end()` calls `esp_image_verify()`) and rollback as safety net
+- No baud rate change — RTCM MSM4 + NMEA combined is under 9% of 115200 baud capacity (~1,010 bytes/s of 11,520 byte/s capacity); no headroom problem exists
 
 ### Expected Features
 
-The MVP (v1) must deliver: reliable NMEA relay with per-sentence-type MQTT topic routing, zero-touch BLE provisioning on first boot, persistent NVS credential storage, WiFi and MQTT auto-reconnect, status LED, heartbeat publish, MQTT LWT for offline detection, and remote UM980 configuration via retained MQTT topic. These 17 features are all P1 — the device is operationally useless without any of them.
-
-See `.planning/research/FEATURES.md` for the full feature prioritization matrix, feature dependency graph, and anti-feature analysis.
-
 **Must have (table stakes):**
-- UART RX from UM980 at 115200 baud 8N1 — without this, there is no product
-- NMEA sentence framing, line extraction, type parsing, and checksum validation — prerequisites for all downstream processing
-- Device ID from ESP32 hardware MAC/eFuse — required for per-device MQTT topic namespacing
-- NVS credential storage (WiFi SSID/pass, MQTT host/port/user/pass) — required for persistence across reboots
-- BLE provisioning on first boot — highest-complexity table-stakes feature; enables zero-touch field deployment
-- WiFi station mode connect on boot — core connectivity
-- MQTT client connect with username/password auth — core connectivity
-- MQTT publish NMEA to `gnss/{device_id}/nmea/{TYPE}` topics — primary product function
-- MQTT subscribe to `gnss/{device_id}/config` (QoS 1) and UART TX passthrough — required for remote UM980 initialization without reflash
-- Auto-reconnect for WiFi and MQTT with exponential backoff — required; network drops are inevitable
-- Status LED (provisioning / connecting / connected / error) — required for field diagnosis
-- Heartbeat publish to `gnss/{device_id}/heartbeat` — required for consumers to detect device presence
-- MQTT LWT (`gnss/{device_id}/status` retained, payload `offline`) — zero-cost capability; include at connect time
-- Retain flag on heartbeat/status publishes — zero-cost flag; include from day one
+- RTCM3 frame detection (0xD3 preamble), 10-bit length read, CRC-24Q verification — without CRC, relay forwards corrupt data to RTK engines
+- MQTT publish raw RTCM bytes to `gnss/{device_id}/rtcm/{message_type}` at QoS 0, retain=false
+- Partition table rework (otadata + ota_0 + ota_1) — hard prerequisite for OTA; requires USB reflash before first OTA-enabled build
+- OTA trigger via MQTT (`gnss/{device_id}/ota/trigger`) — payload: JSON with firmware URL
+- HTTP firmware download in chunks, streamed to `EspOta::initiate_update()` → `update.write()`
+- `mark_running_slot_valid()` called after UART init succeeds — mandatory for rollback to engage correctly
+- `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` in sdkconfig.defaults
 
-**Should have (add post-validation, v1.x):**
-- Web portal fallback provisioning (SoftAP + HTTP form) — for environments lacking BLE support; already in requirements but lower priority than BLE path
-- NVS wipe and re-provisioning trigger (GPIO button or MQTT reset command) — for field re-provisioning without reflash
-- Structured JSON heartbeat payload (uptime, fix status, satellite count) — richer monitoring data
-- Sentence-type allow/deny filter via retained config topic — reduces broker load for high-rate UM980 output
+**Should have (v1.2.x, add after core validation):**
+- OTA progress reporting to `gnss/{device_id}/ota/status`
+- Clear retained OTA trigger after successful update (publish empty retained message) to prevent re-trigger on reconnect
+- 1005/1006 base position published with retain=true so new subscribers get base position immediately
 
 **Defer (v2+):**
-- TLS/mTLS for MQTT — requires certificate provisioning design, mbedTLS tuning, NVS space planning; separate milestone
-- OTA firmware update — requires dual-partition layout, rollback, image signing; wrong implementation bricks devices
-- Panic/error reporting to MQTT — requires careful panic handler design to avoid boot loops; defer until v1 is stable
+- TLS for OTA HTTP download (HTTPS) — requires certificate bundle setup; HTTP over internal network is acceptable for v1
+- Anti-rollback via eFuse security counter — requires security milestone with key management design
+- OTA firmware signature verification (secure boot) — requires eFuse provisioning at manufacture time; irrecoverable brick risk if misimplemented
 
-**Anti-features to explicitly avoid in v1:**
-- Full NMEA field parsing (lat/lon decode) — firmware job is relay, not parse; consumers parse in any language
-- Local NMEA buffering across power cycles — stale positions are misleading; flash wear from 10Hz writes is unacceptable
-- Multi-broker publishing — multiplies state management complexity on a constrained MCU
-- GNSS config stored in device NVS (not from broker) — defeats the remote reconfiguration design goal
+**Anti-features (explicitly excluded):**
+- RTCM base64 encoding — 33% overhead, mandatory decode step on every consumer, no benefit; MQTT is a binary protocol
+- RTCM reassembly or NTRIP server in firmware — ESP32-C6 RAM (512KB) is insufficient for TCP connection management; relay to MQTT and use rtkbase/SNIP as NTRIP caster
+- OTA firmware push over MQTT — MQTT cannot reliably transport 1MB binary; HTTP pull is the standard ESP-IDF pattern
 
 ### Architecture Approach
 
-The firmware is a single binary crate structured as one file per component, each mapped to its own FreeRTOS task via `std::thread::spawn`. Components communicate via bounded `mpsc::sync_channel` queues (64-sentence bound for NMEA, 8-message bound for config payloads to UART). The boot sequence is NVS-gated: on first boot (no credentials), enter BLE provisioning mode; after successful provisioning, write credentials, set a `provisioned` flag, and reboot into normal operational mode. This avoids maintaining two parallel runtime code paths. BLE is explicitly shut down before WiFi starts to avoid 2.4GHz coexistence conflicts.
-
-See `.planning/research/ARCHITECTURE.md` for full component diagram, data flow diagrams, concurrency model comparison, build order, and anti-patterns.
+The architecture extends the existing multi-thread, typed-channel pattern. The `gnss.rs` RX thread becomes a dual-mode `RxState` enum state machine that dispatches NMEA frames to the existing `SyncSender<(String,String)>` (bound 64, unchanged) and RTCM frames to a new `SyncSender<(u16,Vec<u8>)>` (bound 32; carries message type + raw frame bytes). A new `rtcm_relay.rs` module mirrors `nmea_relay.rs` exactly in structure. A new `ota.rs` module runs an independent listener thread, blocking on `Receiver<String>` for URL triggers from the MQTT pump and performing chunked HTTP download + EspOta write without touching the MQTT event loop. The MQTT pump receives a fix to discriminate topics before routing to `config_tx` or `ota_tx`.
 
 **Major components:**
-1. `uart_reader.rs` — DMA-buffered UART read loop; accumulates bytes into `\n`-terminated NMEA sentences; pushes complete sentences to bounded channel; runs at elevated FreeRTOS priority to prevent FIFO overflow
-2. `nmea_router.rs` — Extracts sentence type from `$TYPE,` prefix; constructs `gnss/{device_id}/nmea/{TYPE}` topic string; passes (topic, payload) tuple to MQTT task; validates NMEA checksum and drops corrupt sentences
-3. `mqtt_client.rs` — Manages single long-lived `EspMqttClient` instance; subscribes to config topic inside `Connected` event handler (not at init, to survive reconnects); publishes from NMEA channel; forwards received config payloads to UART TX channel via a separate bounded queue
-4. `ble_provision.rs` — Custom GATT server accepting WiFi and MQTT credentials as characteristic writes; runs only on first boot; shuts down cleanly before WiFi starts
-5. `nvs_store.rs` — `EspNvs` wrapper with custom namespace; key-value abstraction for all credentials and the `provisioned` flag; all NVS reads wrapped in explicit error handling that routes to provisioning mode on failure
-6. `wifi.rs` — `EspWifi` station mode connection with reconnect loop and exponential backoff; signals MQTT task via `Arc<AtomicBool>` when WiFi is up
-7. `led.rs` — State machine driven by `mpsc` channel messages or `Arc<AtomicU8>` from any task; polls at ~100ms interval; drives GPIO LED through defined states (provisioning, connecting, connected, error)
-8. `heartbeat.rs` — Periodic MQTT publish to `gnss/{device_id}/heartbeat` with retained flag; uses monotonic timer to avoid NTP-induced skips
+1. `gnss.rs` (MODIFIED) — `RxState` machine replaces flat line assembler; `spawn_gnss` returns triple `(cmd_tx, nmea_rx, rtcm_rx)`; RTCM buffer sized at 1100 bytes (covers max 1029-byte frame)
+2. `rtcm_relay.rs` (NEW) — consumes `Receiver<(u16,Vec<u8>)>`; publishes binary MQTT payload to `gnss/{id}/rtcm/{msg_type}`; stack 8KB
+3. `ota.rs` (NEW) — independent listener thread; `EspHttpConnection` GET → chunk write to `EspOta` → `complete()` → `esp_restart()`; stack 16KB (HTTP client requires more stack than relay threads)
+4. `mqtt.rs` (MODIFIED) — pump adds topic discrimination in `Received` arm; `subscriber_loop` adds OTA trigger subscription; current bug (all Received events routed to config_tx regardless of topic) is fixed here
+5. `main.rs` (MODIFIED) — destructures triple from `spawn_gnss`; wires `rtcm_rx` and `ota_tx/rx` channels; spawns `rtcm_relay` and `ota_listener`
+6. `partitions.csv` (MODIFIED) — factory replaced with otadata (0x2000) + ota_0 (0x1E0000) + ota_1 (0x1E0000)
+7. `sdkconfig.defaults` (MODIFIED) — adds `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`, `CONFIG_ESP_HTTPS_OTA_ALLOW_HTTP=y`
+
+**Key architectural decisions:**
+- Two separate typed channels from `gnss.rs` (not a single mixed-type channel) — `nmea_relay.rs` and `rtcm_relay.rs` are independent consumers; a single channel cannot have two consumers without a dispatcher thread
+- CRC-24Q verification happens in `gnss.rs` before `try_send` — gnss.rs is the UART owner and framing authority; only verified frames enter the channel
+- OTA task is fully independent of MQTT pump — pump sends URL string to `ota_tx`; OTA thread handles download; MQTT event loop remains unblocked during multi-second HTTP download
+- `Vec<u8>` for RTCM frame accumulation in the state machine is acceptable (heap-allocated per frame, up to 1029 bytes); fixed `[u8; 1100]` stack buffer is the preferred alternative to avoid heap fragmentation during concurrent OTA
 
 ### Critical Pitfalls
 
-1. **Framework selection lock-in (esp-hal vs esp-idf-hal)** — Choosing esp-hal (bare-metal) for an ESP32-C6 project requiring WiFi, BLE, and NVS simultaneously is a rewrite trap. Use `esp-idf-hal` + `esp-idf-svc` from day one. Verify at project scaffold by successfully building the WiFi example.
+1. **Existing partition table has zero room for OTA** — the `factory` partition at 0x20000 occupies 0x3E0000 bytes (~3.9MB), leaving only 24KB free. OTA requires `otadata` (exactly 0x2000 bytes — mandatory for bootloader OTA state tracking) plus two equal-sized `ota_N` partitions. The table must be redesigned and the device must be erased and reflashed (`espflash erase-flash`) before any OTA code is testable. Warning sign: `espflash` reports partition overlap; `EspOta::initiate_update()` returns error.
 
-2. **Toolchain version mismatch (esp-idf-hal / esp-idf-sys / ESP-IDF C SDK)** — These three components must be version-coordinated. A `cargo update` can silently pull incompatible versions, producing cryptic linker failures or ABI corruption. Pin all three with `=` version specifiers in `Cargo.toml`; start from `esp-idf-template` which provides a known-good coordinated set.
+2. **RTCM binary data corrupts the existing NMEA parser** — the current `gnss.rs` RX loop treats `\n` (0x0A) as a frame delimiter. RTCM3 binary payloads can contain 0x0A bytes anywhere in the payload, causing the parser to split frames mid-payload, log spurious "non-NMEA line dropped" warnings, and permanently lose byte-stream sync until the next valid NMEA sentence. Warning sign: "non-NMEA line dropped" warnings flood the log after RTCM output is enabled on the UM980; NMEA topics go silent.
 
-3. **UART receive buffer overflow with high-frequency NMEA output** — UM980 at full output rate overwhelms the default 256-byte software ring buffer if the UART reader task is preempted by WiFi reconnect. Set `rx_buffer_size: 4096` at UART init and dedicate a high-priority FreeRTOS task exclusively to UART reading.
+3. **`mark_running_slot_valid()` omission causes every reboot to trigger rollback** — if `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` is set and the new firmware never calls `EspOta::mark_running_slot_valid()`, the bootloader sees `ESP_OTA_IMG_PENDING_VERIFY` on every boot and rolls back to the previous partition. Call it after UART init succeeds — before network operations, but not on the first line of `main()`. Warning sign: device boots into new firmware once, then reverts; log shows "Falling back to previous version".
 
-4. **MQTT reconnect creating memory leak or heap exhaustion** — Creating a new `EspMqttClient` on each disconnect event leaks memory. Use the client's built-in `reconnect_timeout_ms` configuration and a single long-lived client instance. Re-subscribe to all topics in the `Connected` event handler, not at initialization.
+4. **Task watchdog fires during OTA partition erase** — erasing a 1.875MB OTA partition at `esp_ota_begin()` with `OTA_SIZE_UNKNOWN` takes 4-8 seconds (SPI flash erase ~50ms/sector × ~200 sectors). The default watchdog timeout is 5 seconds. Use sequential erase mode (pass `OTA_WITH_SEQUENTIAL_WRITES` equivalent via `EspOta`) to spread erase time across the download. Warning sign: device reboots during OTA at a consistent byte offset; "Task watchdog got triggered" in log.
 
-5. **BLE and WiFi 2.4GHz coexistence conflicts** — Starting WiFi connect while BLE provisioning is active causes intermittent provisioning failures (80-90% success rate that degrades under RF congestion). The BLE driver (`BtDriver`) must be fully dropped before `EspWifi::connect()` is called. Enforce this with a strict state machine; test on real mobile hardware, not a bench emulator.
-
-6. **MQTT config message processed before UART is ready** — The broker delivers the retained config topic message within milliseconds of MQTT connect. If UART initialization has not completed, config commands are silently lost and the UM980 runs in default state. Use an `AtomicBool` `uart_ready` flag; queue config messages and only apply them after the flag is set.
-
----
+5. **OTA download inside the MQTT pump blocks the event loop** — the pump must call `connection.next()` continuously. A 20-second HTTP download inside the pump causes MQTT keep-alive timeout and broker disconnect, aborting the OTA attempt. The pump must send the URL to `ota_tx` and return immediately; the `ota.rs` thread handles the download independently. Warning sign: MQTT heartbeat stops publishing during OTA; broker logs a client disconnect.
 
 ## Implications for Roadmap
 
-The feature dependency graph and architecture build order both point to the same seven-phase structure. Each phase has hard prerequisites from the previous one. Do not reorder.
+The milestone decomposes into two phases with a hard dependency ordering. Both phases are self-contained and can be shipped independently — Phase A (RTCM relay) delivers immediate operational value for RTK base station use cases without waiting for OTA.
 
-### Phase 1: Project Scaffold and Toolchain
+### Phase A: RTCM Relay
 
-**Rationale:** All other phases depend on a correct, version-pinned build environment. The most common catastrophic failure mode (wrong framework, toolchain mismatch) occurs here. Get it right once; never revisit.
+**Rationale:** Zero partition risk; validates the `gnss.rs` state machine change that is also a prerequisite for OTA routing; fixes the MQTT pump topic-discrimination bug (which OTA also requires) in a lower-stakes context. RTCM relay is the lower-risk half of the milestone and should reach hardware-verified status before the partition table is touched.
 
-**Delivers:** Compiling project from `esp-idf-template`; correct Cargo.toml with pinned Espressif crate versions; `sdkconfig.defaults` with BLE stack enabled, correct UART buffer sizes, FreeRTOS stack overflow detection; `partitions.csv` with 64KB+ NVS partition; `device_id.rs` module reading hardware MAC; verified `cargo build` and `espflash` flash cycle.
+**Delivers:** UM980 RTCM3 frames appear on `gnss/{device_id}/rtcm/NNNN` MQTT topics as raw binary at QoS 0; downstream RTK clients (rtkbase, RTKLIB, SNIP) can consume corrections directly; NMEA relay continues to function unchanged alongside RTCM relay.
 
-**Addresses features:** Device ID from MAC/eFuse; foundation for all other features.
+**Addresses:** RTCM frame detection + CRC-24Q verification, MQTT binary publish, MQTT topic discrimination fix, `out_buffer_size=2048` config change.
 
-**Avoids pitfalls:** Framework selection lock-in (commit to esp-idf-hal); toolchain version mismatch (pin all versions from template); NVS misconfiguration (define partition table now, not later).
+**Avoids:**
+- Pitfall 2 (RTCM binary corrupts NMEA parser) — resolved by `RxState` machine; 0xD3 and `$` as unambiguous first-byte discriminators
+- Pitfall 6 (buffer too small for MSM7) — RTCM frame buffer sized at 1100 bytes from the start; not tunable after implementation
 
-**Research flag:** Verify current `esp-idf-hal`/`esp-idf-svc`/`esp-idf-sys` coordinated versions on crates.io and from the latest `esp-idf-template` before pinning. Training data versions may have incremented.
+**Sub-tasks:**
+- A1: `RxState` enum in `gnss.rs`; `spawn_gnss` returns triple `(cmd_tx, nmea_rx, rtcm_rx)`; 1100-byte RTCM accumulation buffer
+- A2: `rtcm_relay.rs` (mirrors `nmea_relay.rs`); wire into `main.rs`; set `out_buffer_size=2048` in MQTT config
+- A3: MQTT pump topic discrimination fix — route `/config` to `config_tx`, `/ota/trigger` to `ota_tx`, unrouted topics to warn+drop
+- Hardware verify: RTCM frames visible on broker under `gnss/{id}/rtcm/NNNN`; CRC pass rate >99% over 100 frames; NMEA topics continue uninterrupted
 
----
+**Research flag:** No additional research needed. State machine design is fully specified in ARCHITECTURE.md. CRC-24Q algorithm and polynomial are confirmed from RTKLIB source. All decisions are made.
 
-### Phase 2: NVS Credential Store and Boot Branch
+### Phase B: OTA Firmware Update
 
-**Rationale:** NVS is required by every subsequent component (BLE provisioning writes to it; WiFi and MQTT read from it; boot logic gates on it). Building and validating it standalone avoids debugging NVS issues while simultaneously debugging BLE or WiFi.
+**Rationale:** Depends on Phase A completing the pump topic discrimination fix. Requires a USB reflash to change the partition table — this is the harder reset point of the milestone and should come after RTCM relay is validated. OTA's rollback safety net depends on the partition table being correct from the very first OTA-enabled build.
 
-**Delivers:** `nvs_store.rs` module with typed read/write for all credential keys; `main.rs` boot branch that reads `provisioned` flag and routes accordingly; validated erase-flash → provisioning mode behavior; all NVS errors route to provisioning mode rather than panic.
+**Delivers:** Operator publishes a firmware URL to `gnss/{device_id}/ota/trigger`; device downloads, validates, flashes to the inactive OTA slot, and reboots into new firmware; failed boots (firmware does not mark itself valid) auto-rollback to the previous slot; OTA progress and completion status published to `gnss/{device_id}/ota/status`.
 
-**Addresses features:** NVS persistent credential storage; graceful factory reset behavior.
+**Addresses:** Partition table rework, OTA MQTT trigger, HTTP firmware download in chunks, rollback on first-boot failure, `mark_running_slot_valid()`, watchdog-safe sequential erase.
 
-**Avoids pitfalls:** NVS partition misconfiguration; boot loop on NVS corruption; accidental panic on empty NVS.
+**Avoids:**
+- Pitfall 1 (no OTA partition space) — redesign `partitions.csv` as first act of Phase B; `espflash erase-flash` before building OTA code
+- Pitfall 2 (interrupted download leaves corrupt partition) — `EspOta`'s `Drop` calls `esp_ota_abort()` automatically; never call `complete()` before the full download succeeds
+- Pitfall 3 (boot loop without mark-valid) — `mark_running_slot_valid()` called after UART init, before network operations; added in initial implementation, never as a follow-up
+- Pitfall 4 (watchdog during erase) — sequential erase mode from the start
+- Pitfall 5 (OTA inside MQTT pump) — independent `ota.rs` thread; pump sends URL string via channel
 
----
+**Sub-tasks:**
+- B1: `partitions.csv` redesign; `sdkconfig.defaults` additions; `espflash erase-flash` + reflash; verify layout with `espflash partition-table`
+- B2: `ota.rs` module; Cargo.toml `ota` feature (verify feature name from local `esp-idf-svc-0.51.0/Cargo.toml`); `EspHttpConnection` + `EspOta` imports; 16KB thread stack
+- B3: Wire `ota_listener` into `main.rs`; add `ota_tx/rx` channel; add `mark_running_slot_valid()` call in startup sequence
+- B4: Post-OTA: publish empty retained message to `/ota/trigger` to clear trigger; publish status to `/ota/status`
+- Hardware verify: trigger OTA from MQTT; new firmware boots and marks valid; force reboot before mark-valid and confirm rollback to previous slot
 
-### Phase 3: BLE Provisioning
-
-**Rationale:** BLE provisioning is the highest-complexity P1 feature and the one with the lowest-confidence API surface. Building it early, while the codebase is small, means any API surprises are cheap to handle. It also validates the critical BLE-then-WiFi sequencing before WiFi code exists.
-
-**Delivers:** `ble_provision.rs` custom GATT server accepting WiFi SSID/password and MQTT host/port/user/password as characteristic writes; credentials written to NVS on successful provisioning; `provisioned` flag set; BLE driver fully shut down before returning; `main.rs` reboot after provisioning complete; status LED shows provisioning state.
-
-**Addresses features:** BLE provisioning on first boot; status LED (provisioning blink pattern).
-
-**Avoids pitfalls:** BLE + WiFi coexistence (BtDriver dropped before WiFi starts); BLE GATT write fragmentation for long passwords (>22 bytes requires MTU negotiation).
-
-**Research flag:** Verify current `esp-idf-svc::bt` GATT server API and look for working examples in the esp-idf-svc repository. This was the most volatile API as of mid-2025. If the Rust GATT API is insufficient, fall back to `esp32-nimble` crate or `unsafe` FFI to the `wifi_provisioning` IDF component.
-
----
-
-### Phase 4: WiFi and MQTT Connectivity Skeleton
-
-**Rationale:** With credentials in NVS and the boot branch working, WiFi and MQTT can be built as a validated connectivity layer before adding NMEA data. Testing MQTT publish with a hardcoded heartbeat message confirms broker reachability and credential correctness before introducing UART complexity.
-
-**Delivers:** `wifi.rs` with station mode connect, event loop integration, and exponential backoff reconnect; `mqtt_client.rs` with single long-lived `EspMqttClient`, LWT registration at connect time, config topic subscription inside `Connected` handler, heartbeat publish; `heartbeat.rs` with periodic timer; MQTT LWT and retain flags set correctly from the start.
-
-**Addresses features:** WiFi connection; MQTT client connect; MQTT LWT for offline status; retain flag on heartbeat/status; heartbeat publish; auto-reconnect for WiFi and MQTT.
-
-**Avoids pitfalls:** MQTT reconnect memory leak (single client, built-in reconnect); MQTT config topic subscription only at startup (re-subscribe in Connected handler).
-
----
-
-### Phase 5: UART-to-MQTT NMEA Pipeline
-
-**Rationale:** This is the core product function. With connectivity validated, the UART reader and NMEA router can be added and the end-to-end relay pipeline confirmed on live hardware with a real UM980. The bounded channel between UART and MQTT provides natural backpressure.
-
-**Delivers:** `uart_reader.rs` with high-priority FreeRTOS task, 4096-byte RX ring buffer, line accumulator handling fragmented reads, NMEA checksum validation, and bounded channel send; `nmea_router.rs` with sentence type extraction and topic string construction; `mqtt_client.rs` NMEA publish loop dequeuing from channel; full end-to-end relay validated with live UM980 connected.
-
-**Addresses features:** UART RX from UM980; NMEA sentence framing and line extraction; NMEA sentence type parsing; NMEA checksum validation; NMEA publish to per-type topics; per-sentence topic routing.
-
-**Avoids pitfalls:** UART receive buffer overflow (4096-byte buffer, dedicated high-priority task); NMEA sentence fragmentation (line accumulator from the start, not added later); unbounded channel memory exhaustion (bounded sync_channel(64)).
-
----
-
-### Phase 6: MQTT Config to UM980 Init
-
-**Rationale:** With the NMEA relay pipeline working, the config pathway completes the bidirectional control loop. This phase introduces sequencing requirements (UART must be ready before config is applied) and the UART TX write path.
-
-**Delivers:** Config channel from MQTT event callback to UART TX; `uart_ready` `AtomicBool` flag set after UM980 responds to test command; config messages queued and held until `uart_ready` is set; UART TX write path with per-command delay for UM980 processing window; QoS 1 subscription to config topic confirmed.
-
-**Addresses features:** MQTT subscribe to config topic (QoS 1); UART TX to UM980 (send received config payload); remote UM980 initialization without reflash.
-
-**Avoids pitfalls:** Retained MQTT config message processed before UART ready; writing UART from MQTT event callback directly (use channel; never write UART inside the callback).
-
----
-
-### Phase 7: LED State Machine, Reconnect Hardening, and Integration
-
-**Rationale:** Final integration phase. All components are running together for the first time, exposing stack size and memory pressure issues that only appear under combined load. Reconnect logic is validated under deliberate fault injection. LED state machine completes the operator-visible status feedback.
-
-**Delivers:** `led.rs` full state machine (provisioning, connecting, connected, error states); WiFi and MQTT reconnect validated through 50+ disconnect/reconnect cycles with stable heap; FreeRTOS stack high-water marks measured on all tasks with canary enabled; `uxTaskGetStackHighWaterMark()` confirms >25% headroom on all tasks; status LED wired to all state transitions; field test with live UM980 and real MQTT broker.
-
-**Addresses features:** Status LED full state machine; auto-reconnect hardening; all "looks done but isn't" checklist items.
-
-**Avoids pitfalls:** FreeRTOS task stack overflow (canary enabled in Phase 1, measured and tuned here); string allocation per MQTT publish (pre-format topic strings at boot); logging every NMEA sentence at info level (use debug level).
-
----
+**Research flag:** Verify exact Cargo feature name for OTA in `esp-idf-svc-0.51.0/Cargo.toml` before B2. STACK.md (from lib.rs inspection) found no feature gate; ARCHITECTURE.md (from docs) suggests `features = ["ota"]`. This takes 2 minutes to check and resolves a build-time ambiguity.
 
 ### Phase Ordering Rationale
 
-- **Foundation before provisioning:** NVS must exist before BLE can write to it; the partition table must be defined before NVS is first used; toolchain must be pinned before any code is written that relies on specific API surfaces.
-- **Provisioning before connectivity:** BLE provisioning delivers the credentials that WiFi and MQTT depend on. Testing provisioning standalone, while the codebase is small, is dramatically cheaper than debugging it after WiFi and MQTT are also in play.
-- **Connectivity before pipeline:** Validating MQTT publish with a heartbeat message before adding UART confirms that broker address, credentials, and network path are correct. Introducing UART complexity simultaneously would obscure connectivity issues.
-- **Pipeline before config passthrough:** The UART TX config path depends on the UART driver being initialized and the MQTT subscription being active; both are established in phases 4 and 5.
-- **Integration last:** Stack sizing, heap profiling, and reconnect stress testing require all components to be running simultaneously; they cannot be done meaningfully in partial builds.
+- **RTCM before OTA:** RTCM requires no partition changes; OTA requires a full device erase. Validating RTCM while the current partition table is intact eliminates one variable from debugging and delivers value sooner.
+- **State machine (A1) before relay (A2):** `gnss.rs` change is a shared dependency; the RTCM channel must exist before `rtcm_relay.rs` can consume it.
+- **Topic discrimination (A3) in Phase A:** The existing pump bug (all `Received` events routed to `config_tx` regardless of topic) must be fixed before adding OTA subscription — otherwise OTA trigger payloads would be forwarded to the UM980 as configuration commands. Fixing it in Phase A makes Phase B simpler and removes a source of hard-to-diagnose bugs.
+- **Partition table (B1) before OTA code (B2-B4):** The new firmware must be built and flashed against the OTA-compatible layout before OTA logic is exercised. Testing `EspOta` against a factory-only partition produces misleading failures that do not reflect the final deployment.
 
 ### Research Flags
 
-Phases needing deeper research or API verification during planning:
+Phases needing deeper research during planning:
+- **Phase B, task B2:** Verify `esp-idf-svc` OTA feature gating by reading `/home/ben/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-idf-svc-0.51.0/Cargo.toml`. Takes 2 minutes; resolves whether `features = ["ota"]` is needed or the module is unconditionally compiled. Do this before writing the Cargo.toml change.
 
-- **Phase 1 (Scaffold):** Verify the current coordinated versions of `esp-idf-hal`, `esp-idf-svc`, and `esp-idf-sys` from the latest `esp-idf-template` on crates.io and the esp-rs GitHub org. Training data versions (0.44 / 0.49 / 0.37) are from August 2025 and will have incremented.
-- **Phase 3 (BLE Provisioning):** Verify the `esp-idf-svc::bt` GATT server API with working examples from the esp-idf-svc repository. BLE GATT server was the most volatile API surface in the Rust IDF ecosystem. If the Rust API is insufficient, evaluate `esp32-nimble` as an alternative before starting implementation.
-- **Phase 5 (UART Pipeline):** Verify the UM980 default baud rate and response timing (50ms command processing window is unverified) against the Unicore UM980 Integration Manual before writing the UART init sequence and config passthrough logic.
-
-Phases with standard, well-documented patterns (research-phase not needed):
-
-- **Phase 2 (NVS):** `EspNvs` API and NVS behavior are well-documented and stable. Standard pattern.
-- **Phase 4 (WiFi + MQTT):** `EspWifi` and `EspMqttClient` are the primary examples in the esp-idf-svc repository. Callback model and reconnect pattern are documented.
-- **Phase 6 (Config passthrough):** Pure channel plumbing; no novel APIs. The MQTT → channel → UART TX pattern is straightforward given the architecture established in earlier phases.
-- **Phase 7 (Integration):** Profiling and tuning; no new APIs. FreeRTOS stack measurement APIs are stable and well-documented.
-
----
+Phases with standard patterns (skip research-phase):
+- **Phase A (RTCM relay):** State machine design, CRC-24Q algorithm, channel types, MQTT binary publish — all fully specified in research files with no ambiguity.
+- **Phase B OTA sequence:** `EspOta` call sequence (initiate → write → complete → restart → mark_valid), partition layout math, and sequential erase rationale — all verified from local ESP-IDF v5.3.3 source and confirmed by multiple independent sources.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | MEDIUM | Framework choice (esp-idf-hal vs esp-hal) is HIGH confidence and well-documented. Specific crate versions are training data from Aug 2025 — verify before pinning. BLE GATT API stability is LOW confidence within the otherwise MEDIUM stack picture. |
-| Features | MEDIUM | Feature list is grounded in project requirements (PROJECT.md) and well-established NMEA/MQTT/IoT patterns. NMEA 0183 spec and MQTT 3.1.1 spec are HIGH confidence. UM980-specific timing and command details are LOW confidence — verify against Unicore datasheet. |
-| Architecture | MEDIUM | FreeRTOS thread model, bounded channel pattern, NVS-gated boot branch, and EspMqttClient event model are all established patterns with examples in the esp-idf-svc repository. No web access during research; verify EspMqttClient callback API against current crate version before implementing. |
-| Pitfalls | MEDIUM-HIGH | Core embedded pitfalls (stack overflow, UART overflow, MQTT reconnect leak, BLE+WiFi coexistence) are well-documented in ESP-IDF literature and FreeRTOS documentation. UM980-specific timing values are unverified. |
+| Stack | HIGH | OTA and HTTP APIs verified by direct source read of `esp-idf-svc-0.51.0` local files; MQTT binary payload API confirmed from existing codebase usage; one minor gap (OTA feature name in Cargo.toml, easily resolved) |
+| Features | HIGH | RTCM3 framing confirmed from RTKLIB source (canonical reference implementation); OTA flow verified against ESP-IDF v5.3.3 C source; MQTT topic convention is MEDIUM (no single authoritative standard, but observed practice from multiple open-source projects is consistent) |
+| Architecture | HIGH | All component boundaries and data flows are concrete; partition math verified; state machine design confirmed against RTCM spec; `RxState` enum structure is explicitly specified including byte-level transitions |
+| Pitfalls | HIGH | OTA/partition pitfalls verified against ESP-IDF v5.3.3 `esp_ota_ops.c` and `esp_ota_ops.h` in `.embuild/`; RTCM pitfalls confirmed from RTKLIB and RTCM spec; UM980 baud rate sequencing is MEDIUM (command syntax confirmed from multiple manufacturer sources; PDF not machine-readable) |
 
-**Overall confidence:** MEDIUM
+**Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **BLE GATT server API surface:** This was the most volatile part of the esp-rs ecosystem as of mid-2025. Before writing Phase 3 code, check the `esp-idf-svc` repository for current GATT server examples and confirm whether `esp32-nimble` is a better alternative. If neither has a working example, consider falling back to `unsafe` FFI to the `wifi_provisioning` IDF component (WiFi-only) and extending it with a separate GATT characteristic for MQTT credentials.
-- **Crate versions:** All version numbers in STACK.md are training data. Run `cargo generate esp-rs/esp-idf-template` at project start and accept the versions it provides; do not manually transcribe versions from this document.
-- **UM980 UART specifics:** Default baud rate confirmed as 115200 in the project brief, but command acknowledgment timing (the 50ms window cited in PITFALLS.md) requires verification against the Unicore UM980 Integration Manual before implementing the config passthrough UART TX sequence.
-- **ESP32-C6 memory budget:** The heap budget estimate (WiFi ~80KB, BLE ~60KB during provisioning, MQTT buffers, Rust stacks) needs validation against measured values on the actual hardware during Phase 7. The 320KB figure is a training data estimate; actual available heap depends on sdkconfig options.
+- **OTA Cargo feature name:** STACK.md (from lib.rs inspection) found OTA is gated only by ESP-IDF component flags, not a Cargo feature flag. ARCHITECTURE.md (from docs) references `features = ["ota"]`. Read `esp-idf-svc-0.51.0/Cargo.toml` from local cargo cache before Phase B implementation to confirm. If OTA is unconditional, no Cargo.toml change is needed for the module itself.
 
----
+- **OTA trigger QoS:** FEATURES.md recommends QoS 1 for the OTA trigger subscription (OTA is a one-shot action where dropped messages matter). The existing codebase uses QoS 0 for NMEA and heartbeat. Confirm that `EspMqttClient` subscription supports QoS 1 and that the `subscriber_loop` can specify per-topic QoS during Phase B planning.
+
+- **RTCM MSM7 bandwidth in practice:** Bandwidth analysis used MSM4 estimates (~370 bytes/s). MSM7 is ~30-50% larger per frame, yielding ~500-550 bytes/s total with NMEA — still under 6% of 115200 baud capacity. Buffer sizing (1100 bytes) and MQTT `out_buffer_size` (2048) are sized for the maximum 1029-byte frame regardless of MSM level. No action needed, but verify that the UM980 RTCM configuration enabled on device FFFEB5 matches the MSM level assumed in testing.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- MQTT 3.1.1 specification (OASIS, Section 3.1.3.4 LWT, 3.3.1.3 retained) — LWT behavior, retained messages, QoS levels
-- NMEA 0183 / IEC 61162-1 — sentence format, max length (82 chars), checksum algorithm (XOR between `$` and `*`)
-- FreeRTOS task stack behavior on ESP32 — well-documented, stable across ESP32 variants
+
+- `/home/ben/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-idf-svc-0.51.0/src/ota.rs` — `EspOta`, `EspOtaUpdate`, `complete()`, `finish()`, `mark_running_slot_valid()` methods
+- `/home/ben/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-idf-svc-0.51.0/src/lib.rs` — OTA module gate conditions (`esp_idf_comp_app_update_enabled`)
+- `/home/ben/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-idf-svc-0.51.0/src/http/client.rs` — `EspHttpConnection::new`, `Configuration` struct
+- `/home/ben/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-idf-svc-0.51.0/src/mqtt/client.rs` — `enqueue`/`publish` accept `&[u8]`
+- `/home/ben/github.com/bharrisau/esp32-gnssmqtt/.embuild/espressif/esp-idf/v5.3.3/components/app_update/esp_ota_ops.c` — OTA write atomicity, sequential erase behavior, abort handle lifecycle
+- `/home/ben/github.com/bharrisau/esp32-gnssmqtt/.embuild/espressif/esp-idf/v5.3.3/components/app_update/include/esp_ota_ops.h` — `esp_ota_mark_app_valid_cancel_rollback()`, `esp_ota_abort()`, rollback state machine
+- RTKLIB `src/rtcm.c` — RTCM3 preamble 0xD3, CRC-24Q polynomial 0x864CFB, resync strategy after CRC failure
+- Espressif partition table documentation — `otadata` 0x2000 requirement, alignment constraints, dual-slot OTA mechanics
 
 ### Secondary (MEDIUM confidence)
-- The Rust on ESP Book (https://esp-rs.github.io/book/) — std vs no_std choice, project setup, thread model; training data Aug 2025
-- esp-idf-hal crate (https://github.com/esp-rs/esp-idf-hal) — UART, GPIO, timer drivers; training data Aug 2025
-- esp-idf-svc crate (https://github.com/esp-rs/esp-idf-svc) — WiFi, MQTT, NVS, BT bindings; training data Aug 2025
-- ESP-IDF Programming Guide for ESP32-C6 (https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/) — UART overflow behavior, NVS key limits, coexistence; training data Aug 2025
-- esp-idf-template (https://github.com/esp-rs/esp-idf-template) — canonical project scaffold; training data Aug 2025
-- ESP-IDF coexistence guide (https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/api-guides/coexist.html) — BLE+WiFi coexistence; training data Aug 2025
 
-### Tertiary (LOW confidence — verify before use)
-- UM980 UART characteristics — command acknowledgment timing (50ms window) and baud rate confirmation; based on general RTK receiver patterns; verify against Unicore UM980 Integration Manual
-- esp-idf-svc BLE GATT server API — functional but had rough edges as of mid-2025; verify current API surface and examples before implementing Phase 3
+- SNIP RTCM cheat sheet — message type matrix (1005, 1074-1127 MSM4/MSM7, 1230)
+- ArduSimple/Unicore UM980 hookup guide and commands manual — RTCM output message list, baud rate options
+- RVMT/RVMP project (hagre/GitHub) — binary RTCM over MQTT topic convention (per-type topics, raw bytes)
+- pyrtcm library — CRC failure resync strategy (scan byte-by-byte for next 0xD3 or `$`)
+- ESP-IDF OTA practical walkthrough (quan.hoabinh.vn, 2024) — `EspHttpConnection` + `EspOta` Rust integration pattern
+- esp-ota crate (faern/esp-ota) — transport-agnostic OTA Rust crate; confirms binary must be ESP app image format (first byte 0xE9)
+
+### Tertiary (LOW confidence / needs validation before use)
+
+- UM980 baud rate command syntax (`COM COM1 <rate>`) — confirmed from multiple web sources; PDF manual not machine-readable in this session; verify against Unicore Reference Commands Manual before implementing baud rate change (deferred to future milestone, not part of v1.2)
 
 ---
-
-*Research completed: 2026-03-03*
+*Research completed: 2026-03-07*
 *Ready for roadmap: yes*

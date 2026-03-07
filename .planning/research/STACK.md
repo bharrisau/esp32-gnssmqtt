@@ -1,271 +1,278 @@
 # Stack Research
 
 **Domain:** Embedded Rust firmware — ESP32-C6, GNSS/MQTT bridge
-**Researched:** 2026-03-03
-**Confidence:** MEDIUM (training data through Aug 2025; external verification tools unavailable during this session — all versions marked with verification notes)
+**Researched:** 2026-03-07 (milestone 2 update: RTCM relay + OTA)
+**Confidence:** HIGH for OTA and HTTP APIs (source code verified in local cargo cache); MEDIUM for RTCM sizing (derived from published spec structure); HIGH for baud rates (multiple sources agree)
 
 ---
 
-## The Central Decision: esp-idf-hal vs esp-hal (bare metal)
+## Scope of This Document
 
-This is the most important architectural choice. Get it wrong and you rewrite.
+This is a milestone-scoped update. The original stack (esp-idf-hal =0.45.2, esp-idf-svc =0.51.0, esp-idf-sys =0.36.1, ESP-IDF v5.3.3) is pinned and working. This document answers what is needed for two new features:
 
-### Recommendation: Use esp-idf-hal (std, IDF-backed)
+1. RTCM3 binary frame relay: detect 0xD3-preamble frames mixed with NMEA text on the same UART and relay binary frames over MQTT
+2. OTA firmware update: MQTT-triggered HTTP-pull → SHA-256 verify → flash → reboot
 
-**Rationale:**
-
-This project requires WiFi, BLE, and NVS — all of which depend on Espressif's IDF (IoT Development Framework) blobs. The ESP32-C6's WiFi and BLE stacks are closed-source firmware from Espressif. Both `esp-idf-hal` and `esp-hal` ultimately require these blobs, but the integration story differs dramatically:
-
-- **`esp-idf-hal` (std):** Runs on top of ESP-IDF via the `esp-idf-sys` bindgen layer. You get std Rust (heap, threads, network stack via `esp-idf-svc`). WiFi, BLE, NVS, TCP/IP, MQTT are all first-party Espressif crates. This is the production-tested path.
-- **`esp-hal` (no_std, bare metal):** Hardware abstraction with no OS. WiFi/BLE requires `esp-wifi` crate which is still maturing. NVS requires `esp-storage` + your own abstraction. More control, less ecosystem. As of mid-2025, `esp-wifi` BLE on C6 was functional but less battle-tested than IDF path.
-
-**This project needs all three: WiFi + BLE + NVS simultaneously.** The `esp-idf-hal` path provides all three as stable, maintained crates from Espressif itself. The bare-metal path would require integrating three less-mature crates with no guarantee they coexist cleanly on C6.
-
-**Choose `esp-hal` only if:** ultra-low latency requirements, no WiFi/BLE needed, or you need no_std for memory constraints so tight that IDF overhead is unacceptable. None of those apply here.
+No crate version bumps are needed. All required APIs are already present in the pinned versions.
 
 ---
 
-## Recommended Stack
+## New Feature 1: RTCM3 Binary Frame Relay
 
-### Core Framework
+### UART Baud Rate Decision
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| `esp-idf-hal` | ~0.44 | HAL for ESP32 peripherals (UART, GPIO, SPI, etc.) over IDF | Official Espressif crate; exposes UART, GPIO via embedded-hal traits; stable API on C6; std Rust allowed |
-| `esp-idf-svc` | ~0.49 | WiFi, BLE, NVS, MQTT, HTTP services over IDF | Official Espressif crate; wraps IDF service layer; provides `EspWifi`, `EspBle`, `EspNvs`, `EspMqttClient`; the only mature path for all three services simultaneously on C6 |
-| `esp-idf-sys` | ~0.37 | Low-level bindgen bindings to ESP-IDF C API | Required transitive dependency; `esp-idf-hal` and `esp-idf-svc` both depend on it; do not call directly |
-| Rust toolchain | nightly (with `esp` channel) | Rust compiler targeting RISC-V ESP32-C6 | ESP32-C6 is RISC-V (rv32imac); requires `riscv32imc-esp-espidf` target; use `espup` to install Espressif Rust toolchain |
-| ESP-IDF | v5.2.x or v5.3.x | Underlying C framework providing WiFi/BLE blobs and OS primitives | IDF v5.x required for C6 support; IDF v5.2+ is the stable branch as of mid-2025; `esp-idf-sys` build script downloads and links it |
+**Stay at 115200 baud. No baud-rate change needed.**
 
-**Confidence:** MEDIUM — versions are from training data (Aug 2025); verify latest on crates.io before pinning.
+**Bandwidth math:**
 
-### UART (GNSS Reading)
+RTCM3 MSM4 frame structure:
+- Frame overhead: 3 bytes (0xD3 preamble + 6 reserved bits + 10-bit length) + 3 bytes CRC = **6 bytes per frame**
+- MSM4 fixed header: 169 bits
+- Per-satellite delta: 10 bits (satellite mask cell)
+- Per-signal cell: 42 bits (15-bit pseudorange mod 1ms + 22-bit carrier phase + 4-bit lock time + 1-bit half-cycle ambiguity)
+- Formula: total bits = 169 + nSat×10 + nSig×42
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| `esp_idf_hal::uart` | (part of esp-idf-hal) | Blocking or async UART read/write | Built-in to esp-idf-hal; `UartDriver` provides read/write; no extra dependency |
-| `nmea` | ~0.7 or ~0.6 | NMEA 0183 sentence parsing | Pure Rust, no_std-compatible parser; handles GGA, GLL, RMC, GSA, GSV, VTG; used for parsing only (we relay raw sentences, so parser is optional) |
+Typical open-sky scenario (conservative estimates, 1 Hz):
 
-**Recommendation on UART mode:** Use **blocking UART** for initial implementation. The UM980 sends sentences at 115200 baud; a blocking read loop on a dedicated FreeRTOS thread (via `std::thread`) is simple, predictable, and avoids the complexity of async executor integration with IDF. Async UART (`esp-idf-hal` async support) exists but adds `embassy` dependency and is less commonly tested on C6 as of mid-2025.
+| Constellation | Msg ID | Visible Sats | Signals | Payload bits | Frame bytes |
+|---------------|--------|--------------|---------|-------------|-------------|
+| GPS           | 1074   | 10           | 10      | 169+100+420=689 | ceil(689/8)+6 = **92** |
+| GLONASS       | 1084   | 8            | 8       | 169+80+336=585  | ceil(585/8)+6 = **80** |
+| Galileo       | 1094   | 10           | 10      | 169+100+420=689 | ceil(689/8)+6 = **92** |
+| BeiDou        | 1124   | 12           | 12      | 169+120+504=793 | ceil(793/8)+6 = **106** |
+| **Total**     |        |              |         |             | **~370 bytes/s** |
 
-**Do not** use async unless the blocking read loop becomes a bottleneck — at 115200 baud with NMEA sentences, a blocking thread is perfectly adequate.
+NMEA at 115200 baud with typical UM980 output (GGA, RMC, GSA, GSV×4, VTG = ~8 sentences × ~80 bytes = ~640 bytes/s):
 
-### WiFi
+Total UART load: ~370 + 640 = **~1,010 bytes/s**
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| `esp-idf-svc::wifi` | (part of esp-idf-svc) | Station mode WiFi connection | `EspWifi` wraps IDF WiFi driver; handles scan, connect, DHCP; most mature WiFi path for IDF Rust |
+At 115200 baud: 115,200 / 10 = **11,520 bytes/s** capacity.
 
-Configuration pattern: `EspWifi::new()` → configure with `ClientConfiguration` → `wifi.connect()` → wait for IP via event loop. The IDF event loop (`EspSystemEventLoop`) is required.
+RTCM + NMEA combined is **< 9% of 115200 baud capacity**. No baud rate change required.
 
-### MQTT
+**UM980 supported baud rates (COMCONFIG command):** 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600. Factory default is 115200. Source: multiple ArduSimple/Unicore references confirm 460800 and 921600 are valid options. We do not need them.
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| `esp-idf-svc::mqtt::client` | (part of esp-idf-svc) | MQTT 3.1.1 client over TCP | `EspMqttClient` wraps IDF MQTT client; native C implementation in IDF; no extra Rust MQTT crate needed; supports QoS 0/1/2, retained messages, username/password auth; battle-tested on IDF |
+**If RTCM MSM7 (higher precision, 58-bit signal cells instead of 42) were used**, the same constellation set would produce ~500 bytes/s — still well within 115200 budget.
 
-**Recommendation:** Use `EspMqttClient` from `esp-idf-svc` rather than a pure-Rust MQTT crate (like `rumqttc`). Reason: `rumqttc` requires a full async runtime (`tokio`) or careful integration; `EspMqttClient` is built on the IDF's own MQTT implementation which is already running inside the firmware, no extra code size overhead. The IDF MQTT client handles reconnect logic via `MqttClientConfiguration::reconnect_timeout` natively.
+### RTCM3 Frame Detection in Byte Stream
 
-**Confidence for EspMqttClient:** MEDIUM — documented in esp-idf-svc 0.48+; verify API hasn't changed.
+RTCM3 frames start with byte `0xD3`. NMEA sentences start with `$` (0x24). The byte stream is unambiguous: a `0xD3` byte starts an RTCM frame; `$` starts an NMEA sentence.
 
-### BLE Provisioning
+Frame parsing state machine (pure Rust, no external crate needed):
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| `esp-idf-svc::bt` | (part of esp-idf-svc) | Bluetooth/BLE via IDF BT stack | `EspBluetooth` + GATT server APIs; or use `esp_idf_svc::ble::gap` for advertising |
-| Espressif `wifi_provisioning` component | via IDF component | Wi-Fi provisioning over BLE using standard Espressif provisioning protocol | IDF has a built-in `wifi_provisioning` component that implements the Espressif Unified Provisioning Protocol; works with the official ESP SoftAP/BLE Provisioning mobile app (Android/iOS); can be called via `esp-idf-sys` bindings |
+```
+State: Idle
+  0xD3  → read 2 more bytes (6-bit reserved + 10-bit length) → State: InRtcm(length)
+  '$'   → accumulate until '\n' → emit NMEA sentence
+  other → discard (log warn)
 
-**Important nuance on BLE provisioning approach:**
+State: InRtcm(n)
+  read n bytes (payload) + 3 bytes (CRC-24Q) → emit RTCM frame as &[u8]
+  → State: Idle
+```
 
-Two paths exist:
+Maximum RTCM frame size: 10-bit length field = max 1023 bytes payload + 6 bytes overhead = **1029 bytes maximum**. The existing 512-byte NMEA line buffer in `gnss.rs` is insufficient for RTCM; the RTCM parser needs its own buffer of at least 1029 bytes.
 
-1. **Espressif Unified Provisioning (`wifi_provisioning` IDF component):** Uses the standard Espressif provisioning protocol over BLE GATT. Pairs with the official "ESP BLE Prov" mobile apps. Protobuf-based. Requires calling IDF C API through `esp-idf-sys`. As of mid-2025, no dedicated Rust wrapper crate exists — you write `unsafe` FFI to `wifi_provisioning_mgr_init()` and friends, or wrap it yourself.
+**No external crate required.** The detection and framing logic is a simple state machine that fits in ~50 lines of Rust. Do not add an `rtcm` or `nmea` parsing crate — we relay raw bytes, not parse them.
 
-2. **Custom GATT server via `esp-idf-svc::bt`:** Write a custom BLE GATT service that accepts WiFi/MQTT credentials as characteristic writes. Pure Rust with `esp-idf-svc`'s BLE APIs. More code, but full control over the protocol. Can work with any BLE client (nRF Connect, custom app, etc.).
+### MQTT Binary Payload Publishing
 
-**Recommendation:** Use path 2 (custom GATT server) for this project. Reason: MQTT credentials (host, port, username, password) need provisioning alongside WiFi credentials. The Espressif Unified Provisioning protocol is WiFi-only — you'd need to extend it for MQTT config, which requires the same custom GATT work anyway. Build one simple GATT service that accepts a JSON blob with all credentials.
+**API:** `EspMqttClient::enqueue(topic, QoS, retain, payload: &[u8])` — already used in this codebase (see `heartbeat_loop` in `mqtt.rs`). The `payload` parameter is `&[u8]`, so binary data works identically to text. No API change needed.
 
-**Confidence:** LOW — BLE GATT server in `esp-idf-svc` Rust API is documented but had rough edges as of mid-2025; verify current API surface and look for examples in the `esp-idf-svc` repo.
+**Size limit:** The ESP-IDF MQTT client's internal outbox buffer defaults to 1024 bytes. RTCM frames up to 1029 bytes will exceed this. Two mitigations:
+1. Set `out_buffer_size` in `MqttClientConfiguration` to at least 2048 bytes (covers the max RTCM frame plus MQTT framing overhead of ~5 bytes)
+2. Alternatively, publish RTCM frames via `client.publish()` (blocking) instead of `enqueue()` (non-blocking) — `publish()` handles fragmentation automatically but blocks until sent
 
-### NVS (Flash Config Storage)
+**Recommendation:** Increase `out_buffer_size` to 2048 in `MqttClientConfiguration`. This is a one-line config change. The MQTT 3.1.1 protocol supports payloads up to 256 MB theoretically; the only limit is the ESP-IDF client's internal buffer configuration.
 
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| `esp-idf-svc::nvs` | (part of esp-idf-svc) | Non-volatile storage for key-value config | `EspNvs` wraps IDF NVS partition; stores strings (WiFi SSID/password, MQTT host/port/credentials, device ID); survives power cycles; wear-leveled by IDF; direct Rust API |
-
-Usage pattern: Open a namespace (`EspNvs::new(nvs_partition, "config", true)`), use `get_str`/`set_str` for each credential. Max value size for NVS strings is 4000 bytes by default (configurable). Suitable for all config values in this project.
-
-**Do not use** `embassy-nvm` or external flash crates — NVS via IDF is the correct solution for ESP32 config storage with wear leveling and atomic updates.
-
-### Device ID
-
-| Approach | Why |
-|----------|-----|
-| `esp_idf_sys::esp_efuse_mac_get_default()` | Returns the 6-byte factory-burned MAC address; unique per chip; use as device ID base; format as hex string for MQTT topic construction |
-
-### Web Portal Fallback (Provisioning)
-
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| `esp-idf-svc::http::server` | (part of esp-idf-svc) | HTTP server for web provisioning portal | `EspHttpServer` wraps IDF HTTP server; serves a simple HTML form for WiFi/MQTT credential entry; runs alongside WiFi AP mode |
-
-For web portal: set ESP32 to AP mode (soft AP), run HTTP server on 192.168.4.1, serve form, accept POST with credentials, save to NVS, reboot into station mode. Standard IDF pattern.
+**Topic pattern:** `gnss/{device_id}/rtcm/{msg_type}` where `msg_type` is the 4-digit RTCM message number (e.g., `1074`). Decode the 12-bit message type from bytes 3-4 of the frame (bits 0-11 of the payload, after the 3-byte header) to get the topic suffix.
 
 ---
 
-### Development Tools
+## New Feature 2: OTA Firmware Update
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| `espup` | Installs ESP Rust toolchain + RISC-V target | Run `espup install` to get the `esp` Rust channel, RISC-V target, and `ldproxy`; replaces the old manual `espflash` + custom toolchain setup |
-| `espflash` | Flashes firmware to ESP32 over USB/UART | `cargo espflash flash --monitor`; also handles serial monitor; required in `Cargo.toml` as `[alias]` |
-| `cargo-generate` | Project scaffolding | Use `cargo generate esp-rs/esp-idf-template` to get a working std/IDF project skeleton |
-| `ldproxy` | Linker proxy for IDF builds | Required by `esp-idf-sys` build system; installed by `espup` |
-| `probe-rs` | Debugging via JTAG/USB-JTAG | ESP32-C6 has built-in USB-JTAG; `probe-rs run` + `defmt` for RTT logging during development |
+### OTA API (Verified from Source)
+
+All OTA functionality is in `esp_idf_svc::ota` — **no extra crate, no feature flag**. The module is enabled by the ESP-IDF component flags `esp_idf_comp_app_update_enabled` and `esp_idf_comp_spi_flash_enabled`, both of which are always true in a standard ESP-IDF build. Confirmed by reading `lib.rs` in esp-idf-svc-0.51.0 local cache.
+
+**Key types (all in `esp_idf_svc::ota`):**
+
+| Type | Purpose |
+|------|---------|
+| `EspOta` | Singleton OTA manager; only one instance exists at a time (internally mutex-guarded) |
+| `EspOtaUpdate<'a>` | Write handle returned by `initiate_update()`; implements `io::Write` |
+| `EspOtaUpdateFinished<'a>` | Returned by `update.finish()`; call `.activate()` to set boot partition |
+
+**OTA sequence:**
+
+```rust
+// Step 1: obtain OTA handle (fails if another OTA is in progress)
+let mut ota = EspOta::new()?;
+
+// Step 2: initiate — selects next OTA partition, erases it
+let mut update = ota.initiate_update()?;
+
+// Step 3: write firmware data in chunks (implements io::Write)
+update.write(&chunk)?;  // call repeatedly as HTTP data arrives
+
+// Step 4a: complete (validates image + sets boot partition atomically)
+update.complete()?;
+// OR Step 4b: finish then activate separately
+// let finished = update.finish()?;
+// finished.activate()?;
+
+// Step 5: reboot
+esp_idf_svc::hal::reset::restart();
+
+// On next boot — mark valid to prevent rollback:
+let mut ota = EspOta::new()?;
+ota.mark_running_slot_valid()?;
+```
+
+If `update` is dropped without calling `complete()` or `finish()`, `Drop` automatically calls `esp_ota_abort()` — safe by design.
+
+**`mark_running_slot_valid()` is mandatory** when rollback-on-failure is enabled (it is enabled by default in ESP-IDF). If the new firmware boots and does not call this within the watchdog window, ESP-IDF rolls back to the previous partition. Call it early in `main()` on subsequent boots.
+
+### HTTP Client API (Verified from Source)
+
+`esp_idf_svc::http::client::EspHttpConnection` — already in the crate, no feature flag. Requires `feature = "alloc"` which is included in `feature = "std"` (already in use). Confirmed by reading `http/client.rs` and `lib.rs` in esp-idf-svc-0.51.0.
+
+```rust
+use esp_idf_svc::http::client::{Configuration as HttpConfig, EspHttpConnection};
+use embedded_svc::http::client::Client;
+
+let conn = EspHttpConnection::new(&HttpConfig {
+    buffer_size: Some(4096),     // response read buffer
+    buffer_size_tx: Some(512),   // request send buffer
+    timeout: Some(Duration::from_secs(30)),
+    ..Default::default()
+})?;
+
+let mut client = embedded_svc::utils::http::client::Client::wrap(conn);
+let response = client.get(url)?.submit()?;
+// response implements io::Read — pipe into update.write()
+```
+
+For plain HTTP (no TLS), the above is sufficient. TLS requires setting `crt_bundle_attach` in `HttpConfig` — not needed for internal network OTA in v1.
+
+**Do not use `esp_https_ota` C API directly** — the Rust `EspHttpConnection` + `EspOta` combination covers the same functionality without unsafe FFI.
+
+### Partition Table Change (Required)
+
+Current `partitions.csv` has a single `factory` partition at 0x20000, size 0x3E0000 (~3.875 MB). OTA requires an `otadata` partition plus at least two `ota_N` app partitions.
+
+The XIAO ESP32-C6 has **4 MB flash**. Layout must fit in 4 MB (0x400000).
+
+Proposed new layout:
+
+```
+# Name,     Type, SubType, Offset,  Size,    Flags
+nvs,        data, nvs,     0x9000,  0x6000,
+otadata,    data, ota,     0xF000,  0x2000,
+phy_init,   data, phy,     0x11000, 0x1000,
+ota_0,      app,  ota_0,   0x20000, 0x1E0000,
+ota_1,      app,  ota_1,   0x200000,0x1E0000,
+```
+
+- `ota_0` at 0x20000: 1.875 MB (sufficient — current firmware is ~600 KB compiled)
+- `ota_1` at 0x200000: 1.875 MB (same size, required — partitions must be equal size for OTA)
+- Total: 0x20000 + 0x1E0000 + 0x1E0000 = 0x3E0000 = exactly 3.875 MB — fits in 4 MB
+
+**NVS grows from 0x10000 (64 KB) to 0x6000 (24 KB)** to reclaim space. 24 KB NVS is sufficient for this project (only stores device config, no large blobs).
+
+**CRITICAL: The `factory` partition is removed.** Once OTA partitions exist, the bootloader boots from `otadata` which points to `ota_0` or `ota_1`. Initial flash must write to `ota_0` using espflash with `--partition-table partitions.csv`. After the first OTA, the device alternates.
+
+**CRITICAL: After changing the partition table, the entire device flash must be erased and reflashed.** `espflash erase-flash` before the first flash with the new layout.
+
+### SHA-256 Verification
+
+The question asks about SHA-256 verification of the downloaded binary. **ESP-IDF OTA performs image validation automatically** — `esp_ota_end()` (called inside `update.complete()`) verifies the ESP image magic bytes, app description, and SHA-256 hash embedded in the firmware binary by `esptool`. There is no need to manually compute SHA-256 before writing.
+
+If the MQTT OTA trigger message includes an expected SHA-256 to verify the downloaded binary matches a known-good hash (supply-chain verification), that requires reading the entire binary into RAM before writing — not feasible on ESP32-C6 with ~320 KB available heap. Instead, rely on ESP-IDF's built-in validation. The trigger message only needs the URL; the SHA-256 field can be omitted or treated as metadata only.
+
+**Rollback provides the safety net:** if the new firmware is corrupt or fails to boot correctly, ESP-IDF rolls back to the previous OTA partition automatically.
 
 ---
 
-## Alternatives Considered
+## Core Technologies (Existing — Unchanged)
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| `esp-idf-hal` + `esp-idf-svc` (std) | `esp-hal` + `esp-wifi` (no_std) | When: no WiFi/BLE needed, need deterministic timing, ultra-low power, or no_std required. Not this project. |
-| `EspMqttClient` (from esp-idf-svc) | `rumqttc` (pure Rust async MQTT) | When: targeting a std Linux/embedded-linux target with tokio. On ESP32/IDF, native MQTT is better. |
-| `EspMqttClient` (from esp-idf-svc) | `mqttrs` (sync MQTT encoder/decoder) | When: building your own transport layer. Don't do this; EspMqttClient handles the full stack. |
-| Custom GATT provisioning | Espressif Unified Provisioning (`wifi_provisioning` IDF component) | When: WiFi-only provisioning and you want compatibility with the official ESP BLE Prov app. |
-| Blocking UART on dedicated thread | Async UART with Embassy | When: many concurrent peripherals and you need cooperative scheduling across them all. Overkill for one UART + MQTT publish. |
-| `EspNvs` | `sequential-storage` + raw flash | When: targeting no_std bare metal without IDF. `EspNvs` is simpler and correct for this project. |
+| Technology | Version | Purpose | Status |
+|------------|---------|---------|--------|
+| `esp-idf-svc` | =0.51.0 | WiFi, MQTT, HTTP client, OTA | Already pinned; OTA and HTTP in this version |
+| `esp-idf-hal` | =0.45.2 | UART, GPIO | Already pinned |
+| `esp-idf-sys` | =0.36.1 | ESP-IDF C bindings | Already pinned |
+| `embedded-svc` | =0.28.1 | Trait definitions (MQTT, HTTP, OTA) | Already pinned |
+| ESP-IDF | v5.3.3 | Underlying C framework | Already in .embuild/ |
+
+## New Stack Additions
+
+| Addition | What Changes | Why |
+|----------|-------------|-----|
+| `MqttClientConfiguration::out_buffer_size` | Set to 2048 (was unset/default 1024) | RTCM frames up to 1029 bytes need headroom in MQTT outbox |
+| `partitions.csv` | Replace single-factory layout with otadata + ota_0 + ota_1 | Required for OTA dual-partition boot |
+| `sdkconfig.defaults` | Possibly add `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` | Explicitly enable rollback (may be default already in IDF v5.3) |
+| `esp_idf_svc::ota` module | New import in ota.rs (new file) | OTA write/complete/mark-valid logic |
+| `esp_idf_svc::http::client` module | New import in ota.rs | HTTP GET to download firmware binary |
 
 ---
 
-## What NOT to Use
+## What NOT to Add
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `tokio` | No tokio support on ESP32-C6 IDF; IDF uses FreeRTOS threads, not async Rust runtime | `std::thread` + IDF blocking APIs, or Embassy if async truly needed |
-| `embassy` + `esp-hal` (bare metal async) | BLE provisioning + NVS + WiFi simultaneously on bare metal is immature on C6 as of 2025; Embassy ESP32 support exists but is missing stable BLE GATT server | `esp-idf-svc` on IDF |
-| `rumqttc` | Requires tokio or async-std; doesn't integrate cleanly with IDF event loop; adds 50-100KB to binary vs native IDF MQTT | `EspMqttClient` from `esp-idf-svc` |
-| IDF v4.x | Does not support ESP32-C6 (C6 requires IDF v5.0+) | IDF v5.2.x or v5.3.x |
-| `esp32-hal` (older unmaintained) | Superseded by `esp-hal` (the new unified bare metal HAL from esp-rs); name collision risk | `esp-idf-hal` (for IDF path) or `esp-hal` (for bare metal) |
-| Direct `esp-idf-sys` calls for UART/WiFi | Unsafe FFI when safe wrappers exist in `esp-idf-hal`/`esp-idf-svc`; brittle | Use the HAL/svc safe APIs |
-
----
-
-## Stack Patterns by Variant
-
-**If std + IDF (this project):**
-- Use `esp-idf-hal` + `esp-idf-svc`
-- Use `std::thread` for concurrency (one thread per: UART reader, MQTT publisher, heartbeat, BLE provisioning)
-- Use IDF event loop (`EspSystemEventLoop`) for WiFi/IP events
-- Use `EspMqttClient` with callback-based message handler
-
-**If bare metal was chosen (not this project):**
-- Use `esp-hal` for peripherals
-- Use `esp-wifi` for WiFi (note: BLE GATT server maturity unclear on C6)
-- Use `embassy` for async runtime
-- Use `sequential-storage` for flash KV store
-- Use `mqttrs` + manual TCP for MQTT
-
-**If NMEA parsing needed (optional):**
-- Use `nmea` crate (pure Rust, no_std compatible)
-- This project relays raw NMEA strings, so parsing is optional (only needed if you want to filter or transform sentences before publishing)
+| `esp-ota` crate (crates.io) | Third-party crate wrapping the same ESP-IDF OTA APIs; adds an indirection layer | `esp_idf_svc::ota::EspOta` directly — already present, source-verified |
+| `rtcm` or `rtcm3` parsing crate | We relay raw bytes, not parse them; adding a parser crate is scope creep | Hand-written state machine (~50 lines) |
+| SHA-256 crate for OTA verification | Full-binary hash before write requires ~1 MB RAM; ESP32-C6 has ~320 KB available | ESP-IDF built-in image validation; rollback as safety net |
+| Baud rate increase to 460800 | Unnecessary — 115200 handles full RTCM+NMEA load at < 9% capacity | Stay at 115200 |
+| `esp_https_ota` C API via unsafe FFI | Rust wrapper already exists in esp-idf-svc | `EspHttpConnection` + `EspOta` in Rust |
+| TLS for OTA HTTP in this milestone | Adds mbedTLS setup complexity; internal network deployment acceptable | Plain HTTP OTA for v1; TLS OTA is a separate milestone |
+| Async/Embassy for OTA task | OTA runs once, blocking is fine; no benefit to async here | `std::thread` dedicated OTA task, blocking HTTP read loop |
 
 ---
 
 ## Version Compatibility
 
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| `esp-idf-hal` ~0.44 | `esp-idf-sys` ~0.37, `esp-idf-svc` ~0.49 | These three crates must be version-coordinated; check the `Cargo.toml` in the `esp-idf-template` generated project for the current pinned set |
-| ESP-IDF v5.2.x | `esp-idf-sys` ~0.37 | `esp-idf-sys` build downloads IDF; pin via `ESP_IDF_VERSION` env var or `[package.metadata.esp-idf-sys]` in Cargo.toml |
-| Rust nightly (`esp` channel) | `riscv32imc-esp-espidf` target | Standard Rust stable does NOT support ESP32 targets; must use `espup`-installed toolchain |
-| `esp-idf-svc::mqtt` | MQTT 3.1.1 | IDF MQTT client is MQTT 3.1.1; MQTT 5.0 support in IDF is partial/experimental — do not rely on MQTT 5.0 features |
-
-**Confidence note:** All version numbers above are from training data (Aug 2025). Versions WILL have incremented. The relationship between the three Espressif crates is stable, but specific version numbers must be verified at project creation time via the official `esp-idf-template` or the `esp-rs` GitHub org.
+| Package | Version | Notes |
+|---------|---------|-------|
+| `esp-idf-svc` | =0.51.0 | `ota` module present with no feature flag; `http::client::EspHttpConnection` present; verified from local source |
+| `embedded-svc` | =0.28.1 | Provides `Ota`, `OtaUpdate`, `OtaUpdateFinished` traits used by EspOta |
+| ESP-IDF | v5.3.3 | `esp_ota_ops.h` and `esp_https_ota.h` present in .embuild; C symbols available |
+| Partition table | custom | Must switch from single-factory to ota_0+ota_1+otadata; erase-flash required |
 
 ---
 
-## Project Setup Commands
+## Bandwidth Math Summary
 
-```bash
-# 1. Install Espressif Rust toolchain
-cargo install espup
-espup install  # installs esp Rust channel, RISC-V target, ldproxy
-
-# 2. Activate toolchain (add to shell profile)
-. $HOME/export-esp.sh   # Linux/macOS
-# Windows: run %USERPROFILE%\export-esp.ps1
-
-# 3. Install flash tool
-cargo install espflash
-
-# 4. Generate project from template
-cargo install cargo-generate
-cargo generate esp-rs/esp-idf-template
-
-# Answer prompts:
-#   Target: ESP32-C6
-#   std (not no_std)  ← CRITICAL CHOICE
-#   IDF version: v5.2 (or v5.3 if available and tested)
-
-# 5. Verify build
-cd <project-name>
-cargo build
 ```
+UART capacity at 115200 baud:    11,520 bytes/s
 
-## Cargo.toml Key Entries
+RTCM MSM4 all constellations @1 Hz:  ~370 bytes/s
+NMEA all sentences @1 Hz:            ~640 bytes/s
+                                     ────────────
+Total UART load:                    ~1,010 bytes/s  (8.8% of capacity)
 
-```toml
-[package]
-name = "esp32-gnssmqtt"
-edition = "2021"
+Headroom:                          ~10,510 bytes/s  (91%)
 
-[dependencies]
-# Core ESP32 IDF crates (verify latest versions on crates.io)
-esp-idf-sys = { version = "0.37", features = ["binstart"] }
-esp-idf-hal = "0.44"
-esp-idf-svc = { version = "0.49", features = ["std", "alloc"] }
-
-# Embedded-hal traits (for HAL compatibility)
-embedded-hal = "1.0"
-
-# NMEA parsing (optional, only if sentence filtering needed)
-# nmea = "0.7"
-
-# Logging
-log = "0.4"
-esp-idf-svc = { version = "0.49", features = ["log"] }  # enables IDF log backend
-
-[build-dependencies]
-embuild = "0.32"  # required by esp-idf-sys for build coordination
-
-[[bin]]
-name = "esp32-gnssmqtt"
-harness = false  # required for no_std-compat test builds on ESP
+Conclusion: 115200 baud is sufficient. No change needed.
 ```
-
-**WARNING:** The exact version numbers above are from training data. Run the `esp-idf-template` generator for a known-good set of coordinated versions.
 
 ---
 
 ## Sources
 
-- Training data through August 2025 — core framework recommendation (MEDIUM confidence)
-- `esp-rs` GitHub organization: https://github.com/esp-rs — official source for all ESP Rust crates
-- Espressif ESP-IDF Programming Guide: https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/ — C6-specific IDF docs
-- `esp-idf-svc` repo: https://github.com/esp-rs/esp-idf-svc — examples for WiFi, MQTT, BLE, NVS
-- `esp-idf-hal` repo: https://github.com/esp-rs/esp-idf-hal — UART, GPIO examples
-- The Rust on ESP Book: https://esp-rs.github.io/book/ — official guide; covers std vs no_std choice authoritatively
-- `esp-idf-template`: https://github.com/esp-rs/esp-idf-template — canonical project scaffold
-
-**Verification required before coding:**
-1. Check current `esp-idf-hal`, `esp-idf-svc`, `esp-idf-sys` versions on crates.io
-2. Check "The Rust on ESP Book" for updated esp-hal vs esp-idf-hal guidance
-3. Verify BLE GATT server API in `esp-idf-svc` examples — this was the most volatile API as of mid-2025
-4. Confirm ESP-IDF version compatibility with C6 in the esp-idf-sys build notes
+- `/home/ben/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-idf-svc-0.51.0/src/ota.rs` — EspOta API, EspOtaUpdate, complete/finish/mark_valid methods. HIGH confidence (direct source read).
+- `/home/ben/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-idf-svc-0.51.0/src/lib.rs` — OTA module gate conditions (esp_idf_comp_app_update_enabled, no Cargo feature flag). HIGH confidence.
+- `/home/ben/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-idf-svc-0.51.0/src/http/client.rs` — EspHttpConnection::new, Configuration struct. HIGH confidence.
+- `/home/ben/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/esp-idf-svc-0.51.0/src/mqtt/client.rs` — EspMqttClient::enqueue/publish signatures accept `&[u8]`. HIGH confidence.
+- `/home/ben/github.com/bharrisau/esp32-gnssmqtt/.embuild/espressif/esp-idf/v5.3.3/components/app_update/include/esp_ota_ops.h` — C OTA API backing the Rust wrappers. HIGH confidence.
+- RTCM3 MSM4 formula (169 + nSat×10 + nSig×42 bits): WebSearch result citing RTCM SC-104 spec structure. MEDIUM confidence — formula is consistent across multiple RTCM tooling docs; exact bit counts require the proprietary RTCM standard to verify authoritatively.
+- UM980 baud rates (9600–921600): Multiple ArduSimple/Unicore/SparkFun sources agree; CONFIG example shows 460800 and 921600 as valid. MEDIUM confidence (PDF content not directly readable; conclusion from multiple concordant sources).
+- [EspOta documentation](https://docs.esp-rs.org/esp-idf-svc/esp_idf_svc/ota/struct.EspOta.html) — confirms public API surface
+- [ota_http_client example](https://github.com/esp-rs/esp-idf-svc/blob/master/examples/ota_http_client.rs) — referenced in search results; confirms EspHttpConnection + EspOta integration pattern
+- [ESP-IDF MQTT documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/protocols/mqtt.html) — buffer_size and out_buffer_size configuration
 
 ---
 
-*Stack research for: Embedded Rust firmware, ESP32-C6, GNSS/MQTT bridge*
-*Researched: 2026-03-03*
-*Confidence: MEDIUM — training data Aug 2025; external verification tools unavailable; verify all versions before use*
+*Stack research for: RTCM binary relay + OTA firmware update, ESP32-C6 Rust firmware*
+*Researched: 2026-03-07*
+*Confidence: HIGH for OTA API (source verified); MEDIUM for RTCM sizing and baud rates*

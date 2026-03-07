@@ -1,393 +1,553 @@
 # Architecture Research
 
-**Domain:** Embedded Rust firmware — ESP32-C6 GNSS-to-MQTT bridge
-**Researched:** 2026-03-03
-**Confidence:** MEDIUM (WebSearch/WebFetch unavailable this session; based on esp-rs ecosystem knowledge through August 2025 training data, cross-referenced with official esp-rs book and crate documentation patterns. Flag for verification before implementation.)
+**Domain:** Embedded Rust firmware — ESP32-C6 GNSS-to-MQTT bridge (milestone: RTCM relay + OTA)
+**Researched:** 2026-03-07
+**Confidence:** HIGH for RTCM framing (confirmed against RTKLIB and RTCM standard); HIGH for partition math (confirmed against Espressif docs); MEDIUM for EspOta API (docs.esp-rs.org reachable but ota_http_client.rs example rate-limited; feature gating confirmed from multiple sources)
 
 ---
 
-## Standard Architecture
+## Context: Existing Architecture (v1.1 Shipped)
 
-### System Overview
+This document updates and extends the prior architecture research (2026-03-03) for the specific integration questions posed by the RTCM relay + OTA milestone. Read prior doc for full background on WiFi/MQTT/LED patterns.
+
+### Existing Module Map
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│                        EXTERNAL INTERFACES                          │
-│  ┌──────────────┐  ┌──────────────────┐  ┌───────────────────────┐ │
-│  │  UM980 GNSS  │  │   MQTT Broker    │  │  BLE Central (phone)  │ │
-│  │  UART 115200 │  │  (Mosquitto etc) │  │  Provisioning client  │ │
-│  └──────┬───────┘  └────────┬─────────┘  └──────────┬────────────┘ │
-└─────────┼──────────────────┼────────────────────────┼──────────────┘
-          │ UART RX/TX       │ TCP/WiFi               │ BLE GATT
-┌─────────┼──────────────────┼────────────────────────┼──────────────┐
-│                       ESP32-C6 FIRMWARE                             │
-│                                                                     │
-│  ┌───────────────┐   ┌──────────────┐   ┌───────────────────────┐  │
-│  │ UART Reader   │   │ MQTT Client  │   │   BLE Provisioner     │  │
-│  │ (FreeRTOS     │   │ (esp-mqtt /  │   │   (esp-idf BLE or     │  │
-│  │  task, UART0) │   │  mqtt-client)│   │    esp32-nimble-ble)  │  │
-│  └──────┬────────┘   └──────┬───────┘   └──────────┬────────────┘  │
-│         │                  │                        │               │
-│         ▼                  │                        │               │
-│  ┌───────────────┐         │                        │               │
-│  │ NMEA Router   │─────────▶  Channel/Queue         │               │
-│  │ (parser +     │         │  (sentence → topic)    │               │
-│  │  topic map)   │         │                        │               │
-│  └───────────────┘         │                        │               │
-│                            │                        │               │
-│  ┌─────────────────────────┼────────────────────────┼─────────────┐ │
-│  │              SHARED STATE / MESSAGE BUS           │             │ │
-│  │   ┌───────────┐  ┌──────────────┐  ┌────────────┐│             │ │
-│  │   │  NVS      │  │  LED State   │  │ Heartbeat  ││             │ │
-│  │   │  Config   │  │  Machine     │  │  Timer     ││             │ │
-│  │   │  Store    │  │  (RGB/GPIO)  │  │  (periodic)││             │ │
-│  │   └───────────┘  └──────────────┘  └────────────┘│             │ │
-│  └──────────────────────────────────────────────────┘             │ │
-│                                                                     │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                     WiFi Manager                            │   │
-│  │       (esp-idf WiFi + reconnect loop + event handler)       │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
+src/
+├── main.rs          — wiring hub; 15-step init sequence (DO NOT reorder)
+├── config.rs        — compile-time constants (baud, UART_RX_BUF_SIZE, credentials)
+├── device_id.rs     — hardware eFuse MAC → 6-char hex device_id
+├── gnss.rs          — UART owner; RX + TX threads; delivers (String,String) via sync_channel(64)
+├── nmea_relay.rs    — consumes Receiver<(String,String)>; publishes to gnss/{id}/nmea/{TYPE}
+├── config_relay.rs  — consumes Receiver<Vec<u8>> from pump; forwards lines to gnss_cmd_tx
+├── mqtt.rs          — mqtt_connect, pump_mqtt_events, subscriber_loop, heartbeat_loop
+├── uart_bridge.rs   — stdin → gnss_cmd_tx (espflash monitor debug bridge)
+├── led.rs           — Arc<AtomicU8> LED state machine
+└── wifi.rs          — wifi_connect, wifi_supervisor
 ```
 
-### Component Responsibilities
+### Existing Channel Topology
 
-| Component | Responsibility | Typical Implementation |
-|-----------|----------------|------------------------|
-| UART Reader | DMA-buffered read of raw bytes from UM980; accumulate into line-terminated NMEA sentences; push complete sentences to a channel | `esp_idf_hal::uart::UartDriver` with `uart_read_bytes`, dedicated FreeRTOS task |
-| NMEA Router | Parse each NMEA sentence to extract sentence type (e.g. `GNGLL`); route to per-type MQTT topic string; forward tuple `(topic, payload)` to MQTT publish channel | `nmea` or `nmea0183` crate, or custom parser for the `$...,*XX` sentence-type prefix |
-| MQTT Client | Maintain persistent MQTT connection; subscribe to config topic on connect; publish outbound tuples from channel; handle reconnect | `esp_idf_svc::mqtt::client::EspMqttClient` — the official esp-idf-svc binding |
-| MQTT Config Subscriber | Receive retained `gnss/{id}/config` payload; split into newline-delimited UM980 commands; write each over UART TX to UM980 | Part of MQTT Client event handler; writes back through `UartDriver` TX |
-| BLE Provisioner | On first boot (no credentials in NVS): advertise BLE GATT service with characteristic for WiFi SSID, password, MQTT host/port/user/pass; write received values to NVS; reboot | `esp_idf_svc::bt` (Bluedroid) or `esp32-nimble` crate (NimBLE); typically a custom GATT profile |
-| NVS Config Store | Persist and retrieve WiFi credentials, MQTT connection parameters, device flags (provisioned boolean) | `esp_idf_svc::nvs::EspNvs` with a named namespace |
-| LED State Machine | Reflect system state (provisioning, connecting, connected, error) via GPIO LED; driven by state events | Simple enum state machine + `esp_idf_hal::gpio::PinDriver`; updated from any task via shared atomic or channel message |
-| Heartbeat Timer | Publish periodic MQTT message to `gnss/{id}/heartbeat`; also serves as MQTT keepalive signal | `esp_idf_hal::timer` or FreeRTOS timer; enqueues to publish channel |
-| WiFi Manager | Connect using NVS credentials; handle disconnect events; trigger reconnect with backoff; signal MQTT layer to reconnect | `esp_idf_svc::wifi::EspWifi` + `EspEventLoop` subscriptions |
-| Device ID Provider | Derive unique device ID from ESP32 hardware MAC/efuse; expose as constant string | `esp_idf_hal::sys::esp_efuse_mac_get_default` or `esp_idf_svc::sys` binding |
+```
+gnss.rs RX thread
+    │── sync_channel(64) ──▶ nmea_relay.rs  ──▶ MQTT enqueue
+    │
+    TX thread ◀── channel() ──┬── config_relay.rs ◀── pump (config_tx)
+                              └── uart_bridge.rs  ◀── stdin
+                              └── main.rs idle loop (keepalive clone)
+
+pump_mqtt_events
+    ├── subscribe_tx  ──▶ subscriber_loop (subscribe on Connected)
+    ├── config_tx     ──▶ config_relay.rs
+    └── led_state     (Arc<AtomicU8> direct write)
+```
 
 ---
 
-## Recommended Project Structure
+## System Overview (Post-Milestone)
 
 ```
-esp32-gnssmqtt/
-├── Cargo.toml                     # workspace or single crate
-├── build.rs                       # linker script, sdkconfig generation
-├── sdkconfig.defaults             # ESP-IDF Kconfig: UART, BLE, MQTT buffer sizes
-├── .cargo/
-│   └── config.toml                # target = riscv32imac-esp-espidf; runner = espflash
-└── src/
-    ├── main.rs                    # app entrypoint: init NVS, branch to provisioning or main loop
-    ├── config.rs                  # compile-time constants (UART baud, topic prefixes)
-    ├── device_id.rs               # read hardware MAC, format as hex string
-    ├── nvs_store.rs               # NVS read/write abstraction (credentials, flags)
-    ├── wifi.rs                    # WiFi init, connect, reconnect loop
-    ├── ble_provision.rs           # BLE GATT server for first-boot provisioning
-    ├── uart_reader.rs             # UART init, DMA read loop, sentence assembly, channel send
-    ├── nmea_router.rs             # sentence type extraction, topic string construction
-    ├── mqtt_client.rs             # MQTT init, connect, subscribe, publish loop, event handler
-    ├── led.rs                     # LED GPIO init, state machine, update function
-    └── heartbeat.rs               # timer setup, periodic publish enqueue
+┌───────────────────────────────────────────────────────────────────────┐
+│                          EXTERNAL INTERFACES                           │
+│  ┌──────────────────┐  ┌─────────────────────┐  ┌──────────────────┐  │
+│  │   UM980 GNSS     │  │    MQTT Broker       │  │  HTTP OTA server │  │
+│  │   UART 115200    │  │  (Mosquitto/HiveMQ)  │  │  (binary .bin)   │  │
+│  └────────┬─────────┘  └──────────┬──────────┘  └────────┬─────────┘  │
+└───────────┼────────────────────────┼────────────────────────┼──────────┘
+            │ UART RX: mixed         │ TCP/WiFi               │ HTTP GET
+            │ NMEA text + RTCM bin   │                        │
+┌───────────┼────────────────────────┼────────────────────────┼──────────┐
+│                          ESP32-C6 FIRMWARE                             │
+│                                                                        │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                        gnss.rs (MODIFIED)                       │   │
+│  │  UartDriver owner — Arc<UartDriver>                             │   │
+│  │                                                                  │   │
+│  │  RX thread: mixed-stream state machine                          │   │
+│  │    ┌────────────────────────────────────────────────────────┐   │   │
+│  │    │  IDLE ──(0xD3)──▶ RTCM_HDR ──(2 bytes)──▶ RTCM_BODY  │   │   │
+│  │    │    │                                          │         │   │   │
+│  │    │    └──($)──▶ NMEA_LINE ──(\n)──▶ dispatch    │         │   │   │
+│  │    │                                    │          │(+3 CRC) │   │   │
+│  │    │         sync_channel(64) ◀──(NMEA)─┘          │         │   │   │
+│  │    │         sync_channel(32) ◀──────────(RTCM)────┘         │   │   │
+│  │    └────────────────────────────────────────────────────────┘   │   │
+│  │                                                                  │   │
+│  │  TX thread: unchanged (Sender<String> drain → UART write)       │   │
+│  └──────────────────────────────────────┬──────────────────────────┘   │
+│                                         │                              │
+│            ┌────────────────────────────┴──────────────────┐           │
+│            │                                               │           │
+│  ┌─────────▼────────────────┐       ┌────────────────────▼─────────┐  │
+│  │  nmea_relay.rs (UNCHANGED)│       │   rtcm_relay.rs  (NEW)       │  │
+│  │  Receiver<(String,String)>│       │   Receiver<(u16, Vec<u8>)>   │  │
+│  │  → gnss/{id}/nmea/{TYPE} │       │   → gnss/{id}/rtcm/{MSG_ID}  │  │
+│  └──────────────────────────┘       └──────────────────────────────┘  │
+│                                                                        │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  mqtt.rs (MODIFIED — pump routes OTA trigger)                   │   │
+│  │  pump_mqtt_events adds ota_tx: Sender<String> routing           │   │
+│  │  subscriber_loop adds gnss/{id}/ota/trigger subscription        │   │
+│  └───────────────────────────────────────┬─────────────────────────┘   │
+│                                          │ ota_tx (URL string)         │
+│  ┌───────────────────────────────────────▼─────────────────────────┐   │
+│  │  ota.rs (NEW)                                                   │   │
+│  │  spawn_ota_listener(ota_rx)                                     │   │
+│  │  1. recv URL from ota_rx                                        │   │
+│  │  2. HTTP GET → chunk write → SHA256 stream verify               │   │
+│  │  3. EspOta::initiate_update() → write chunks → complete()       │   │
+│  │  4. esp_restart()                                               │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────────────────┘
 ```
-
-### Structure Rationale
-
-- **One crate, not a workspace:** The firmware is a single binary target. A workspace adds no benefit until unit-testable pure logic warrants a separate lib crate.
-- **`sdkconfig.defaults`:** Critical for controlling MQTT RX/TX buffer sizes, BLE stack enable, UART FIFO depth — must be checked in.
-- **`build.rs`:** Required by `esp-idf-sys` embuild to find and link the ESP-IDF C components.
-- **Per-file modules:** Each component above maps to one file. This makes phase-by-phase construction clean — add a file, wire it into `main.rs`.
 
 ---
 
-## Architectural Patterns
+## Pattern 1: Mixed-Stream State Machine in gnss.rs RX Thread
 
-### Pattern 1: FreeRTOS Thread-Per-Component (Recommended for this project)
+### What Changes
 
-**What:** Each long-running component (UART reader, MQTT client, heartbeat) runs in its own `std::thread::spawn` which maps 1:1 to a FreeRTOS task. Communication between tasks uses `std::sync::mpsc` channels or `crossbeam-channel` equivalents — both work on ESP-IDF because `std` is available.
+The RX thread currently reads bytes into a flat line buffer and dispatches on `\n`. It must be extended to detect RTCM frames interleaved in the NMEA text stream. The UM980 can output both simultaneously on the same UART.
 
-**When to use:** When using `esp-idf-hal` / `esp-idf-svc` (the `std`-capable ESP-IDF Rust bindings). This is the correct model for the ESP32-C6 with esp-idf. FreeRTOS tasks are the native concurrency primitive under the hood; `std::thread` is a thin wrapper.
+### RTCM 3.x Frame Structure (HIGH confidence — RTKLIB source + RTCM SC-104 standard)
 
-**Trade-offs:** Simpler than async; each thread needs its own stack (configure with `thread::Builder::stack_size`); FreeRTOS tasks on ESP32 default to 4KB stack which is too small for most Rust code (use 8-16KB per task). Context switching overhead is minimal at the scale of this firmware.
+```
+Byte 0:      0xD3          (preamble — unique, never appears in valid NMEA)
+Bytes 1-2:   [6 reserved bits = 0][10-bit message length N]
+Bytes 3..N+2: payload      (N bytes; first 12 bits = message type number)
+Bytes N+3..N+5: CRC-24Q   (3 bytes; covers preamble + header + payload)
 
-**Example:**
+Total frame size = 3 (header) + N (payload) + 3 (CRC) = N + 6 bytes
+Maximum N = 1023 bytes (10-bit length)
+Maximum frame = 1029 bytes
+```
+
+The 0xD3 preamble is guaranteed not to appear as the first character of an NMEA sentence (NMEA starts with `$` = 0x24). This makes the two protocols unambiguously distinguishable by first byte.
+
+### State Machine Design
+
+Replace the current `line_buf` / `line_len` local variables with a `RxState` enum. The enum is local to the RX thread closure — no locking required.
+
 ```rust
-// src/uart_reader.rs
-use std::sync::mpsc::SyncSender;
-use esp_idf_hal::uart::UartDriver;
+enum RxState {
+    // Waiting for either '$' (NMEA) or 0xD3 (RTCM)
+    Idle,
 
-pub fn start(uart: UartDriver<'static>, tx: SyncSender<String>) {
-    std::thread::Builder::new()
-        .stack_size(8192)
-        .spawn(move || {
-            let mut buf = [0u8; 256];
-            let mut line = String::new();
-            loop {
-                let n = uart.read(&mut buf, 100).unwrap_or(0);
-                for &b in &buf[..n] {
-                    if b == b'\n' {
-                        let sentence = core::mem::take(&mut line);
-                        let _ = tx.send(sentence);
-                    } else if b != b'\r' {
-                        line.push(b as char);
-                    }
-                }
-            }
-        })
-        .expect("UART reader thread failed to spawn");
+    // Accumulating NMEA bytes; line_buf[0..line_len] holds bytes after '$'
+    NmeaLine { line_len: usize },
+
+    // Received 0xD3; waiting for 2 header bytes to determine payload length
+    RtcmHeader { header_buf: [u8; 2], header_len: usize },
+
+    // Reading RTCM payload + 3-byte CRC
+    // frame_buf: [0xD3, hdr0, hdr1, payload..., crc...]
+    // total_needed: payload_len + 6 (full frame including preamble and CRC)
+    RtcmBody { frame_buf: Vec<u8>, total_needed: usize },
 }
 ```
 
-### Pattern 2: Channel-Based Decoupling Between UART and MQTT
+### State Transitions
 
-**What:** The UART reader and MQTT publisher are decoupled via a bounded `mpsc` channel. The UART task pushes complete NMEA sentences; the MQTT task pops them, routes to the correct topic, and publishes. The channel provides natural backpressure: if MQTT is slow (reconnecting), the bounded channel fills and UART drops sentences rather than causing memory exhaustion.
+```
+byte arrives:
+  state = Idle:
+    0xD3  → RtcmHeader { header_buf: [0,0], header_len: 0 }
+    b'$'  → NmeaLine { line_len: 0 }
+    other → Idle (discard with warn if non-whitespace)
 
-**When to use:** Always — this is the correct model for a streaming source feeding a potentially-disconnected sink.
+  state = NmeaLine { line_len }:
+    b'\n' → extract type, try_send to nmea_tx, → Idle
+    other → append to line_buf (overflow check → Idle + warn)
 
-**Trade-offs:** Bounded queue = data loss during broker unavailability. Acceptable per the requirements ("real-time relay only, no buffering across power cycles"). An unbounded channel risks OOM on extended broker outage.
+  state = RtcmHeader { header_buf, header_len }:
+    header_len < 2  → header_buf[header_len] = byte, header_len += 1
+    header_len == 2 → extract 10-bit length N from header_buf
+                      payload_len = N
+                      total_needed = N + 6
+                      frame_buf = Vec::with_capacity(total_needed)
+                      frame_buf.push(0xD3); frame_buf.extend_from_slice(&header_buf)
+                      frame_buf.push(byte)  (this is first payload byte, header_len just hit 2 after push)
+                      → RtcmBody { frame_buf, total_needed }
 
-**Example:**
-```rust
-// src/main.rs (wiring)
-use std::sync::mpsc::sync_channel;
-
-let (nmea_tx, nmea_rx) = sync_channel::<String>(64); // 64-sentence buffer
-uart_reader::start(uart_driver, nmea_tx);
-mqtt_client::start(mqtt_client, nmea_rx, device_id);
+  state = RtcmBody { frame_buf, total_needed }:
+    frame_buf.push(byte)
+    frame_buf.len() < total_needed → stay in RtcmBody
+    frame_buf.len() == total_needed →
+        // Verify CRC-24Q over frame_buf[0..total_needed-3]
+        // Extract msg_type from bits 24..35 of frame_buf (bytes 3-4)
+        msg_type = ((frame_buf[3] as u16) << 4) | ((frame_buf[4] as u16) >> 4)
+        try_send to rtcm_tx: (msg_type, frame_buf)
+        → Idle
 ```
 
-### Pattern 3: Event-Loop MQTT with EspMqttClient
+### CRC-24Q Verification
 
-**What:** `EspMqttClient` from `esp_idf_svc::mqtt::client` uses a callback-based event model. The MQTT client is created with a closure that handles `Connected`, `Received` (for config topic), and `Disconnected` events. Publishing is done by calling `client.publish(...)` from the MQTT task thread — the callback fires on the ESP-IDF internal MQTT task thread.
+CRC-24Q is a standard algorithm. Implement as a pure function — 256-entry lookup table is 768 bytes of ROM, acceptable on ESP32-C6. Verify before dispatching to rtcm_tx. Drop frame with warn on CRC failure.
 
-**When to use:** This is the only supported model for `EspMqttClient`. Do not attempt to use it in a purely blocking poll loop.
-
-**Trade-offs:** The callback fires on an ESP-IDF internal thread, so any shared state accessed in the callback must use `Arc<Mutex<...>>` or `Arc<AtomicBool>`. Keep the callback fast — do not block inside it. Route received config payloads back to the UART TX via a channel or shared buffer rather than writing UART inside the callback.
-
-**Example:**
 ```rust
-// src/mqtt_client.rs (sketch)
-use esp_idf_svc::mqtt::client::{EspMqttClient, MqttClientConfiguration, QoS, EventPayload};
-
-let config = MqttClientConfiguration {
-    client_id: Some(&device_id),
-    username: Some(&mqtt_user),
-    password: Some(&mqtt_pass),
-    ..Default::default()
-};
-
-let config_tx_clone = config_uart_tx.clone(); // to forward config to UART
-let (client, _conn) = EspMqttClient::new_cb(
-    &mqtt_url,
-    &config,
-    move |event| match event.payload() {
-        EventPayload::Connected(_) => {
-            log::info!("MQTT connected");
-            // re-subscribe to config topic on reconnect
+// Polynomial: 0x864CFB (CRC-24Q)
+fn crc24q(data: &[u8]) -> u32 {
+    let mut crc: u32 = 0;
+    for &b in data {
+        crc ^= (b as u32) << 16;
+        for _ in 0..8 {
+            crc <<= 1;
+            if crc & 0x1000000 != 0 { crc ^= 0x864CFB; }
         }
-        EventPayload::Received { topic: Some(t), data, .. } if t.ends_with("/config") => {
-            // forward UM980 commands to UART TX channel
-            let _ = config_tx_clone.try_send(data.to_vec());
-        }
-        EventPayload::Disconnected => {
-            log::warn!("MQTT disconnected");
-        }
-        _ => {}
-    },
-)?;
-```
-
-### Pattern 4: NVS-Gated Boot Branching
-
-**What:** On startup, check a boolean flag in NVS (e.g., `"provisioned"` key). If absent or false, enter BLE provisioning mode. If true, load credentials and proceed to WiFi+MQTT. After successful provisioning, write the flag and reboot.
-
-**When to use:** This is the standard pattern for zero-touch provisioning on ESP32. It avoids maintaining two parallel code paths at runtime.
-
-**Trade-offs:** Reboot-to-switch-modes means a ~2s delay after provisioning. Acceptable; avoids complex state management between provisioning and operational modes.
-
-**Example:**
-```rust
-// src/main.rs
-let nvs = EspDefaultNvsPartition::take()?;
-let store = nvs_store::NvsStore::new(nvs)?;
-
-if !store.is_provisioned()? {
-    log::info!("Not provisioned — starting BLE provisioner");
-    ble_provision::run_and_save(&mut store)?; // blocks until done, saves creds
-    esp_idf_hal::reset::restart();            // reboot into normal mode
+    }
+    crc & 0xFFFFFF
 }
-
-let creds = store.load_credentials()?;
-wifi::connect(&creds)?;
-mqtt_client::start(creds, nmea_rx, device_id)?;
 ```
+
+Verify: `crc24q(&frame_buf[0..total_needed-3]) == u32 from frame_buf[total_needed-3..total_needed]`.
+
+### Stack Size Impact
+
+The RtcmBody state uses `Vec<u8>` on the heap (up to 1029 bytes per frame). The RX thread currently has 8192 bytes of stack. The heap allocation is fine; the stack usage does not increase significantly. Keep 8192 stack. Add `RTCM_RELAY_BUF_SIZE` to config.rs if needed.
+
+---
+
+## Pattern 2: Channel Type for Binary RTCM Frames
+
+### Decision: `SyncSender<(u16, Vec<u8>)>` (RECOMMENDED)
+
+The tuple carries:
+- `u16`: RTCM message type number (e.g., 1005, 1074, 1084) — extracted from frame bits 24-35
+- `Vec<u8>`: complete raw frame bytes (preamble + header + payload + CRC), ready to publish as-is
+
+**Why `u16` not `u32`:** RTCM message types fit in 12 bits (0-4095). `u16` is sufficient and matches the natural extraction (12-bit field).
+
+**Why include the full frame (not just payload):** RTCM consumers (NTRIP casters, RTK engines) expect the full framed binary including preamble and CRC. Stripping the frame requires the subscriber to re-frame, which adds complexity for no benefit.
+
+**Why `SyncSender` not `Sender`:** Matches the existing pattern. Bounded channel (32 slots) prevents unbounded heap growth if MQTT is backlogged. RTCM frames are larger than NMEA strings; 32 × ~200 bytes = ~6KB max queued — manageable.
+
+**Channel bound:** 32. RTCM corrections typically arrive at 1 Hz per message type. At 5 message types = 5 frames/sec. 32 slots = ~6 seconds of buffer before drops. Acceptable for real-time RTK data where stale corrections are useless anyway.
+
+**Alternative considered: `Sender<Vec<u8>>` (raw frame only).**
+Rejected because rtcm_relay.rs needs the message type to build the MQTT topic `gnss/{id}/rtcm/{MSG_ID}`. Computing it again in rtcm_relay.rs duplicates the bit-extraction logic. Including the type in the channel avoids double-parsing.
+
+### spawn_gnss Return Signature Change
+
+Current:
+```rust
+pub fn spawn_gnss(...) -> anyhow::Result<(Sender<String>, Receiver<(String, String)>)>
+```
+
+New:
+```rust
+pub fn spawn_gnss(...) -> anyhow::Result<(
+    Sender<String>,               // cmd_tx (unchanged)
+    Receiver<(String, String)>,   // nmea_rx (unchanged)
+    Receiver<(u16, Vec<u8>)>,     // rtcm_rx (NEW)
+)>
+```
+
+This is a breaking change to gnss.rs's public signature. main.rs wiring at Step 7 must be updated to destructure the triple.
+
+---
+
+## Pattern 3: rtcm_relay.rs (New Module)
+
+Mirrors nmea_relay.rs exactly in structure. Consumes `Receiver<(u16, Vec<u8>)>`. Publishes to `gnss/{device_id}/rtcm/{msg_type}` at QoS 0, retain=false.
+
+```
+pub fn spawn_rtcm_relay(
+    client: Arc<Mutex<EspMqttClient<'static>>>,
+    device_id: String,
+    rtcm_rx: Receiver<(u16, Vec<u8>)>,
+) -> anyhow::Result<()>
+```
+
+Topic format: `gnss/{device_id}/rtcm/1005` (message type as decimal integer). Binary payload = full RTCM frame bytes. MQTT binary payloads are spec-compliant; broker stores and delivers as raw bytes.
+
+Stack size: 8192 (same as nmea_relay). The Vec<u8> is heap-allocated; enqueue() copies into MQTT outbox.
+
+---
+
+## Pattern 4: OTA Architecture
+
+### Partition Table Redesign
+
+**Current layout (4MB flash):**
+
+```
+# Name,   Type, SubType, Offset,  Size,     Flags
+nvs,      data, nvs,     0x9000,  0x10000,
+phy_init, data, phy,     0x19000, 0x1000,
+factory,  app,  factory, 0x20000, 0x3E0000,
+```
+
+Total: 0x9000 + 0x10000 + 0x1000 + (gap to 0x20000) + 0x3E0000 = 4MB used fully.
+
+**Problem:** No `otadata` partition. No `ota_0`/`ota_1` app partitions. OTA requires the bootloader to read `otadata` to decide which slot to boot. Without `otadata`, `EspOta` will fail or silently overwrite the factory image with no rollback.
+
+**Required new layout (4MB flash):**
+
+```
+# Name,    Type, SubType, Offset,  Size,     Flags
+nvs,       data, nvs,     0x9000,  0x10000,
+otadata,   data, ota,     0x19000, 0x2000,
+phy_init,  data, phy,     0x1B000, 0x1000,
+ota_0,     app,  ota_0,   0x20000, 0x1E0000,
+ota_1,     app,  ota_1,   0x200000, 0x1E0000,
+```
+
+**Partition math verification (4MB = 0x400000 bytes):**
+
+| Partition | Start    | Size     | End      |
+|-----------|----------|----------|----------|
+| nvs       | 0x009000 | 0x010000 | 0x019000 |
+| otadata   | 0x019000 | 0x002000 | 0x01B000 |
+| phy_init  | 0x01B000 | 0x001000 | 0x01C000 |
+| (gap)     | 0x01C000 | 0x004000 | 0x020000 |
+| ota_0     | 0x020000 | 0x1E0000 | 0x200000 |
+| ota_1     | 0x200000 | 0x1E0000 | 0x3E0000 |
+| (spare)   | 0x3E0000 | 0x020000 | 0x400000 |
+
+- NVS preserved at 64KB (0x10000) — existing NVS data format unchanged
+- otadata at 8KB (0x2000) — minimum required; Espressif recommends 2 sectors
+- phy_init preserved at 4KB
+- 16KB gap before ota_0 (aligning to 0x20000 = 128KB boundary — required by ESP-IDF app partition alignment)
+- ota_0 and ota_1: 0x1E0000 = 1,966,080 bytes = ~1.875MB each — ample for this firmware
+- 128KB spare at end (available for future spiffs/data partition)
+- Total: fits exactly in 4MB ✓
+
+**sdkconfig.defaults change required:**
+
+Add `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` to enable rollback if new firmware fails to mark itself valid.
+
+**Critical:** Changing the partition table requires a full erase + reflash (`espflash erase-flash` or `--erase-otadata`). The first OTA flash must be done via USB (espflash), not OTA itself — you cannot OTA from a factory partition to ota_0/ota_1 layout.
+
+### ota.rs Module Design
+
+```
+src/ota.rs (NEW)
+
+pub fn spawn_ota_listener(
+    ota_rx: Receiver<String>,   // URL strings from MQTT trigger
+) -> anyhow::Result<()>
+```
+
+The thread blocks on `ota_rx`. When a URL arrives:
+
+1. Log "OTA triggered: {url}"
+2. Open `EspHttpConnection` (from `esp_idf_svc::http::client::EspHttpConnection`)
+3. HTTP GET the URL; read in chunks (20KB recommended to avoid heap pressure)
+4. Stream chunks into `EspOta::initiate_update()` → `update.write(&chunk)`
+5. Stream-hash with SHA256 (computed over received bytes)
+6. After final chunk: compare SHA256 against expected hash
+7. Call `update.complete()` on success; `update.abort()` on hash mismatch
+8. If complete: `unsafe { esp_idf_svc::sys::esp_restart() }`
+
+**SHA256 source:** The MQTT trigger message should carry both URL and expected hash, e.g. JSON `{"url":"http://...","sha256":"abc..."}`. The ota_rx channel type can be `String` (JSON) or a struct. Recommended: parse JSON in ota.rs using simple string matching (matching the existing no-serde pattern from config_relay.rs).
+
+**Cargo.toml additions for OTA:**
+
+```toml
+esp-idf-svc = { version = "=0.51.0", features = ["ota"] }
+```
+
+The `ota` feature gates the `esp_idf_svc::ota` module. Without it, `EspOta` is not visible (confirmed: multiple sources state OTA is feature-gated in esp-idf-svc; MEDIUM confidence on exact feature name — verify against esp-idf-svc 0.51 Cargo.toml before implementing).
+
+**sdkconfig.defaults addition:**
+
+```
+CONFIG_ESP_HTTPS_OTA_ALLOW_HTTP=y
+```
+
+Required if using plain HTTP OTA URLs (no TLS). Without this, ESP-IDF rejects non-HTTPS OTA.
+
+### OTA MQTT Integration
+
+**New topic:** `gnss/{device_id}/ota/trigger` (subscribed, not retained — OTA is a one-shot action)
+
+**pump_mqtt_events change:** Add `ota_tx: Option<Sender<String>>`. Route `Received` events where `topic` ends with `/ota/trigger` to `ota_tx`. Keep `config_tx` routing for `/config` topic. The current pump routes ALL `Received` events to `config_tx` regardless of topic — this must be fixed in the RTCM milestone anyway (or at OTA time at latest).
+
+**Current pump bug:** `pump_mqtt_events` sends every `Received` event to `config_tx` without checking the topic. When OTA subscription is added, RTCM and OTA payloads would incorrectly flow to config_relay. The pump needs topic discrimination:
+
+```rust
+EventPayload::Received { topic, data, .. } => {
+    let topic = topic.unwrap_or("");
+    if topic.ends_with("/config") {
+        let _ = config_tx.send(data.to_vec());
+    } else if topic.ends_with("/ota/trigger") {
+        if let Ok(s) = std::str::from_utf8(data) {
+            let _ = ota_tx.send(s.to_string());
+        }
+    }
+    // else: unrouted topic — log warn, drop
+}
+```
+
+**subscriber_loop change:** Add `gnss/{device_id}/ota/trigger` subscription alongside the config subscription.
+
+---
+
+## Modified vs New Files
+
+| File | Status | Change Summary |
+|------|--------|----------------|
+| `src/gnss.rs` | MODIFIED | RX thread: flat line assembler → RxState machine; add rtcm_tx SyncSender; return triple from spawn_gnss |
+| `src/main.rs` | MODIFIED | Step 7: destructure triple from spawn_gnss; Step 14b: wire rtcm_rx to spawn_rtcm_relay; Step 9c: add ota_tx/rx channel; Step 15b: spawn_ota_listener |
+| `src/mqtt.rs` | MODIFIED | pump_mqtt_events: add ota_tx param + topic discrimination in Received arm; subscriber_loop: add OTA trigger subscription |
+| `src/rtcm_relay.rs` | NEW | Mirror of nmea_relay.rs; consumes Receiver<(u16,Vec<u8>)>; publishes binary to gnss/{id}/rtcm/{type} |
+| `src/ota.rs` | NEW | OTA listener thread; HTTP download; SHA256 verification; EspOta write; reboot |
+| `partitions.csv` | MODIFIED | Replace factory-only with otadata + ota_0 + ota_1 layout |
+| `sdkconfig.defaults` | MODIFIED | Add CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y; CONFIG_ESP_HTTPS_OTA_ALLOW_HTTP=y |
+| `Cargo.toml` | MODIFIED | Add `ota` feature to esp-idf-svc |
 
 ---
 
 ## Data Flow
 
-### Primary Flow: NMEA Sentences UART → MQTT
+### RTCM Relay Flow
 
 ```
-UM980 GNSS Module
-    │
-    │ (115200 baud UART bytes, continuous stream)
-    ▼
-UART Reader Task
-    │ assemble bytes into '\n'-terminated sentences
-    │ discard malformed / incomplete lines
-    ▼
-mpsc::SyncSender<String>  [bounded: 64 sentences]
+UM980 UART TX (binary RTCM bytes mixed with NMEA text)
     │
     ▼
-MQTT Client Task  (pops from channel in a loop)
-    │ nmea_router: extract sentence type from "$GNGLL,..."
-    │ build topic:  "gnss/{device_id}/nmea/GNGLL"
+gnss.rs RX thread — RxState machine
+    │ detects 0xD3 preamble → accumulates frame → CRC verify
     ▼
-EspMqttClient::publish(topic, payload, QoS::AtMostOnce, retain=false)
+SyncSender<(u16, Vec<u8>)>  [bound: 32 frames]
     │
     ▼
-MQTT Broker (external)
+rtcm_relay.rs thread
+    │ topic = format!("gnss/{}/rtcm/{}", device_id, msg_type)
+    │ payload = raw frame bytes (binary)
+    ▼
+EspMqttClient::enqueue(topic, QoS0, retain=false, &frame)
+    │
+    ▼
+MQTT Broker → RTK subscribers (NTRIP, base station software)
 ```
 
-### Config Flow: Broker → UM980 Initialization
+### OTA Flow
 
 ```
-MQTT Broker (retained message on "gnss/{device_id}/config")
-    │
-    │ (delivered once on subscribe)
-    ▼
-EspMqttClient event callback  (EventPayload::Received)
-    │ payload: newline-delimited UM980 commands
-    │ e.g. "GPGLL ON\r\nGPGGA ON\r\nGPRMC ON\r\n"
-    ▼
-mpsc::SyncSender<Vec<u8>>  [config_uart_tx channel]
+Operator publishes to gnss/{device_id}/ota/trigger:
+  payload: {"url":"http://10.86.32.41:8080/firmware.bin","sha256":"abc123..."}
     │
     ▼
-UART Writer (in UART Reader task or separate config-apply task)
-    │ iterate lines, write each with "\r\n" terminator
-    │ optional: small delay between commands (UM980 may need it)
-    ▼
-UM980 GNSS Module  (applies configuration, begins streaming)
-```
-
-### Provisioning Flow (First Boot)
-
-```
-Power On → NVS check: not provisioned
+pump_mqtt_events → topic discrimination → ota_tx.send(payload_string)
     │
     ▼
-BLE Provisioner: start GATT server, advertise
-    │
-    │  (user writes credentials via BLE client app)
+ota.rs listener thread
+    │ HTTP GET url → stream chunks
+    │ write chunks to EspOta + stream SHA256
+    │ verify SHA256 → complete() or abort()
     ▼
-NVS Store: save WiFi SSID/pass + MQTT host/port/user/pass
-    │
-    ▼
-Set NVS provisioned=true → reboot
+ESP-IDF bootloader sets ota_0 (or ota_1) as boot partition
     │
     ▼
-Normal boot: load credentials → WiFi connect → MQTT connect
-```
-
-### LED State Machine Flow
-
-```
-System events → LED State enum → GPIO output
-
-States:
-  Provisioning     → rapid blink (BLE advertising)
-  WiFi Connecting  → slow blink
-  MQTT Connecting  → double blink pattern
-  Operational      → solid on
-  Error            → fast blink (3x) then off
-  Disconnected     → slow blink (same as WiFi Connecting)
-
-State transitions pushed via:
-  mpsc channel (preferred) OR
-  Arc<AtomicU8> (lighter weight)
-
-LED task: polls channel/flag at ~100ms interval, drives GPIO
+esp_restart() → boots new firmware
+    │ new firmware marks itself valid (app_desc check or explicit mark)
+    ▼
+Rollback: if new firmware fails to mark valid before watchdog → auto-rollback to prior slot
 ```
 
 ---
 
-## Concurrency Model
+## Build Order for Phases
 
-### Decision: FreeRTOS Tasks via std::thread (NOT embassy async)
-
-**Recommendation:** Use `esp-idf-hal` + `esp-idf-svc` with `std::thread`. Do not use Embassy for this project.
+### Recommendation: RTCM Relay Before OTA
 
 **Rationale:**
 
-| Factor | std::thread (esp-idf) | Embassy (esp-hal bare-metal) |
-|--------|-----------------------|------------------------------|
-| WiFi support | Full, mature via esp-idf-svc | Experimental, incomplete on ESP32-C6 as of 2025 |
-| BLE support | Full via esp-idf Bluedroid/NimBLE | Not supported in embassy-esp |
-| MQTT | esp-idf-svc EspMqttClient, stable | Must use external async MQTT crate, less tested |
-| std availability | Yes (`std` feature on esp-idf-hal) | No (no_std only) |
-| Complexity | Lower: familiar Rust threading model | Higher: async executor, lifetime constraints |
-| NVS | esp-idf-svc EspNvs, stable | Manual flash access |
-| Maturity | Production-ready | Actively developed, breaking changes expected |
+1. **RTCM relay has zero partition risk.** It requires no partition table changes. OTA requires a partition table change that involves a full erase — if OTA partition work goes wrong, you lose the ability to test RTCM relay on the device without USB recovery.
 
-Embassy's main advantage — power efficiency via async/await with WFI — is not a requirement here (WiFi/BLE keep the radio powered; the device is likely mains or USB powered for a GNSS station).
+2. **gnss.rs state machine is a shared dependency.** The state machine refactor in gnss.rs must be done before either RTCM relay or OTA can be tested. Isolating that change in Phase A makes debugging cleaner.
 
-**Thread allocation (approximate):**
+3. **mqtt.rs topic discrimination is a prerequisite for OTA.** The pump currently routes all `Received` events to config_tx. OTA needs the pump to discriminate topics. This fix is best done as part of RTCM relay work (where you also want clean routing), not deferred to OTA.
 
-| Thread | Stack Size | Priority | Role |
-|--------|-----------|----------|------|
-| main (app_main) | 8 KB | 5 (normal) | Init, boot branching, credential loading |
-| uart_reader | 8 KB | 10 (above normal) | Time-sensitive: must keep up with 115200 baud stream |
-| mqtt_task | 12 KB | 7 | Dequeue sentences, publish, manage reconnect |
-| heartbeat | 4 KB | 5 | Timer callback or loop; low priority is fine |
-| led_task | 4 KB | 3 (low) | GPIO toggle; never blocks |
-| esp-idf internal (WiFi/BT) | managed by IDF | varies | Not directly controlled |
+4. **OTA requires hardware re-flash to change partitions.** That's a harder reset of the device. Complete RTCM relay while the current partition table is intact.
 
-Note: Total FreeRTOS heap on ESP32-C6 is ~320 KB. With MQTT buffers, UART FIFO, BLE stack (~60 KB), WiFi stack (~80 KB), Rust stacks and heap, budget carefully. Set `CONFIG_ESP_MAIN_TASK_STACK_SIZE` and per-thread sizes explicitly.
+**Recommended phase order:**
+
+```
+Phase A — gnss.rs state machine + RTCM relay (no partition change)
+  A1: RxState machine in gnss.rs; extend spawn_gnss to return triple
+  A2: rtcm_relay.rs (mirrors nmea_relay.rs); wire into main.rs
+  A3: mqtt.rs topic discrimination fix
+  Hardware verify: RTCM frames appear on gnss/{id}/rtcm/NNNN topics
+
+Phase B — OTA
+  B1: partitions.csv redesign; sdkconfig.defaults updates; full erase + reflash
+  B2: ota.rs module; Cargo.toml feature addition
+  B3: mqtt.rs OTA trigger routing; subscriber_loop OTA subscription
+  B4: Wire ota.rs into main.rs
+  Hardware verify: trigger OTA from MQTT, new firmware boots, rollback works
+```
 
 ---
 
-## Build Order (Phase Dependencies)
+## Baud Rate Change Impact (If Moving to 230400+)
 
-The firmware has hard dependencies between components. Build in this order:
+The PROJECT.md records "UM980 fixed at 115200 baud, 8N1" as a constraint. If this changes:
 
-```
-Phase 1: Foundation
-  ├── Cargo.toml + build.rs + sdkconfig.defaults
-  ├── .cargo/config.toml (target, runner, linker)
-  ├── device_id.rs (pure, no deps)
-  └── nvs_store.rs (needed by provisioning AND main boot)
+1. `config.rs` `UART_RX_BUF_SIZE` should be increased proportionally (currently 4096; at 230400 the byte rate doubles — consider 8192).
+2. `UartDriver::new()` baudrate parameter change in gnss.rs.
+3. No impact on the state machine design — the byte-by-byte processing is rate-agnostic.
+4. RX thread sleep-on-empty is currently 10ms. At 230400, a 10ms gap delivers 230 bytes into the FIFO. The 4096-byte ring buffer provides adequate cushion; no overflow risk.
+5. The UM980 must be commanded to change baud before the ESP32 changes — send the baud-change command, then reinitialize UartDriver. This is a tricky sequencing problem best handled in a dedicated plan.
 
-Phase 2: BLE Provisioning
-  ├── ble_provision.rs  [depends on: nvs_store]
-  └── main.rs boot branch: if !provisioned → ble, else continue
+Current constraint stands: **do not change baud rate without an explicit plan and hardware validation.**
 
-Phase 3: WiFi + MQTT Skeleton
-  ├── wifi.rs  [depends on: nvs_store for credentials]
-  ├── mqtt_client.rs skeleton  [depends on: wifi]
-  └── Verify: device connects to broker, heartbeat publishes
+---
 
-Phase 4: UART + NMEA Pipeline
-  ├── uart_reader.rs  [depends on: channel infrastructure]
-  ├── nmea_router.rs  [depends on: uart_reader output]
-  └── mqtt_client.rs publish loop  [depends on: nmea_router output]
+## Anti-Patterns
 
-Phase 5: MQTT Config → UM980 Init
-  ├── config subscriber in mqtt_client.rs event handler
-  └── UART TX write path in uart_reader.rs (or separate config_writer.rs)
+### Anti-Pattern 1: Using a Single Channel for Mixed NMEA+RTCM Output
 
-Phase 6: LED State Machine + Reconnect Logic
-  ├── led.rs state machine
-  ├── wifi.rs reconnect with backoff
-  └── mqtt_client.rs reconnect on disconnect event
-
-Phase 7: Integration + Hardening
-  ├── Stack size tuning
-  ├── Memory profiling (heap_caps_get_free_size)
-  └── Field test with live UM980
+**What people do:** Add a Rust enum to the existing NMEA channel:
+```rust
+enum GnssFrame { Nmea(String, String), Rtcm(u16, Vec<u8>) }
+SyncSender<GnssFrame>
 ```
 
-**Critical dependency:** MQTT subscribe to config topic MUST happen inside the `Connected` event handler, not at startup. The client will reconnect, and subscriptions must be re-established on every reconnect — this is a common bug if wired at init time only.
+**Why it's wrong:** nmea_relay.rs and rtcm_relay.rs are independent consumers. A single channel can only have one consumer. You would need to fan-out in a new dispatcher thread, adding latency and a thread just for routing. Two separate channels are simpler, cheaper, and match the existing pattern exactly.
+
+**Do this instead:** Two separate typed channels from gnss.rs: one `SyncSender<(String,String)>` for NMEA (unchanged), one `SyncSender<(u16,Vec<u8>)>` for RTCM (new).
+
+### Anti-Pattern 2: Buffering RTCM Frames Across MQTT Disconnections
+
+**What people do:** Use an unbounded channel or large bounded channel for RTCM to avoid dropping frames during broker outages.
+
+**Why it's wrong:** RTCM corrections are time-sensitive. A correction more than 10-30 seconds old is useless for RTK positioning. Buffering stale corrections wastes memory and confuses RTK engines. The UM980 will generate fresh corrections when the broker reconnects.
+
+**Do this instead:** Use `try_send` with drop-on-full (same as NMEA). Log a warn. The bounded channel (32 slots) provides a reasonable buffer for transient hiccups.
+
+### Anti-Pattern 3: Verifying CRC in rtcm_relay.rs Instead of gnss.rs
+
+**What people do:** Pass raw unverified bytes from the state machine and verify CRC in the relay thread.
+
+**Why it's wrong:** gnss.rs is the UART owner and the framing authority. Passing corrupted frames downstream creates a contract violation — consumers can't know whether frames are verified. gnss.rs should only emit verified frames.
+
+**Do this instead:** Verify CRC-24Q in gnss.rs before calling try_send. Drop the frame and log warn on failure. This mirrors how gnss.rs already validates NMEA (`first() == Some(&b'$')`).
+
+### Anti-Pattern 4: Triggering OTA From the MQTT Pump Thread Directly
+
+**What people do:** Perform the HTTP download and OTA write inside `pump_mqtt_events` when the trigger arrives.
+
+**Why it's wrong:** `pump_mqtt_events` must call `connection.next()` continuously. Blocking for a multi-second HTTP download inside the pump stops the MQTT event loop, causing the broker to disconnect (keepalive timeout), and any MQTT state written by the pump (LED, subscribe signals) is frozen.
+
+**Do this instead:** pump sends URL string to `ota_tx` channel. A dedicated `ota.rs` thread blocks on the channel and performs the download. The pump remains unblocked.
+
+### Anti-Pattern 5: Writing New Firmware to the Running Partition
+
+**What people do:** Try to write OTA data to the currently-active partition slot (ota_0 while running from ota_0).
+
+**Why it's wrong:** ESP-IDF's `EspOta::initiate_update()` automatically selects the inactive slot. If you attempt to write the active slot, it fails. Do not attempt to select the partition manually.
+
+**Do this instead:** Let `EspOta::initiate_update()` choose. It always targets the inactive slot.
+
+### Anti-Pattern 6: Omitting otadata Partition
+
+**What people do:** Add ota_0 and ota_1 to partitions.csv without adding the `otadata` partition.
+
+**Why it's wrong:** The ESP-IDF bootloader reads `otadata` (subtype `ota`) to determine which app partition to boot. Without it, the bootloader cannot track OTA state and will always boot from the first app partition. OTA writes will succeed but `esp_restart()` will boot the old image.
+
+**Do this instead:** Always include `otadata, data, ota, <offset>, 0x2000` in the partition table when using OTA.
 
 ---
 
@@ -397,105 +557,55 @@ Phase 7: Integration + Hardening
 
 | Service | Integration Pattern | Notes |
 |---------|---------------------|-------|
-| UM980 GNSS | UART full-duplex, 115200 8N1, no flow control | RX: continuous read; TX: send init commands from config topic. UM980 outputs NMEA + optional proprietary sentences. |
-| MQTT Broker | `esp_idf_svc::mqtt::client::EspMqttClient` over TCP | MQTT 3.1.1; username/password; QoS 0 for NMEA (fire-and-forget); QoS 1 for heartbeat (optional). No TLS in v1. |
-| BLE Central (phone) | Custom GATT profile; one service, characteristics for each credential field | Alternatively: use Espressif's `wifi_provisioning` component via esp-idf which uses BLE Protocol Buffers over GATT — but requires protobuf dependency and a companion app. Custom GATT with plain strings is simpler for v1. |
-| NVS Flash | `esp_idf_svc::nvs::EspNvs<NvsReadWrite>` | Namespace: `"gnssmqtt"`. Keys: `"ssid"`, `"wifi_pass"`, `"mqtt_host"`, `"mqtt_port"`, `"mqtt_user"`, `"mqtt_pass"`, `"provisioned"`. Max key length: 15 chars. Max value: namespace-dependent. |
+| UM980 GNSS | UART full-duplex, 115200 8N1, mixed NMEA+RTCM stream | RX: RxState machine handles both protocols by first byte; TX: unchanged |
+| MQTT Broker | EspMqttClient binary publish for RTCM frames | MQTT supports binary payloads natively; broker stores and delivers as raw bytes |
+| OTA HTTP server | EspHttpConnection GET, chunked read | Can be any HTTP server (python -m http.server, nginx); HTTPS requires certificate bundle |
 
-### Internal Boundaries
+### Internal Boundaries (Updated)
 
 | Boundary | Communication | Notes |
 |----------|---------------|-------|
-| UART Reader → NMEA Router → MQTT Client | `mpsc::SyncSender<String>` (bounded, 64) | Router logic can be inlined into UART reader or MQTT consumer; separate function/module is fine |
-| MQTT Event Callback → UART TX | `mpsc::SyncSender<Vec<u8>>` (bounded, 8) | Config payloads are infrequent; small bound is fine |
-| Any component → LED | `mpsc::SyncSender<LedState>` or `Arc<AtomicU8>` | AtomicU8 is simpler; channel gives ordering guarantees |
-| WiFi reconnect → MQTT reconnect | `Arc<AtomicBool>` (`wifi_connected` flag) or event channel | MQTT task polls or blocks on flag before attempting connect |
+| gnss.rs RX → nmea_relay.rs | `SyncSender<(String,String)>` bound 64 — UNCHANGED | Same as v1.1 |
+| gnss.rs RX → rtcm_relay.rs | `SyncSender<(u16,Vec<u8>)>` bound 32 — NEW | Binary frames, heap-allocated Vec per frame |
+| pump → config_relay | `Sender<Vec<u8>>` — UNCHANGED routing | pump must now discriminate topic before sending |
+| pump → ota.rs | `Sender<String>` — NEW | URL+hash JSON string; unbounded OK (OTA triggers are rare) |
+| ota.rs → EspOta | Direct in-thread — no channel | OTA thread owns the EspOta handle; blocking calls acceptable |
 
 ---
 
-## Anti-Patterns
+## Concurrency Budget (Updated)
 
-### Anti-Pattern 1: Subscribing to MQTT Config Topic Only at Startup
+| Thread | Stack | Role | Status |
+|--------|-------|------|--------|
+| main (idle loop) | 8KB | keepalive, holds gnss_cmd_tx | unchanged |
+| gnss RX | 8KB | state machine, UART read | MODIFIED |
+| gnss TX | 8KB | UART write | unchanged |
+| uart_bridge | 8KB | stdin → gnss_cmd_tx | unchanged |
+| led_task | 8KB | GPIO LED | unchanged |
+| pump | 8KB | MQTT event loop | MODIFIED (minor) |
+| subscriber_loop | 8KB | subscribe on Connected | MODIFIED (add OTA topic) |
+| heartbeat_loop | 8KB | periodic heartbeat | unchanged |
+| wifi_supervisor | 8KB | reconnect logic | unchanged |
+| nmea_relay | 8KB | NMEA MQTT publish | unchanged |
+| rtcm_relay | 8KB | RTCM MQTT publish | NEW |
+| ota_listener | 16KB | HTTP download + OTA write | NEW (16KB: HTTP client stack is larger) |
 
-**What people do:** Subscribe once in the initialization function, then assume the subscription persists.
-
-**Why it's wrong:** If the MQTT broker disconnects and reconnects, all subscriptions are lost. The retained config message will not be re-delivered. The UM980 will never receive its initialization commands after a reconnect.
-
-**Do this instead:** Subscribe to `gnss/{device_id}/config` inside the `Connected` event handler. Every reconnection automatically re-subscribes and the broker re-delivers the retained message.
-
-### Anti-Pattern 2: Writing UART from the MQTT Event Callback
-
-**What people do:** Call `uart.write(data)` directly inside the `EventPayload::Received` handler.
-
-**Why it's wrong:** The MQTT event callback fires on an ESP-IDF internal MQTT task thread. That thread has a limited stack (~4 KB by default) and holding UART write locks can cause priority inversion or deadlock with the UART reader task.
-
-**Do this instead:** Send the received config payload to a dedicated channel. The UART reader task (or a config-writer task) dequeues and writes to UART on its own thread.
-
-### Anti-Pattern 3: Unbounded Channel Between UART and MQTT
-
-**What people do:** Use `mpsc::channel()` (unbounded) for NMEA sentences.
-
-**Why it's wrong:** If the MQTT broker is unreachable for minutes, NMEA sentences accumulate in memory. The ESP32-C6 has ~320 KB free heap. At ~100 bytes/sentence and 10 sentences/second, this exhausts in under a minute.
-
-**Do this instead:** Use `mpsc::sync_channel(64)` (bounded). The sender blocks or uses `try_send` (preferred: drop the sentence with a log warning). Real-time relay does not need buffering.
-
-### Anti-Pattern 4: Blocking Inside FreeRTOS Task with Wrong Stack Size
-
-**What people do:** Spawn a `std::thread` without setting stack size, hit stack overflow, get opaque panic or reset.
-
-**Why it's wrong:** Default thread stack size on ESP-IDF is configured by `CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE` but `std::thread` spawns at `CONFIG_PTHREAD_TASK_STACK_SIZE_DEFAULT` (default 3 KB in some SDK versions). Rust frames are large.
-
-**Do this instead:** Always use `std::thread::Builder::new().stack_size(N).spawn(...)`. Set N to at least 8192 bytes for any task that uses formatting, parsing, or heap allocation.
-
-### Anti-Pattern 5: Using Embassy with esp-hal for This Feature Set
-
-**What people do:** Choose Embassy (bare-metal async) for its modern Rust ergonomics.
-
-**Why it's wrong:** As of 2025, Embassy on ESP32-C6 does not have stable WiFi or BLE support. The network stack (esp-wifi) is experimental. Provisioning via BLE is not available. This project requires both WiFi and BLE, which are only mature in the esp-idf-based stack.
-
-**Do this instead:** Use `esp-idf-hal` + `esp-idf-svc`. Accept std threading. Revisit Embassy when esp-wifi matures (track https://github.com/esp-rs/esp-wifi).
-
-### Anti-Pattern 6: Hardcoding UM980 Init Commands in Firmware
-
-**What people do:** Embed UM980 NMEA output configuration as constants in Rust source.
-
-**Why it's wrong:** Every configuration change (enable a new sentence type, change rate) requires reflashing. The project requirement explicitly avoids this.
-
-**Do this instead:** Subscribe to the retained MQTT config topic. The retained message persists in the broker; updating the broker message reconfigures the device on next reboot or reconnect without firmware changes.
-
----
-
-## Scaling Considerations
-
-This is single-device embedded firmware — "scaling" means handling edge cases and resource constraints, not user load.
-
-| Concern | Approach |
-|---------|---------|
-| NMEA throughput | UM980 at 10 Hz all sentence types ≈ ~20-50 sentences/sec. At 100 bytes avg = ~5 KB/s UART. ESP32-C6 UART with DMA handles this easily. MQTT at QoS 0 over WiFi 6 is sufficient. |
-| Memory pressure | Monitor with `unsafe { esp_idf_sys::heap_caps_get_free_size(MALLOC_CAP_DEFAULT) }` in debug builds. Budget: WiFi ~80 KB, BLE ~60 KB during provisioning (can be deinited after), MQTT buffers (set `CONFIG_MQTT_BUFFER_SIZE`), Rust heap. |
-| WiFi reconnect storms | Use exponential backoff (1s, 2s, 4s, up to 60s). Do not hammer reconnect on every disconnect event. |
-| MQTT reconnect | Same backoff as WiFi. Check WiFi is connected before attempting MQTT reconnect. |
-| NVS wear | NVS credentials written once at provisioning. Heartbeat and runtime state are not written to NVS. No wear concern. |
-| UM980 UART buffer | UM980 outputs continuously. If the UART Reader task is preempted for too long, the hardware FIFO overflows. Give the UART reader a higher FreeRTOS priority than the MQTT task. |
+Total new threads: 2 (rtcm_relay + ota_listener). ESP32-C6 has adequate task capacity. Total approximate stack: ~13 threads × ~8KB = ~104KB + WiFi/MQTT internal = within budget.
 
 ---
 
 ## Sources
 
-- esp-rs book (authoritative): https://docs.esp-rs.org/book/ — std vs no_std, project setup, thread model (MEDIUM confidence — verified against training knowledge through Aug 2025)
-- esp-idf-hal crate: https://github.com/esp-rs/esp-idf-hal — UART, GPIO, timer drivers (MEDIUM confidence)
-- esp-idf-svc crate: https://github.com/esp-rs/esp-idf-svc — WiFi, MQTT, NVS, BT bindings (MEDIUM confidence)
-- esp-idf-sys crate: https://github.com/esp-rs/esp-idf-sys — embuild, sdkconfig (MEDIUM confidence)
-- esp-wifi (Embassy WiFi): https://github.com/esp-rs/esp-wifi — experimental, not recommended for this project (MEDIUM confidence)
-- UM980 UART interface: Unicore Communications UM980 datasheet — NMEA output, configuration commands via UART (LOW confidence — based on general RTK receiver knowledge; verify command syntax with vendor docs)
-- FreeRTOS task model on ESP32: https://docs.espressif.com/projects/esp-idf/en/latest/esp32c6/api-guides/freertos-smp.html (MEDIUM confidence)
-
-**Note:** WebSearch and WebFetch were unavailable during this research session. All findings are based on training data through August 2025. Before implementation, verify:
-1. Current esp-idf-svc version and `EspMqttClient` API (callback vs connection-based API may have changed)
-2. esp32-nimble crate status for NimBLE on ESP32-C6 specifically
-3. Whether `esp_idf_svc::bt` provides a usable GATT server API in current versions, or whether esp-nimble-coex is needed
+- RTCM 3.x frame structure: [RTKLIB/src/rtcm.c](https://github.com/tomojitakasu/RTKLIB/blob/master/src/rtcm.c) (HIGH confidence — reference implementation)
+- RTCM SC-104 Wikipedia overview: [RTCM SC-104](https://en.wikipedia.org/wiki/RTCM_SC-104) (MEDIUM confidence — correct on preamble/length/CRC structure)
+- An RTCM 3 message cheat sheet: [SNIP Support](https://www.use-snip.com/kb/knowledge-base/an-rtcm-message-cheat-sheet/) (MEDIUM confidence)
+- EspOta API: [docs.esp-rs.org](https://docs.esp-rs.org/esp-idf-svc/esp_idf_svc/ota/struct.EspOta.html) (MEDIUM — site reachable but full API read rate-limited)
+- OTA example: [esp-idf-svc/examples/ota_http_client.rs](https://github.com/esp-rs/esp-idf-svc/blob/master/examples/ota_http_client.rs) (MEDIUM — confirmed to exist)
+- OTA practical walkthrough: [Programming ESP32 with Rust: OTA firmware update](https://quan.hoabinh.vn/post/2024/3/programming-esp32-with-rust-ota-firmware-update) (MEDIUM — 2024 article, 0.51 not specifically tested)
+- ESP-IDF Partition Tables: [Espressif docs](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-guides/partition-tables.html) (HIGH — official)
+- ESP-IDF OTA: [Espressif OTA docs](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/ota.html) (HIGH — official)
 
 ---
 
-*Architecture research for: ESP32-C6 GNSS-to-MQTT bridge (embedded Rust)*
-*Researched: 2026-03-03*
+*Architecture research for: ESP32-C6 GNSS-to-MQTT bridge — RTCM relay + OTA milestone*
+*Researched: 2026-03-07*

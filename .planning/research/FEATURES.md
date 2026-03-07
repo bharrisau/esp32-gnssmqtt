@@ -1,157 +1,341 @@
 # Feature Research
 
-**Domain:** Embedded GNSS-to-MQTT bridge firmware (ESP32-C6, Rust, UM980, WiFi/BLE)
-**Researched:** 2026-03-03
-**Confidence:** MEDIUM — no web access available; based on domain knowledge of embedded IoT telemetry, NMEA processing, MQTT protocols, ESP32 provisioning patterns, and Rust embedded ecosystem. Confidence is MEDIUM (not LOW) because these features are well-established across the embedded IoT domain and the project requirements in PROJECT.md align directly with observed industry patterns. Flag for validation before roadmap finalization.
+**Domain:** Embedded GNSS-to-MQTT bridge firmware — RTCM3 binary relay and OTA firmware update (milestone 2)
+**Researched:** 2026-03-07
+**Confidence:** HIGH for RTCM3 framing (spec is public and stable); HIGH for OTA partition mechanics (official ESP-IDF docs); MEDIUM for MQTT topic convention for binary RTCM (no single authoritative standard exists — observed practice from open-source projects).
 
 ---
 
-## Feature Landscape
+## Existing Features (Already Shipped — v1.1)
+
+These are included for completeness. Do not re-implement.
+
+- NMEA sentence relay: `gnss/{device_id}/nmea/{TYPE}` at QoS 0
+- Remote config: `gnss/{device_id}/config` → UART TX to UM980 with djb2 dedup
+- WiFi + MQTT connectivity with reconnect, LWT, heartbeat
+- Status LED, device ID from eFuse MAC
+
+---
+
+## Feature Landscape — New Features for This Milestone
 
 ### Table Stakes (Users Expect These)
 
-Features the device must have or it is operationally unusable. A GNSS-to-MQTT bridge without any of these either cannot function or is indistinguishable from a broken device.
+Features that must exist for the milestone to deliver value. Missing any of these means the stated goal is not achieved.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| UART RX from UM980 at 115200 baud 8N1 | Without this there is no GNSS data — the device does nothing | LOW | Hardware UART peripheral on ESP32-C6; `esp-idf-hal` UART driver. Baud is fixed by the UM980 hardware. |
-| NMEA sentence framing and line extraction | Raw bytes from UART must be split into discrete NMEA sentences; half-sentences must not be published | LOW | Read until `\n`, accumulate in a line buffer. Buffer must handle longest NMEA sentence (max 82 chars per NMEA 0183 spec). |
-| NMEA sentence type parsing (header extraction) | Topic routing requires knowing sentence type (GNGLL, GPGGA, etc.) before publishing | LOW | Parse `$<TYPE>,` prefix; no need to decode field values in v1. |
-| WiFi connection on boot using stored credentials | Device is useless without network connectivity | LOW | `esp-idf-hal` WiFi station mode; connect with SSID + password from NVS. |
-| MQTT client connect to broker | Core function of the device | LOW | `esp-idf-mqtt` or `rumqttc`; username + password auth; broker IP/port from NVS. |
-| MQTT publish NMEA sentences to typed topics | This is the primary product function | LOW | Publish to `gnss/{device_id}/nmea/{SENTENCE_TYPE}`; QoS 0 is sufficient for real-time telemetry. |
-| Persistent credential storage in NVS flash | WiFi SSID/password and MQTT broker/credentials must survive reboots | LOW | ESP32 NVS partition; `esp-idf-sys` NVS API or a Rust NVS wrapper. Credentials are lost if NVS is wiped. |
-| BLE provisioning on first boot | Without provisioning, the device cannot receive its credentials and cannot connect to anything | HIGH | ESP-IDF WiFi provisioning component uses BLE transport. This is the highest-complexity table-stakes feature. Requires BLE GATT server, custom provisioning protocol or use of `esp_prov` component. |
-| Auto-reconnect for WiFi and MQTT | Real-world networks drop; a device that does not reconnect is useless after the first dropout | MEDIUM | Requires a supervisor loop / state machine. WiFi reconnect events from esp-idf event loop; MQTT reconnect with exponential backoff. |
-| Device ID derived from ESP32 hardware MAC/eFuse | Per-device topic namespacing requires unique stable IDs | LOW | `esp_read_mac` or eFuse serial via esp-idf. MAC is factory-burned, guaranteed unique. |
-| MQTT subscribe to config topic on connect | Remote GNSS reconfiguration is a stated core value; without it UM980 init is hardcoded | LOW | Subscribe to `gnss/{device_id}/config` with QoS 1 for reliable delivery of retained config. |
-| Send received config payload as UART TX to UM980 | Config topic payload must reach the UM980 as UART command bytes | LOW | UART TX write after receiving MQTT config message. Handle multi-command payloads (newline-delimited). |
-| Status LED reflecting connectivity state | Without visual feedback, field debugging is impossible; no one can tell if device is running | LOW | Single RGB or multi-color LED; at minimum: provisioning mode, connecting, connected, error. GPIO output, trivial to implement. |
-| Heartbeat publish on timer | Without a heartbeat, broker consumers cannot distinguish "no GNSS data" from "device offline" | LOW | Publish to `gnss/{device_id}/heartbeat` with timestamp or uptime; every 30–60 seconds is conventional. |
+| RTCM3 frame detection on UART RX (0xD3 preamble) | Without this, UM980 RTCM output is indistinguishable from noise; no relay is possible | MEDIUM | Mixed NMEA+RTCM stream on same UART; must detect preamble byte 0xD3, not consume it as NMEA. Current gnss.rs discards non-NMEA bytes — needs extension. |
+| RTCM3 length read (10-bit field in header bytes 1-2) | Frame boundary cannot be known without reading the length field | LOW | Header is 3 bytes total: byte 0 = 0xD3, byte 1 bits[5:0] = length MSBs (6 bits), byte 2 = length LSBs (8 bits). Max payload = 1023 bytes. |
+| RTCM3 CRC-24Q verification before relay | Corrupt frames must not be forwarded; NTRIP consumers and RTK rovers will malfunction on bad data | MEDIUM | CRC-24Q (Qualcomm) covers header + payload (6 bytes total overhead). Three CRC bytes follow payload. Algorithm: polynomial 0x1864CFB, widely implemented. |
+| RTCM message type extraction | Required for per-type topic routing and for logging/debugging | LOW | Message type is a 12-bit field at bits [0:11] of the payload body (first 2 bytes of payload, big-endian, MSB first). E.g. 1074 decimal. |
+| MQTT publish RTCM frames to typed topics | Core value of this milestone: RTCM data reaches the broker | LOW | Once frame is validated, publish raw bytes. Topic: `gnss/{device_id}/rtcm/{MESSAGE_TYPE}` at QoS 0, retain=false. |
+| Partition table rework for OTA | Current partitions.csv has only a single `factory` app partition — OTA is structurally impossible without ota_0 + ota_1 slots + otadata | HIGH | This is a precondition for any OTA feature. Requires reflash of the partition table. ESP32-C6 flash is 4MB; each OTA app slot needs ~1.5MB minimum (current factory partition is 3.9MB — must shrink). |
+| OTA trigger via MQTT (`gnss/{device_id}/ota`) | Without a trigger mechanism, OTA cannot be initiated remotely | LOW | Subscribe to OTA command topic. Payload contains firmware URL (HTTP/HTTPS). On receipt, spawn OTA task. |
+| Firmware download over HTTP | Firmware binary is fetched from a URL, not pushed over MQTT | MEDIUM | Use esp-idf HTTP client to download in chunks; write each chunk to the inactive OTA partition via `esp-ota` crate or `esp_idf_svc::ota::EspOta`. |
+| SHA256 verification of downloaded firmware | Without integrity check, a corrupted download bricks the device | MEDIUM | ESP-IDF bootloader verifies SHA256 of the app image stored in partition headers automatically when secure boot is not used. Caller should also verify SHA256 against a known-good hash provided in the MQTT OTA trigger payload. |
+| Rollback on first-boot failure | If new firmware cannot reach a "healthy" state, device must revert to the previous version | HIGH | Requires `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y` in sdkconfig. App must call `esp_ota::mark_app_valid()` after WiFi+MQTT connect succeeds. If not called before reboot, bootloader rolls back automatically. |
 
 ### Differentiators (Competitive Advantage)
 
-Features that exceed baseline expectations and add real operational value. None are required for the device to function, but several significantly improve reliability and operator experience.
+Features that go beyond baseline and add real operational value for RTK use cases.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| MQTT Last Will and Testament (LWT) | Broker automatically publishes an "offline" message if device disconnects ungracefully; consumers know device is down without waiting for heartbeat timeout | LOW | Set at MQTT connect time; zero ongoing cost. Use `gnss/{device_id}/status` with payload `online`/`offline`. |
-| Per-sentence topic routing (not single topic) | Consumers subscribe only to sentence types they care about (e.g. only `GNGGA` for position); reduces traffic and processing on consumer side | LOW | Already in project design. Routing is trivially derived from NMEA sentence type header — `$GNGGA` → topic suffix `GNGGA`. |
-| Web portal fallback provisioning | Covers environments without BLE capability (headless servers, older devices) | MEDIUM | ESP-IDF SoftAP + HTTP server serving a config form. Requires WiFi in AP mode. Lower priority than BLE path but valuable for operators. Already in PROJECT.md requirements. |
-| MQTT QoS 1 for config topic subscription | Ensures UM980 initialization commands are delivered exactly-at-least-once; device won't start with wrong or missing config | LOW | QoS 1 on subscribe to config topic only. NMEA telemetry remains QoS 0 (fire-and-forget is appropriate for real-time sensor data). |
-| NMEA checksum validation before publish | Filters corrupt UART bytes; prevents publishing malformed sentences that will confuse consumers | LOW | NMEA 0183 checksum is XOR of bytes between `$` and `*`; trivial to compute. Drop sentence if checksum fails. |
-| Sentence-type allow/deny filter (config-driven) | Operator can suppress unwanted sentence types (e.g. suppress `GPGSV` satellite info noise) via retained config topic | MEDIUM | Requires parsing a filter list from config topic; apply per-sentence before publish. Not required for v1 but reduces broker load in high-rate GNSS scenarios. |
-| MQTT retained publish for heartbeat/status | Broker retains last status; consumers connecting after device reboot immediately know current state | LOW | Set `retain=true` on heartbeat and status publishes. Zero implementation cost beyond a flag. |
-| Structured heartbeat payload (JSON with uptime, GNSS fix status) | Richer diagnostics than a bare "alive" pulse; allows monitoring systems to surface device health metrics | LOW | Serialize a small JSON struct: `{"uptime_s": 1234, "fix": true, "satellites": 8}`. Requires GNSS fix state tracking (available from NMEA GGA sentence). |
-| NVS partition wipe + re-provisioning via button or MQTT command | Lets operators reset credentials without firmware reflash | LOW | GPIO button hold-to-reset, or subscribe to `gnss/{device_id}/reset` topic. NVS erase via esp-idf NVS API. |
-| Panic/error reporting to MQTT | Surfaces firmware panics or error states to the broker for remote diagnostics | MEDIUM | Set up a panic handler that publishes to `gnss/{device_id}/error` before restarting. Requires careful design to avoid infinite panic loops. |
+| MSM4 message set selection (1074/1084/1094/1124) | Sufficient for most RTK rovers; lower bandwidth than MSM7; universally supported | LOW | Configure via existing MQTT config relay: `rtcm1074 1`, `rtcm1084 1`, `rtcm1094 1`, `rtcm1124 1`. No firmware change needed — just UM980 config. |
+| MSM7 message set option (1077/1087/1097/1127) | Higher resolution pseudorange + carrier phase + Doppler; better ambiguity resolution for precision applications; required by some calibration workflows | LOW | Same config relay path: `rtcm1077 1`, etc. UM980 supports both MSM4 and MSM7 simultaneously — operator chooses per use case. |
+| 1005/1006 base position at slow rate (30s) | NTRIP clients require 1005 or 1006 at the start of the stream to locate the base; slow rate (30s) conserves bandwidth | LOW | UM980 config: `rtcm1005 30`. This is data the firmware relays, not generates — no firmware logic change. |
+| 1230 GLONASS code-phase biases | Required by some RTK solvers (RTKLIB, u-blox) to resolve GLONASS phase ambiguity; without it GLONASS MSM data is harder to use | LOW | UM980 config: not always supported; verify with UM980 command reference. Include if available. |
+| OTA status reporting to MQTT | Allows remote monitoring of OTA progress and failure reasons | LOW | Publish to `gnss/{device_id}/ota/status` with payload `{"state": "downloading", "progress_pct": 42}`. Use existing MQTT publish path. |
+| Anti-rollback version tracking | Prevents downgrade attacks (flashing older vulnerable firmware) | LOW | ESP-IDF supports anti-rollback via eFuse security counter. Requires bumping `CONFIG_BOOTLOADER_APP_ANTI_ROLLBACK=y` and setting app security version in Cargo.toml/sdkconfig. Defer to security milestone unless needed. |
+| Dual-rate RTCM: position messages at 1s, 1005 at 30s | Position data at 1Hz keeps rovers updated; base position at 30s avoids redundant data | LOW | Pure UM980 configuration, not a firmware feature. Document as recommended operator config. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
-Features that seem like good ideas but introduce complexity, risk, or scope that is inappropriate for v1 of this firmware.
-
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| TLS/mTLS for MQTT | Security best practice | In v1, adds certificate management complexity (provisioning, rotation, storage) that dwarfs the firmware itself; correct mTLS on embedded targets requires significant NVS/flash management and mbedTLS tuning; out of scope per PROJECT.md | Username + password auth is sufficient for v1 on trusted networks. Add TLS in v2 as a separate milestone with proper certificate provisioning design. |
-| Local NMEA buffering across power cycles | "Don't lose data" instinct | The UM980 is a real-time sensor; stale buffered NMEA positions are misleading, not helpful. Flash write amplification from buffering high-rate NMEA (10Hz = 600+ sentences/minute) degrades NVS lifespan. Real-time relay is the correct model. | Accept QoS 0 data loss as the defined behavior; if loss tolerance is needed later, use an SD card with a dedicated logging feature — not NVS. |
-| OTA firmware update over MQTT or WiFi | Convenient for field updates | OTA on ESP32 requires dual-partition layout, rollback logic, image verification, and handling partial transfers; adds 20–30% firmware complexity for a v1. Wrong OTA implementation bricks devices in the field. | Defer to a dedicated v2 milestone. Use esptool + USB for v1 updates. |
-| Full NMEA sentence parsing (lat/lon decode, field extraction) | "It would be useful to have parsed data" | Firmware's job is relay, not parse; adding a full NMEA parser adds 500–2000 lines of code, edge cases (NMEA variants, proprietary sentences), and test burden. Consumers can parse NMEA trivially in any language. | Publish raw NMEA strings. Consumer-side parsing is the right separation of concerns. |
-| Mobile app for provisioning | Better UX than BLE CLI | Building a companion mobile app is a separate product; it is out of scope for firmware v1. BLE provisioning via standard tools (nRF Connect, esp-idf-prov CLI) covers all operator use cases. | BLE GATT server that standard BLE client tools can talk to. |
-| Multi-broker publishing | "Publish to multiple endpoints" | Multiple simultaneous MQTT connections multiply state management complexity and memory pressure on a constrained MCU; connection failure handling becomes combinatorial. | One broker per device. If fan-out is needed, implement it at the broker level (MQTT bridge, topic mirroring). |
-| GNSS config stored in device NVS (not from broker) | "What if the broker is offline at boot?" | Defeats the stated design goal: remote reconfiguration without reflash. Also creates a dual-source-of-truth problem. | Use MQTT retained config as the single source of truth; on first boot without config, send a safe default init or wait for config before starting NMEA relay. |
-| Parsed geofence or alert logic in firmware | "Alert when device leaves an area" | Application logic in firmware: couples sensor relay to a specific use case, makes firmware brittle to changing requirements, and is better done in the MQTT consumer pipeline. | Implement geofence logic in the consumer application subscribing to NMEA topics. |
+| RTCM payload as base64 in MQTT | JSON/text tool compatibility; some brokers handle text better | Adds 33% size overhead to already-binary data; introduces encode/decode step; MQTT supports binary payloads natively; all RTK software (RTKLIB, SNIP, rtkbase) expects raw bytes; base64 requires consumer-side decode before use | Publish raw bytes directly. MQTT is a binary protocol. Use raw payload. Any consumer that cannot handle binary payloads is the wrong consumer. |
+| RTCM reassembly / NTRIP server in firmware | "Close the loop" — device acts as its own NTRIP caster | ESP32-C6 has 512KB RAM; an NTRIP server requires TCP connection management, HTTP state machine, and concurrent client handling — disproportionate complexity for a relay device; NTRIP is HTTP-based and needs TLS for external access | Relay raw RTCM to MQTT broker. A separate NTRIP-from-MQTT bridge (e.g. rtkbase, SNIP, or a small Python script) handles NTRIP serving. Separation of concerns. |
+| OTA firmware push over MQTT | MQTT is already connected; push firmware binary as MQTT payload | MQTT is not designed for large binary transfers; 1MB firmware cannot fit in a single MQTT message; fragmentation logic, reassembly, and partial-transfer recovery add high complexity; HTTP pull is standard and well-supported by ESP-IDF | HTTP pull: device fetches firmware from URL provided in MQTT trigger message. Reliable, chunked, standard. |
+| Firmware signature verification in firmware | "Extra security" | Secure boot + code signing requires eFuse key programming during manufacture — cannot be added after deployment without re-provisioning the device; adds irrecoverable brick risk if key management fails | SHA256 hash verification against a publisher-provided hash is sufficient for this use case. Reserve secure boot for a security-dedicated milestone with proper key management design. |
+| Parsing RTCM messages in firmware (decode fields) | "Know what's inside" for logging | RTCM field decoding requires implementing the full RTCM3 spec (complex bit-packed structures, scale factors, constellation-specific encodings); relay firmware must not be an RTCM decoder; adds hundreds of lines of code | Relay opaque frames. RTKLIB or pyrtcm on the consumer side decodes fields. Firmware validates CRC and publishes. |
+| Storing RTCM frames in NVS | "Don't lose corrections during WiFi drop" | RTCM corrections are time-stamped and ephemeral; a correction more than a few seconds old is useless or harmful for RTK; NVS write endurance (10K-100K cycles) is incompatible with 1Hz frame writes | Accept loss during WiFi drop. RTK rovers handle correction gaps gracefully (hold last fix, degrade to float). |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[NVS Credential Storage]
-    └──required by──> [WiFi Connection on Boot]
-                          └──required by──> [MQTT Client Connect]
-                                                └──required by──> [NMEA Publish to Topics]
-                                                └──required by──> [Config Topic Subscribe]
-                                                └──required by──> [Heartbeat Publish]
+[Partition table rework (ota_0, ota_1, otadata)]
+    └──required by──> [OTA trigger via MQTT]
+                          └──required by──> [Firmware download over HTTP]
+                                                └──required by──> [SHA256 verification]
+                                                └──required by──> [Rollback on first-boot failure]
 
-[BLE Provisioning]
-    └──writes to──> [NVS Credential Storage]
+[RTCM3 frame detection (0xD3 preamble)]
+    └──required by──> [RTCM3 length read]
+                          └──required by──> [RTCM3 CRC-24Q verification]
+                                                └──required by──> [RTCM message type extraction]
+                                                                      └──required by──> [MQTT publish RTCM to typed topics]
 
-[Web Portal Fallback Provisioning]
-    └──writes to──> [NVS Credential Storage]
-    └──conflicts with──> [BLE Provisioning] (can't run both simultaneously; need mode-select logic)
+[UM980 config (via existing config relay)]
+    └──configures──> [RTCM output messages on UM980 UART]
+                          └──feeds──> [RTCM3 frame detection]
 
-[UART RX from UM980]
-    └──required by──> [NMEA Sentence Framing]
-                          └──required by──> [NMEA Type Parsing]
-                                                └──required by──> [NMEA Publish to Topics]
+[CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y]
+    └──required by──> [Rollback on first-boot failure]
+    └──requires──> [Partition table rework] (rollback needs two OTA slots to roll back to)
 
-[Config Topic Subscribe]
-    └──required by──> [UART TX to UM980 (init commands)]
-
-[MQTT Client Connect]
-    └──required by──> [LWT registration] (must be set at connect time, not after)
-
-[NMEA Checksum Validation]
-    └──enhances──> [NMEA Publish to Topics] (filter corrupt sentences before publish)
-
-[Auto-Reconnect (WiFi)]
-    └──required by──> [Auto-Reconnect (MQTT)] (can't reconnect MQTT without WiFi)
-
-[Device ID (MAC/eFuse)]
-    └──required by──> [All topic construction] (topics include {device_id})
+[WiFi + MQTT connected state]
+    └──required by──> [OTA trigger via MQTT] (must be subscribed to receive trigger)
+    └──required by──> [mark_app_valid() call] (must confirm healthy state before calling)
 ```
 
 ### Dependency Notes
 
-- **NVS requires provisioning to exist first:** On a freshly flashed device with no credentials, the boot sequence must detect empty NVS and enter provisioning mode rather than attempting a connection that will always fail.
-- **Config topic subscription requires WiFi+MQTT to be up:** The UM980 cannot be initialized with remote commands until the full connectivity stack is established. Design implication: device must handle "connected but no config received yet" as a valid transient state.
-- **LWT must be registered at MQTT connect time:** LWT is not a post-connect subscription; it must be embedded in the CONNECT packet. This means LWT topic/payload must be known before calling `mqtt_connect`.
-- **BLE and WiFi SoftAP provisioning modes conflict:** ESP32-C6 can run BLE and WiFi concurrently but SoftAP provisioning requires WiFi in AP mode. Mode selection logic (BLE primary, web portal fallback) must be explicitly coded — they cannot both be active defaults.
-- **Auto-reconnect for MQTT depends on WiFi being up:** The reconnect state machine must be layered: reconnect WiFi first, then reconnect MQTT. A flat "reconnect everything" approach causes MQTT connect attempts against a non-existent network interface.
+- **Partition rework is a hard prerequisite for OTA:** The current `partitions.csv` allocates the entire 3.9MB flash to a single `factory` partition. OTA requires two `ota_N` app partitions plus an `otadata` partition. This requires a partition table change and a full reflash — it cannot be done over the air on the first OTA-enabled build.
+- **RTCM framing is independent of NMEA relay:** RTCM detection in the UART stream is additive — existing NMEA detection logic does not need to change. The two streams are byte-level multiplexed and distinguished by the 0xD3 preamble vs. the `$` preamble.
+- **OTA mark-valid timing:** `mark_app_valid()` must be called only after the firmware confirms healthy operation (WiFi connected + MQTT connected). Calling it too early (e.g. on first line of main) defeats rollback protection entirely.
+- **RTCM message selection is a UM980 config concern, not a firmware concern:** The firmware relays whatever RTCM frames the UM980 emits. The operator controls message selection via the existing MQTT config relay. Document recommended UM980 RTCM configs separately from firmware requirements.
 
 ---
 
-## MVP Definition
+## RTCM3 Framing Specification (Reference)
 
-### Launch With (v1)
+Source: RTCM 10403 standard (behind paywall) — framing independently confirmed by RTKLIB source (`rtcm.c`, `#define RTCM3PREAMB 0xD3`) and multiple open implementations. Confidence: HIGH.
 
-These are the features needed for the device to deliver its core value: reliably relay NMEA to MQTT with zero-touch provisioning.
+### Frame Structure
 
-- [x] **UART RX from UM980 at 115200 baud** — without this, there is no product
-- [x] **NMEA sentence framing and line extraction** — prerequisite for all NMEA processing
-- [x] **NMEA sentence type parsing (header extraction)** — required for per-topic routing
-- [x] **NMEA checksum validation** — prevents corrupt data reaching the broker; LOW complexity, HIGH value
-- [x] **Device ID from ESP32 hardware MAC/eFuse** — required for topic namespacing
-- [x] **NVS credential storage** — required for persistent WiFi and MQTT config
-- [x] **BLE provisioning on first boot** — required for zero-touch field deployment
-- [x] **WiFi connection on boot using stored credentials** — core connectivity
-- [x] **MQTT client connect with username + password** — core connectivity
-- [x] **MQTT publish NMEA to `gnss/{device_id}/nmea/{TYPE}`** — core product function
-- [x] **MQTT subscribe to `gnss/{device_id}/config` (QoS 1)** — required for remote UM980 init
-- [x] **UART TX to UM980 (send received config payload)** — required for remote UM980 init
-- [x] **Auto-reconnect for WiFi and MQTT** — without this the device requires manual power cycle on every network blip
-- [x] **Status LED (provisioning / connecting / connected / error)** — required for field diagnosis
-- [x] **Heartbeat publish** — required for consumers to detect device presence
-- [x] **MQTT LWT for offline status** — differentiator with LOW cost; include in v1
-- [x] **MQTT retain flag on heartbeat/status publishes** — zero cost flag; include in v1
+```
+Byte 0:     0xD3  (preamble, always)
+Byte 1:     [7:6] = reserved, always 0b00
+            [5:0] = length bits [9:8] (MSBs of 10-bit length)
+Byte 2:     length bits [7:0] (LSBs of 10-bit length)
+Bytes 3..(3+length-1): payload
+Bytes (3+length)..(3+length+2): CRC-24Q (3 bytes, big-endian)
 
-### Add After Validation (v1.x)
+Total frame size = 3 (header) + length + 3 (CRC) = length + 6 bytes
+Maximum payload = 1023 bytes → max frame = 1029 bytes
+```
 
-Features to add once the core relay pipeline is confirmed working in the field.
+### CRC-24Q Algorithm
 
-- [ ] **Web portal fallback provisioning** — add when BLE coverage gaps are reported; already in PROJECT.md requirements but lower priority than BLE path
-- [ ] **NVS wipe + re-provisioning trigger (button or MQTT command)** — add when first operator needs to re-provision a deployed device
-- [ ] **Structured JSON heartbeat (uptime, fix status, satellite count)** — add when monitoring dashboards are being built and need richer data
-- [ ] **Sentence-type allow/deny filter via config** — add when operators report unwanted NMEA noise consuming broker bandwidth
+- Polynomial: 0x1864CFB
+- Initial value: 0x000000
+- Covers: all bytes from byte 0 (preamble) through last payload byte
+- Does NOT cover the CRC bytes themselves
+- Reference implementation in RTKLIB `src/rtcm.c` function `crc24q()`
+
+### Message Type Extraction
+
+- Payload byte 0 bits [7:4] = message type bits [11:8]
+- Payload byte 0 bits [3:0] = message type bits [7:4]  (first byte = upper 8 bits of 12-bit type)
+- Payload byte 1 bits [7:4] = message type bits [3:0]
+- Simplified: `msg_type = (payload[0] << 4) | (payload[1] >> 4)` — 12-bit value, range 1-4095
+
+### Parsing State Machine (Implementation Pattern)
+
+```
+State::Idle          → on byte 0xD3 → State::Header1
+State::Header1       → read byte, extract length MSBs → State::Header2
+State::Header2       → read byte, extract length LSBs, compute total length → State::Payload
+State::Payload       → accumulate (length + 3 CRC) bytes → State::Validate
+State::Validate      → compute CRC-24Q, compare, publish or discard → State::Idle
+```
+
+Important: a 0xD3 byte inside a payload is not a preamble. Only re-enter Idle state after CRC validation (success or fail) — do not scan for 0xD3 inside payloads.
+
+---
+
+## RTCM Message Selection for RTK Base Station + Calibration
+
+Source: UM980 reference commands manual (SparkFun mirror), SNIP RTCM cheat sheet, Tersus GNSS MSM description, onocoy/rtkbase community documentation. Confidence: MEDIUM-HIGH (UM980 message list confirmed from manufacturer docs; MSM semantics confirmed from multiple sources).
+
+### UM980-Supported RTCM Output Messages
+
+The UM980 supports: 1005, 1006, 1033, 1074, 1077, 1084, 1087, 1094, 1097, 1117, 1124, 1127. Note: 1114 (QZSS MSM4) may not be listed in all UM980 firmware versions; verify against installed firmware.
+
+### Message Selection Matrix
+
+| Message | Constellation | MSM Level | Content | RTK Use | Calibration Use | Rate |
+|---------|--------------|-----------|---------|---------|-----------------|------|
+| 1005 | — | — | Base ARP position (no antenna height) | Required by all NTRIP clients | Required | 30s |
+| 1006 | — | — | Base ARP + antenna height | Better than 1005 if antenna height known | Recommended | 30s |
+| 1074 | GPS | MSM4 | Pseudorange, carrier phase, CNR | Good; widely supported | Good | 1s |
+| 1077 | GPS | MSM7 | Pseudorange + phase (high-res) + Doppler + CNR | Better ambiguity resolution | Best | 1s |
+| 1084 | GLONASS | MSM4 | Pseudorange, carrier phase, CNR | Good | Good | 1s |
+| 1087 | GLONASS | MSM7 | High-res + Doppler | Better | Best | 1s |
+| 1094 | Galileo | MSM4 | Pseudorange, carrier phase, CNR | Good | Good | 1s |
+| 1097 | Galileo | MSM7 | High-res + Doppler | Better | Best | 1s |
+| 1124 | BeiDou | MSM4 | Pseudorange, carrier phase, CNR | Good | Good | 1s |
+| 1127 | BeiDou | MSM7 | High-res + Doppler | Better | Best | 1s |
+| 1117 | QZSS | MSM7 | High-res (Asia-Pacific only) | Regional only | Regional only | 1s |
+| 1230 | GLONASS | — | Code-phase biases | Needed by RTKLIB for GLONASS fix | Needed | 10s |
+| 1033 | — | — | Receiver + antenna descriptor | Optional; useful for CORS networks | Optional | 10s |
+
+### Recommended Minimum Set (RTK Base + Calibration)
+
+This is the minimum that a rover or calibration tool (RTKLIB, rtkbase, u-blox u-center, Emlid Flow) can use for an RTK fix:
+
+```
+rtcm1005 30    (or rtcm1006 30 if antenna height measured)
+rtcm1074 1     (GPS MSM4 — or 1077 1 for MSM7)
+rtcm1084 1     (GLONASS MSM4 — or 1087 1 for MSM7)
+rtcm1094 1     (Galileo MSM4 — or 1097 1 for MSM7)
+rtcm1124 1     (BeiDou MSM4 — or 1127 1 for MSM7)
+rtcm1230 10    (GLONASS biases — required for GLONASS carrier-phase use)
+```
+
+### MSM4 vs MSM7 Decision
+
+Use MSM4 when bandwidth is constrained or when connecting legacy rovers. Use MSM7 when operating a precision reference station for post-processing or when connecting modern rovers (ZED-F9P, UM980 in rover mode, Septentrio). MSM7 messages are ~30-50% larger than MSM4 for the same constellation. UM980 outputs both simultaneously if both are configured — this is valid and some setups use MSM4 for low-latency and MSM7 for archival.
+
+---
+
+## MQTT Topic Convention for RTCM Binary Relay
+
+Source: RVMT/RVMP open-source RTCM-via-MQTT project (GitHub), SNIP documentation, observed practice in open-source RTK communities. No single authoritative standard exists. Confidence: MEDIUM.
+
+### Recommendation: Raw Bytes, Per-Type Topics
+
+**Topic pattern:** `gnss/{device_id}/rtcm/{message_type}`
+
+Examples:
+- `gnss/fffeb5/rtcm/1005` — base position
+- `gnss/fffeb5/rtcm/1074` — GPS MSM4
+- `gnss/fffeb5/rtcm/1084` — GLONASS MSM4
+
+**Payload encoding:** Raw bytes (binary MQTT payload). Do NOT base64-encode.
+
+**QoS:** 0 (fire-and-forget). RTCM corrections are time-sensitive; retransmission of stale corrections is harmful. Same rationale as NMEA relay.
+
+**Retain:** false. Stale corrections are useless (position fixes advance every epoch).
+
+**Exception for 1005/1006:** Some implementations publish base position with retain=true so that a consumer connecting mid-stream immediately gets the base location. This is a reasonable differentiator but not table stakes.
+
+### Rationale for Raw Bytes
+
+MQTT is a binary protocol — there is no transport-layer reason to base64. NTRIP clients, RTKLIB, and rtkbase all expect raw RTCM byte streams. A Mosquitto-to-NTRIP bridge or Python subscriber receives the binary payload and can pipe it directly to an NTRIP caster or RTKLIB instance without transformation. Base64 adds 33% overhead, a mandatory decode step on every consumer, and complexity for no gain. The only argument for base64 is JSON envelope compatibility — but wrapping binary corrections in JSON is wrong for this domain.
+
+### "Done" Criteria for RTCM Relay
+
+RTCM relay is operationally complete when:
+
+1. A Mosquitto subscriber receives binary frames on `gnss/{device_id}/rtcm/1074` (and other configured types)
+2. Frame size matches `length + 6` bytes from the UM980 output
+3. CRC-24Q computed by a consumer tool (e.g. `pyrtcm`, `rtklib`, or `node-NTRIP/rtcm`) passes on every received frame
+4. An NTRIP caster (rtkbase, SNIP free tier, or a minimal Python NTRIP server reading from MQTT) accepts the stream and a rover receiver achieves RTK float or fix
+5. RTKLIB `str2str` can receive frames from MQTT (via a pipe or MQTT-to-TCP bridge) and output a position solution
+
+Alternatively (simpler validation): pipe raw bytes to `rtk2rtklib` or `pyrtcm` decode and verify message type parsing is correct.
+
+---
+
+## OTA Update Flow (ESP32-C6, Rust, esp-idf-svc)
+
+Source: ESP-IDF OTA official docs (v5.x), esp-ota crate (crates.io, GitHub: faern/esp-ota), esp-idf-svc ota module docs (docs.esp-rs.org). Confidence: HIGH.
+
+### Partition Table Change (Hard Prerequisite)
+
+Current `partitions.csv` (single factory partition) must become:
+
+```
+# Name,    Type,  SubType,   Offset,   Size
+nvs,       data,  nvs,       0x9000,   0x10000
+phy_init,  data,  phy,       0x19000,  0x1000
+otadata,   data,  ota,       0x1A000,  0x2000
+ota_0,     app,   ota_0,     0x20000,  0x1C0000
+ota_1,     app,   ota_1,     0x1E0000, 0x1C0000
+```
+
+Note: Each OTA slot is 1.75MB. Current factory build is ~500KB — well within this size. The 4MB flash on ESP32-C6 supports two 1.75MB slots comfortably. This partition table change requires a full USB reflash; it cannot be applied via OTA.
+
+### OTA Update Flow
+
+```
+1. MQTT message arrives on gnss/{device_id}/ota
+   Payload: {"url": "http://192.168.1.10:8080/firmware.bin", "sha256": "abc123..."}
+
+2. Parse URL and SHA256 from payload
+
+3. Spawn OTA task (do not block MQTT pump thread):
+   a. Begin OTA: esp_ota::OtaUpdate::begin()
+      → ESP-IDF finds inactive OTA slot (ota_0 or ota_1)
+      → Erases target partition
+
+   b. HTTP GET firmware binary in chunks (e.g. 4KB chunks)
+      → Write each chunk: ota_update.write(chunk)
+      → Track bytes written for progress reporting
+
+   c. Finalize: completed = ota_update.finalize()
+      → ESP-IDF writes app descriptor + SHA256 to partition header
+      → Validates image integrity (built-in SHA256 check)
+
+   d. Verify SHA256 of written image against provided hash
+      → esp_ota_get_app_elf_sha256() or compute over flash directly
+
+   e. Set boot partition: completed.set_as_boot_partition()
+      → Updates otadata partition to boot from new slot
+
+   f. Restart: completed.restart()
+      → ESP-IDF reboots into new firmware (marked ESP_OTA_IMG_NEW)
+
+4. On first boot of new firmware:
+   → Bootloader sees ESP_OTA_IMG_NEW state
+   → If CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y: starts watchdog
+   → Firmware runs its normal startup (WiFi connect, MQTT connect)
+   → After WiFi + MQTT confirmed connected: call esp_ota::mark_app_valid()
+   → Image state transitions to ESP_OTA_IMG_VALID → rollback window closed
+
+5. If firmware panics or never calls mark_app_valid():
+   → On next reboot, bootloader detects image in ESP_OTA_IMG_NEW state
+   → Bootloader rolls back to previous slot
+   → Device recovers to last known-good firmware
+```
+
+### Key sdkconfig Changes for OTA
+
+```
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+CONFIG_APP_PROJECT_VER="1.2.0"  (increment per release)
+```
+
+### OTA Crate Options
+
+| Option | Crate | Notes |
+|--------|-------|-------|
+| esp-ota | `esp-ota` (faern/esp-ota) | Transport-agnostic, safe Rust; recommended; well-maintained as of 2024 |
+| esp-idf-svc::ota | built into esp-idf-svc | Available but documented as experimental; fewer examples in the wild |
+
+Recommendation: Use `esp-ota` crate. It wraps the ESP-IDF OTA partition API in safe Rust, is transport-agnostic (caller handles HTTP), and the rollback API (`mark_app_valid()` / `rollback_and_reboot()`) is explicit and well-documented.
+
+---
+
+## MVP Definition for This Milestone
+
+### Launch With (v1.2)
+
+Minimum viable product for RTCM relay + OTA milestone.
+
+- [ ] **Partition table rework** — hard prerequisite; ship in first phase of milestone
+- [ ] **RTCM3 frame detection + length + CRC-24Q verification** — without CRC, relay is unsafe
+- [ ] **MQTT publish raw RTCM bytes to `gnss/{device_id}/rtcm/{type}`** — core relay function
+- [ ] **OTA trigger via MQTT** — control plane for updates
+- [ ] **HTTP firmware download in chunks** — fetch mechanism
+- [ ] **Rollback on first-boot failure** — safety net; do not ship OTA without this
+- [ ] **mark_app_valid() after WiFi+MQTT connect** — required for rollback to work correctly
+
+### Add After Validation (v1.2.x)
+
+- [ ] **OTA progress reporting to MQTT** — useful for monitoring; trivial to add
+- [ ] **SHA256 hash verification in firmware** — adds second integrity layer; low complexity once OTA flow is working
+- [ ] **1005/1006 retain=true** — makes base position immediately available to new subscribers
 
 ### Future Consideration (v2+)
 
-Features requiring separate design work; premature in v1.
-
-- [ ] **TLS/mTLS** — defer until v2; requires certificate provisioning design, mbedTLS tuning, and NVS space planning
-- [ ] **OTA firmware update** — requires dual-partition layout, rollback, image signing; defer to dedicated OTA milestone
-- [ ] **Panic/error reporting to MQTT** — useful but requires careful panic handler design to avoid boot loops; defer until v1 is stable
-- [ ] **Sentence-type filtering (advanced, regex-based)** — defer until simple allow/deny filter is validated as insufficient
+- [ ] **Anti-rollback (eFuse security counter)** — requires security milestone with key management design
+- [ ] **TLS for OTA download (HTTPS)** — add when HTTP pull is validated; requires certificate handling
+- [ ] **OTA signature verification (secure boot)** — requires eFuse provisioning at manufacture time
 
 ---
 
@@ -159,26 +343,17 @@ Features requiring separate design work; premature in v1.
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| UART RX + NMEA framing + type parse | HIGH | LOW | P1 |
-| NMEA checksum validation | HIGH | LOW | P1 |
-| NVS credential storage | HIGH | LOW | P1 |
-| BLE provisioning | HIGH | HIGH | P1 |
-| WiFi + MQTT connect | HIGH | LOW | P1 |
-| NMEA publish to per-type topics | HIGH | LOW | P1 |
-| Config topic subscribe + UART TX to UM980 | HIGH | LOW | P1 |
-| Auto-reconnect (WiFi + MQTT) | HIGH | MEDIUM | P1 |
-| Device ID from MAC/eFuse | HIGH | LOW | P1 |
-| Status LED | MEDIUM | LOW | P1 |
-| Heartbeat publish | MEDIUM | LOW | P1 |
-| MQTT LWT (offline status) | MEDIUM | LOW | P1 — free capability, include at connect time |
-| Retain flag on status/heartbeat | LOW | LOW | P1 — zero-cost flag |
-| Web portal fallback provisioning | MEDIUM | MEDIUM | P2 |
-| NVS wipe / re-provisioning trigger | MEDIUM | LOW | P2 |
-| Structured JSON heartbeat | LOW | LOW | P2 |
-| Sentence-type filter (config-driven) | LOW | MEDIUM | P2 |
-| Panic/error MQTT reporting | MEDIUM | MEDIUM | P3 |
-| TLS/mTLS | HIGH | HIGH | P3 — correct design requires separate milestone |
-| OTA firmware update | HIGH | HIGH | P3 — correct design requires separate milestone |
+| RTCM3 frame detection + CRC | HIGH | MEDIUM | P1 |
+| RTCM MQTT publish (raw bytes) | HIGH | LOW | P1 |
+| Partition table rework | HIGH (enables OTA) | MEDIUM | P1 |
+| OTA MQTT trigger + HTTP pull | HIGH | MEDIUM | P1 |
+| Rollback on first-boot failure | HIGH | MEDIUM | P1 |
+| mark_app_valid() after connect | HIGH | LOW | P1 |
+| OTA progress reporting | MEDIUM | LOW | P2 |
+| SHA256 hash cross-check | MEDIUM | LOW | P2 |
+| 1005 retain=true | LOW | LOW | P2 |
+| Anti-rollback (eFuse) | MEDIUM | HIGH | P3 |
+| HTTPS for OTA download | MEDIUM | HIGH | P3 |
 
 **Priority key:**
 - P1: Must have for launch
@@ -187,37 +362,17 @@ Features requiring separate design work; premature in v1.
 
 ---
 
-## Competitor Feature Analysis
-
-Direct "competitors" for this firmware are open-source GNSS-to-MQTT bridge implementations (e.g. gpsd+MQTT adapters, Python-on-Pi solutions, SparkFun/Adafruit GPS+MQTT demos) and commercial GPS tracking middleware.
-
-| Feature | gpsd + MQTT adapter (Pi/Linux) | Commercial GPS tracker (SIM7xxx) | This project |
-|---------|-------------------------------|----------------------------------|--------------|
-| NMEA relay to MQTT | Via gpsd daemon, sentence parsing, re-serialization | Proprietary binary or NMEA over cellular MQTT | Raw NMEA sentence relay, no intermediate parse |
-| Per-sentence topic routing | Rarely; usually single topic or JSON-wrapped | No — flat topic or binary protocol | Yes — `gnss/{id}/nmea/{TYPE}` per sentence type |
-| Remote GNSS module config | No — gpsd has its own config layer | Limited — AT commands via SIM module | Yes — retained MQTT config topic → UART passthrough |
-| Zero-touch provisioning | Not applicable (Linux has SSH) | QR code / cellular APN config | BLE provisioning with web portal fallback |
-| Auto-reconnect | OS networking handles it | Cellular modem retries | Explicit reconnect state machine in firmware |
-| Heartbeat / LWT | Manual implementation | Varies | Built-in heartbeat + MQTT LWT |
-| TLS | Yes (OS-managed) | Often yes (cellular TLS) | Deferred to v2 |
-| OTA | apt-get / SCP | Cellular OTA | Deferred to v2 |
-| Rust embedded, no Linux | No | No | Yes — key differentiator for resource-constrained deployment |
-
-**Key insight:** The main competitive differentiator vs. Linux-based solutions is the constrained, deterministic Rust firmware with sub-second boot time and zero OS overhead. The main differentiator vs. cellular trackers is the RTK-grade UM980 GNSS capability and WiFi connectivity model.
-
----
-
 ## Sources
 
-- Project requirements: `.planning/PROJECT.md` (authoritative for this project's scope)
-- NMEA 0183 standard: IEC 61162-1 — sentence format, max length (82 chars), checksum algorithm (XOR between `$` and `*`)
-- ESP32-C6 ESP-IDF provisioning: Espressif official docs (WiFi provisioning component, BLE transport, NVS API) — MEDIUM confidence from training data; verify against ESP-IDF v5.x docs
-- MQTT 3.1.1 specification (OASIS) — LWT (Section 3.1.3.4), retained messages (Section 3.3.1.3), QoS levels — HIGH confidence, well-established standard
-- Embedded Rust ESP32 ecosystem: `esp-idf-hal`, `esp-idf-sys`, `esp-idf-svc` crates — MEDIUM confidence from training data; verify against current crate versions on crates.io
-- IoT firmware reconnection patterns: well-established pattern in ESP-IDF example code and embedded IoT literature — MEDIUM confidence
-- UM980 UART interface: manufacturer datasheet (Unicore Communications UM980) — behavior assumed from project context; verify baud rate and command format against actual datasheet
+- RTCM3 framing: RTKLIB source `src/rtcm.c` (tomojitakasu/RTKLIB on GitHub) — preamble 0xD3, CRC-24Q polynomial — HIGH confidence
+- RTCM message types: [SNIP RTCM cheat sheet](https://www.use-snip.com/kb/knowledge-base/an-rtcm-message-cheat-sheet/), [kernelsat.com](https://kernelsat.com/kb/kb_rtcm3.php), [Tersus GNSS MSM explainer](https://www.tersus-gnss.com/tech_blog/new-additions-in-rtcm3-and-What-is-msm) — MEDIUM-HIGH
+- UM980 RTCM message list: [SparkFun UM980 hookup guide](https://docs.sparkfun.com/SparkFun_UM980_Triband_GNSS_RTK_Breakout/single_page/) and [Unicore commands manual](https://globalgpssystems.com/wp-content/uploads/2021/08/Unicore-Reference-Commands-Manual-For-High-Precision-Products_V2_EN_R3.2.pdf) — HIGH
+- MQTT binary RTCM relay: [RVMT/RVMP project](https://github.com/hagre/RVMT_RTCM-VIA-MQTT-TRANSMITTER), [RVMP protocol spec](https://github.com/hagre/RVMP_RTCM-VIA-MQTT-PROTOCOL) — MEDIUM (no single authoritative standard)
+- ESP-IDF OTA: [Official docs v5.x](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/ota.html) — HIGH
+- esp-ota crate: [GitHub faern/esp-ota](https://github.com/faern/esp-ota), [crates.io](https://crates.io/crates/esp-ota) — HIGH
+- Rust ESP32 OTA example: [quan.hoabinh.vn post (2024)](https://quan.hoabinh.vn/post/2024/3/programming-esp32-with-rust-ota-firmware-update), [esp-idf-ota-http-template](https://github.com/rust-esp32/esp-idf-ota-http-template) — MEDIUM
 
 ---
 
-*Feature research for: ESP32-C6 GNSS-to-MQTT bridge firmware (Rust)*
-*Researched: 2026-03-03*
+*Feature research for: esp32-gnssmqtt — RTCM3 relay and OTA firmware update milestone*
+*Researched: 2026-03-07*
