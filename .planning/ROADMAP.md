@@ -76,11 +76,11 @@ Archive: `.planning/milestones/v1.3-ROADMAP.md`
   2. Publishing any string to `gnss/{device_id}/command` causes the UM980 to execute that command exactly once, with no deduplication
   3. Publishing `"reboot"` to `gnss/{device_id}/ota/trigger` causes the device to restart within 5 seconds
   4. The command topic is non-retained; replaying the MQTT session does not re-send old commands
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 14-01: SNTP time sync on WiFi connect
-- [ ] 14-02: Command relay topic + reboot trigger
+- [ ] 14-01-PLAN.md — SNTP time sync on WiFi connect (sdkconfig + EspSntp init)
+- [ ] 14-02-PLAN.md — Command relay topic + reboot trigger (mqtt.rs + ota.rs + main.rs)
 
 ### Phase 15: Provisioning
 **Goal**: Users can configure WiFi and MQTT credentials from any browser via the device's SoftAP hotspot, with up to 3 networks stored in NVS and tried automatically on connection failure
