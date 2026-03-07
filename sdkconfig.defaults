@@ -41,3 +41,8 @@ CONFIG_ESP_TASK_WDT_TIMEOUT_S=30
 # CONFIG_ESP_TASK_WDT_PANIC=y makes TWDT fatal — reboots if the supervisor itself hangs
 # (idle task stops being scheduled). Without this, TWDT only logs (no reboot).
 CONFIG_ESP_TASK_WDT_PANIC=y
+
+# Log timestamps: use system time (wall clock) instead of RTOS ticks.
+# After SNTP syncs, log lines show HH:MM:SS.mmm instead of uptime ms.
+# Requires EspSntp to be initialised at runtime (see main.rs Step 6.5).
+CONFIG_LOG_TIMESTAMP_SOURCE_SYSTEM=y
