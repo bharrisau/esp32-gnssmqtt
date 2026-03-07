@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Observations + OTA
+milestone: v1.0
+milestone_name: milestone
 status: completed
 stopped_at: Completed 08-03 OTA wiring — full Phase 8 OTA complete, v1.2 milestone complete
-last_updated: "2026-03-07T05:56:40.504Z"
-last_activity: 2026-03-07 — OTA prerequisites complete, hardware reflash verified
+last_updated: "2026-03-07T06:09:22.413Z"
+last_activity: 2026-03-07 — OTA wiring complete, hardware Test 1 verified, v1.2 shipped
 progress:
   total_phases: 2
   completed_phases: 2
