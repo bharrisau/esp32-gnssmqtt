@@ -65,6 +65,7 @@ pub fn wifi_supervisor(mut wifi: BlockingWifi<EspWifi<'static>>, led_state: Arc<
         "WiFi sup", hwm_words, hwm_words * 4);
     let mut backoff_secs: u64 = 1;
     let mut consecutive_failures: u32 = 0;
+    let mut disconnected_since: Option<std::time::Instant> = None;
 
     loop {
         std::thread::sleep(std::time::Duration::from_secs(5));
@@ -72,6 +73,19 @@ pub fn wifi_supervisor(mut wifi: BlockingWifi<EspWifi<'static>>, led_state: Arc<
         let connected = wifi.is_connected().unwrap_or(false);
 
         if !connected {
+            // RESIL-01: reboot if WiFi has been down for too long.
+            let since = disconnected_since.get_or_insert_with(std::time::Instant::now);
+            let elapsed = since.elapsed();
+            if elapsed >= crate::config::WIFI_DISCONNECT_REBOOT_TIMEOUT {
+                log::error!("[RESIL-01] WiFi disconnected for {}s — rebooting",
+                    elapsed.as_secs());
+                unsafe { esp_idf_svc::sys::esp_restart(); }
+            }
+
+            // RESIL-02: clear MQTT disconnect timer while WiFi is down.
+            // Prevents combined-outage false trigger (Pitfall 2 in research).
+            crate::resil::MQTT_DISCONNECTED_AT.store(0, std::sync::atomic::Ordering::Relaxed);
+
             log::warn!(
                 "WiFi disconnected. Reconnecting in {}s (attempt {}/{})...",
                 backoff_secs,
@@ -105,17 +119,28 @@ pub fn wifi_supervisor(mut wifi: BlockingWifi<EspWifi<'static>>, led_state: Arc<
             } else {
                 consecutive_failures += 1;
                 if consecutive_failures >= crate::config::MAX_WIFI_RECONNECT_ATTEMPTS {
-                    // Phase 12 (RESIL-01) will call esp_restart() here.
-                    // For now, log error and set LED error state.
                     log::error!(
-                        "WiFi: {} consecutive reconnect failures — giving up (will restart in Phase 12)",
+                        "WiFi: {} consecutive reconnect failures — LedState::Error set",
                         consecutive_failures
                     );
                     led_state.store(LedState::Error as u8, Ordering::Relaxed);
                 }
                 backoff_secs = (backoff_secs * 2).min(60);
             }
+        } else {
+            // WiFi is connected: clear disconnect timer and check MQTT resilience.
+            disconnected_since = None;
+            // RESIL-02: check if MQTT has been disconnected too long while WiFi is up.
+            // Only evaluate here (WiFi-connected arm) to avoid counting MQTT-down-during-WiFi-outage.
+            let mqtt_disc_at = crate::resil::MQTT_DISCONNECTED_AT.load(std::sync::atomic::Ordering::Relaxed);
+            if mqtt_disc_at != 0 {
+                let elapsed_secs = crate::resil::now_secs().saturating_sub(mqtt_disc_at);
+                if elapsed_secs >= crate::config::MQTT_DISCONNECT_REBOOT_SECS {
+                    log::error!("[RESIL-02] MQTT disconnected for {}s (WiFi up) — rebooting",
+                        elapsed_secs);
+                    unsafe { esp_idf_svc::sys::esp_restart(); }
+                }
+            }
         }
-        // If connected: continue — nothing to do this iteration
     }
 }
