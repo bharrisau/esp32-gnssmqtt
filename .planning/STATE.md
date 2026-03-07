@@ -110,6 +110,7 @@ Recent decisions affecting current work:
 - [Phase 05-nmea-relay]: Hardware tested at 10 msg/sec — sync_channel(64) sufficient, no relay channel full warnings at normal UM980 NMEA output rate
 - [Phase 06-remote-config]: djb2 hash chosen for payload deduplication — non-cryptographic, adequate for retained MQTT messages; 100ms default per-command delay overridable via delay_ms JSON field; gnss_cmd_tx send failure logs + abandons (no panic)
 - [Phase 06-remote-config]: All three CONF requirements hardware-verified on device FFFEB5 — config_relay wired into main.rs, relay operational end-to-end with djb2 hash dedup and per-command delay
+- [UM980-behavior]: RESET command causes UM980 to reboot — responds OK, then emits "system is rebooting" + dots on UART, then $devicename,... when ready; must wait before sending subsequent commands. UNLOG disables NMEA outputs without reboot (clean slate alternative). Avoid CONFIGSAVE/SAVECONFIG — writes to NVM; prefer configuring at boot via MQTT retained message instead.
 
 ### Pending Todos
 
