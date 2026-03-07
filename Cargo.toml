@@ -18,6 +18,9 @@ esp-idf-sys = "=0.36.1"
 [build-dependencies]
 embuild = "0.33"
 
+[package.metadata.espflash]
+partition_table = "partitions.csv"
+
 [profile.release]
 opt-level = "s"
 panic = "immediate-abort"
