@@ -133,10 +133,15 @@ fn main() {
     // is dropped (callback uses try_send). Prevents double-flash from re-delivered retained triggers.
     let (ota_tx, ota_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(1);
 
+    // command relay — callback → command_relay_task
+    // Bounded to 4: operator-triggered and rare; try_send() in callback never blocks.
+    // CMD-02: command_relay_task performs no deduplication by design.
+    let (cmd_relay_tx, cmd_relay_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(4);
+
     // Step 9: MQTT — after WiFi (IP must be up). Event dispatch runs in the ESP-IDF C MQTT
     // task thread via callback; no blocking pump thread needed.
     log::info!("Connecting to MQTT broker...");
-    let mqtt_client = mqtt::mqtt_connect(&device_id, subscribe_tx, status_tx, config_tx, ota_tx, led_state_mqtt)
+    let mqtt_client = mqtt::mqtt_connect(&device_id, subscribe_tx, status_tx, config_tx, ota_tx, cmd_relay_tx, led_state_mqtt)
         .expect("MQTT connect failed");
     log::info!("MQTT client created");
 
@@ -189,6 +194,14 @@ fn main() {
     config_relay::spawn_config_relay(gnss_cmd_tx.clone(), config_rx)
         .expect("Config relay thread spawn failed");
     log::info!("Config relay started");
+
+    // Step 15b: Command relay — forwards MQTT /command payloads to UM980.
+    let cmd_gnss_tx = gnss_cmd_tx.clone();
+    std::thread::Builder::new()
+        .stack_size(8192)
+        .spawn(move || mqtt::command_relay_task(cmd_gnss_tx, cmd_relay_rx))
+        .expect("Command relay thread spawn failed");
+    log::info!("Command relay started");
 
     // Step 16: RTCM relay — receives verified RTCM3 frames from gnss RX thread, publishes to MQTT.
     // rtcm_rx and free_pool_tx are moved into spawn_relay — do NOT retain references here.

@@ -26,6 +26,7 @@ pub fn mqtt_connect(
     status_tx: SyncSender<()>,
     config_tx: SyncSender<Vec<u8>>,
     ota_tx: SyncSender<Vec<u8>>,
+    cmd_relay_tx: SyncSender<Vec<u8>>,   // NEW — CMD-01
     led_state: Arc<AtomicU8>,
 ) -> anyhow::Result<Arc<Mutex<EspMqttClient<'static>>>> {
     let broker_url = format!(
@@ -124,6 +125,14 @@ pub fn mqtt_connect(
                         Err(TrySendError::Full(_)) => log::warn!("mqtt cb: OTA channel full — trigger dropped (OTA in progress?)"),
                         Err(TrySendError::Disconnected(_)) => log::warn!("mqtt cb: OTA channel closed"),
                     }
+                } else if t.ends_with("/command") {
+                    // CMD-01: forward payload to command relay task.
+                    // CMD-02: QoS 0 subscription (see subscriber_loop) prevents retain replay.
+                    match cmd_relay_tx.try_send(data.to_vec()) {
+                        Ok(_) => {}
+                        Err(TrySendError::Full(_)) => log::warn!("mqtt cb: command channel full — command dropped"),
+                        Err(TrySendError::Disconnected(_)) => log::warn!("mqtt cb: command channel closed"),
+                    }
                 }
                 // All other topics: silently ignored
             }
@@ -174,6 +183,11 @@ pub fn subscriber_loop(
                             Ok(_) => log::info!("Subscribed to {}", ota_topic),
                             Err(e) => log::warn!("Subscribe /ota/trigger failed: {:?}", e),
                         }
+                        let command_topic = format!("gnss/{}/command", device_id);
+                        match c.subscribe(&command_topic, QoS::AtMostOnce) {  // QoS 0 — no retain replay (CMD-02)
+                            Ok(_) => log::info!("Subscribed to {}", command_topic),
+                            Err(e) => log::warn!("Subscribe /command failed: {:?}", e),
+                        }
                     }
                 }
             }
@@ -189,6 +203,45 @@ pub fn subscriber_loop(
     // Dead-end park (pump exited; thread has nothing to do).
     loop {
         std::thread::sleep(std::time::Duration::from_secs(60));
+    }
+}
+
+/// Forward MQTT /command payloads to the UM980 via gnss_cmd_tx.
+///
+/// CMD-01: each payload is forwarded as one raw UM980 command — no deduplication.
+/// CMD-02: no deduplication by design; caller ensures QoS 0 subscription (no retain replay).
+/// Uses recv_timeout to stay alive when idle; logs and continues on UTF-8 errors.
+pub fn command_relay_task(
+    gnss_cmd_tx: SyncSender<String>,
+    cmd_relay_rx: Receiver<Vec<u8>>,
+) -> ! {
+    // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
+    let hwm_words = unsafe {
+        esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+    };
+    log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+        "CMD relay", hwm_words, hwm_words * 4);
+    loop {
+        match cmd_relay_rx.recv_timeout(crate::config::SLOW_RECV_TIMEOUT) {
+            Ok(payload) => {
+                match std::str::from_utf8(&payload) {
+                    Ok(cmd) => {
+                        log::info!("Command relay: forwarding {:?}", cmd);
+                        if let Err(e) = gnss_cmd_tx.send(cmd.to_string()) {
+                            log::error!("Command relay: gnss_cmd_tx send failed: {:?}", e);
+                        }
+                    }
+                    Err(e) => log::warn!("Command relay: payload not valid UTF-8: {:?}", e),
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                // No command within 30s — normal when idle. Continue.
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                log::error!("Command relay: channel closed — thread parking");
+                loop { std::thread::sleep(std::time::Duration::from_secs(60)); }
+            }
+        }
     }
 }
 
