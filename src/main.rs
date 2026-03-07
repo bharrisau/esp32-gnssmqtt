@@ -111,6 +111,10 @@ fn main() {
     // Bounded to 2: at most one Connected event queued while subscriber processes the previous one.
     let (subscribe_tx, subscribe_rx) = std::sync::mpsc::sync_channel::<()>(2);
 
+    // status signal — callback → heartbeat (publishes retained "online" on every reconnect)
+    // Bounded to 2: same reasoning as subscribe channel.
+    let (status_tx, status_rx) = std::sync::mpsc::sync_channel::<()>(2);
+
     // config payload — callback → config_relay
     // Bounded to 4: config is operator-triggered (rare). 4 covers a retained message on reconnect
     // plus a small burst. callback uses try_send() so it never blocks.
@@ -124,7 +128,7 @@ fn main() {
     // Step 9: MQTT — after WiFi (IP must be up). Event dispatch runs in the ESP-IDF C MQTT
     // task thread via callback; no blocking pump thread needed.
     log::info!("Connecting to MQTT broker...");
-    let mqtt_client = mqtt::mqtt_connect(&device_id, subscribe_tx, config_tx, ota_tx, led_state_mqtt)
+    let mqtt_client = mqtt::mqtt_connect(&device_id, subscribe_tx, status_tx, config_tx, ota_tx, led_state_mqtt)
         .expect("MQTT connect failed");
     log::info!("MQTT client created");
 
@@ -156,7 +160,7 @@ fn main() {
     let hb_device_id = device_id.clone();
     std::thread::Builder::new()
         .stack_size(8192)
-        .spawn(move || mqtt::heartbeat_loop(hb_client, hb_device_id))
+        .spawn(move || mqtt::heartbeat_loop(hb_client, hb_device_id, status_rx))
         .expect("heartbeat thread spawn failed");
 
     // Step 13: WiFi supervisor thread (reconnect on drop)

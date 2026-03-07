@@ -23,6 +23,7 @@ use crate::led::LedState;
 pub fn mqtt_connect(
     device_id: &str,
     subscribe_tx: SyncSender<()>,
+    status_tx: SyncSender<()>,
     config_tx: SyncSender<Vec<u8>>,
     ota_tx: SyncSender<Vec<u8>>,
     led_state: Arc<AtomicU8>,
@@ -79,6 +80,16 @@ pub fn mqtt_connect(
                     }
                     Err(TrySendError::Disconnected(_)) => {
                         log::error!("mqtt cb: subscribe channel closed");
+                    }
+                }
+                // Signal heartbeat to publish retained "online" to /status (clears LWT on every reconnect).
+                match status_tx.try_send(()) {
+                    Ok(_) => {}
+                    Err(TrySendError::Full(_)) => {
+                        log::warn!("mqtt cb: status signal channel full — online already queued");
+                    }
+                    Err(TrySendError::Disconnected(_)) => {
+                        log::error!("mqtt cb: status channel closed");
                     }
                 }
             }
@@ -194,6 +205,7 @@ pub fn subscriber_loop(
 pub fn heartbeat_loop(
     client: Arc<Mutex<EspMqttClient<'static>>>,
     device_id: String,
+    status_rx: Receiver<()>,
 ) -> ! {
     // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
     let hwm_words = unsafe {
@@ -207,50 +219,54 @@ pub fn heartbeat_loop(
     log::info!("Heartbeat thread started, heartbeat topic: {}, status topic: {}",
         heartbeat_topic, status_topic);
 
-    // Initial delay — give MQTT time to fully connect before first publish.
-    std::thread::sleep(std::time::Duration::from_secs(5));
-
-    // ONE-TIME: publish retained "online" to /status — clears the LWT "offline" retained message.
-    // This happens once per thread lifetime (= once per reconnect, since heartbeat_loop is
-    // re-spawned on each connection cycle — or runs continuously if not re-spawned; either way
-    // it correctly clears LWT on reconnect).
-    match client.lock() {
-        Err(e) => log::warn!("Heartbeat: status mutex poisoned on init: {:?}", e),
-        Ok(mut c) => match c.enqueue(&status_topic, QoS::AtLeastOnce, true, b"online") {
-            Ok(_) => log::info!("Heartbeat: published retained online to {}", status_topic),
-            Err(e) => log::warn!("Heartbeat: status online publish failed: {:?}", e),
-        },
-    }
-
+    // Use recv_timeout to wake on either a Connected event or the heartbeat interval.
+    // Connected event → publish retained "online" to /status (clears LWT on every reconnect).
+    // Timeout → publish JSON health snapshot to /heartbeat.
     loop {
-        // Read cumulative counters — no reset (METR-02: cumulative since boot).
-        let nmea_drops = crate::gnss::NMEA_DROPS.load(Ordering::Relaxed);
-        let rtcm_drops = crate::gnss::RTCM_DROPS.load(Ordering::Relaxed);
-        let uart_tx_errors = crate::gnss::UART_TX_ERRORS.load(Ordering::Relaxed);
+        match status_rx.recv_timeout(std::time::Duration::from_secs(crate::config::HEARTBEAT_INTERVAL_SECS)) {
+            Ok(()) => {
+                // MQTT (re)connected — publish retained "online" to clear the LWT "offline" message.
+                match client.lock() {
+                    Err(e) => log::warn!("Heartbeat: status mutex poisoned: {:?}", e),
+                    Ok(mut c) => match c.enqueue(&status_topic, QoS::AtLeastOnce, true, b"online") {
+                        Ok(_) => log::info!("Heartbeat: published retained online to {}", status_topic),
+                        Err(e) => log::warn!("Heartbeat: status online publish failed: {:?}", e),
+                    },
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                // Timer tick — collect metrics and publish heartbeat JSON.
+                let nmea_drops = crate::gnss::NMEA_DROPS.load(Ordering::Relaxed);
+                let rtcm_drops = crate::gnss::RTCM_DROPS.load(Ordering::Relaxed);
+                let uart_tx_errors = crate::gnss::UART_TX_ERRORS.load(Ordering::Relaxed);
 
-        // Monotonic uptime in seconds since boot. esp_timer_get_time() returns i64 microseconds.
-        // Divide while i64 to avoid sign truncation; safe for any realistic uptime.
-        let uptime_s = unsafe { esp_idf_svc::sys::esp_timer_get_time() } / 1_000_000;
+                // Monotonic uptime in seconds since boot. esp_timer_get_time() returns i64 microseconds.
+                let uptime_s = unsafe { esp_idf_svc::sys::esp_timer_get_time() } / 1_000_000;
 
-        // Current free heap in bytes.
-        let heap_free = unsafe { esp_idf_svc::sys::esp_get_free_heap_size() };
+                // Current free heap in bytes.
+                let heap_free = unsafe { esp_idf_svc::sys::esp_get_free_heap_size() };
 
-        // Build JSON manually — no serde (consistent with ota.rs pattern; avoids ~50KB binary cost).
-        let json = format!(
-            "{{\"uptime_s\":{},\"heap_free\":{},\"nmea_drops\":{},\"rtcm_drops\":{},\"uart_tx_errors\":{}}}",
-            uptime_s, heap_free, nmea_drops, rtcm_drops, uart_tx_errors
-        );
+                let json = format!(
+                    "{{\"uptime_s\":{},\"heap_free\":{},\"nmea_drops\":{},\"rtcm_drops\":{},\"uart_tx_errors\":{}}}",
+                    uptime_s, heap_free, nmea_drops, rtcm_drops, uart_tx_errors
+                );
 
-        log::info!("Heartbeat: {}", json);
+                log::info!("Heartbeat: {}", json);
 
-        match client.lock() {
-            Err(e) => log::warn!("Heartbeat mutex poisoned: {:?}", e),
-            Ok(mut c) => match c.enqueue(&heartbeat_topic, QoS::AtMostOnce, false, json.as_bytes()) {
-                Ok(_) => log::info!("Heartbeat published to {}", heartbeat_topic),
-                Err(e) => log::warn!("Heartbeat publish failed: {:?}", e),
-            },
+                match client.lock() {
+                    Err(e) => log::warn!("Heartbeat mutex poisoned: {:?}", e),
+                    Ok(mut c) => match c.enqueue(&heartbeat_topic, QoS::AtMostOnce, false, json.as_bytes()) {
+                        Ok(_) => log::info!("Heartbeat published to {}", heartbeat_topic),
+                        Err(e) => log::warn!("Heartbeat publish failed: {:?}", e),
+                    },
+                }
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                log::error!("Heartbeat: status channel closed — thread parking");
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(60));
+                }
+            }
         }
-
-        std::thread::sleep(std::time::Duration::from_secs(crate::config::HEARTBEAT_INTERVAL_SECS));
     }
 }
