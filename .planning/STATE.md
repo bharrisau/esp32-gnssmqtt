@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Observations + OTA
 status: planning
-stopped_at: Completed 07-rtcm-relay 07-02-PLAN.md
-last_updated: "2026-03-07T03:18:29.262Z"
+stopped_at: Completed 07-rtcm-relay/07-01-PLAN.md
+last_updated: "2026-03-07T03:20:33.097Z"
 last_activity: 2026-03-07 — Roadmap created; Phase 7 and Phase 8 defined
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -40,6 +40,8 @@ v1.2 progress: [          ] 0% (0/2 phases)
 All decisions logged in PROJECT.md Key Decisions table.
 - [Phase 07-rtcm-relay]: Box<[u8; 1029]> for RtcmBody buffer to avoid stack overflow even with 12288 stack
 - [Phase 07-rtcm-relay]: Complete RTCM frame published (preamble+header+payload+CRC) not just payload for independent CRC verification by consumers
+- [Phase 07-rtcm-relay]: Silent drop for non-/config topics in pump_mqtt_events to avoid log spam during Phase 8 OTA retain playback
+- [Phase 07-rtcm-relay]: out_buffer_size: 2048 in MqttClientConfiguration to support 1029-byte RTCM MSM7 frames
 
 ### Pending Todos
 
@@ -56,7 +58,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-07T03:18:29.259Z
-Stopped at: Completed 07-rtcm-relay 07-02-PLAN.md
+Last session: 2026-03-07T03:20:33.094Z
+Stopped at: Completed 07-rtcm-relay/07-01-PLAN.md
 Resume file: None
 Next action: `/gsd:plan-phase 7`
