@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 Foundation** — Phases 1-3 (shipped 2026-03-04)
 - ✅ **v1.1 GNSS Relay** — Phases 4-6 (shipped 2026-03-07)
-- 🚧 **v1.2 Observations + OTA** — Phases 7-8 (in progress)
+- ✅ **v1.2 Observations + OTA** — Phases 7-8 (shipped 2026-03-07)
 
 ## Phases
 
@@ -30,10 +30,13 @@ Archive: `.planning/milestones/v1.1-ROADMAP.md`
 
 </details>
 
-### 🚧 v1.2 Observations + OTA (In Progress)
+<details>
+<summary>✅ v1.2 Observations + OTA (Phases 7-8) — SHIPPED 2026-03-07</summary>
 
-- [x] **Phase 7: RTCM Relay** — Mixed NMEA+RTCM byte stream parsing, binary MQTT publish, topic routing fix (completed 2026-03-07)
-- [ ] **Phase 8: OTA** — Dual-partition table, HTTP firmware pull, rollback safety, status reporting
+- [x] Phase 7: RTCM Relay (3/3 plans) — completed 2026-03-07
+- [x] Phase 8: OTA (3/3 plans) — completed 2026-03-07
+
+</details>
 
 ## Phase Details
 
@@ -80,4 +83,4 @@ Plans:
 | 5. NMEA Relay | v1.1 | 2/2 | Complete | 2026-03-07 |
 | 6. Remote Config | v1.1 | 2/2 | Complete | 2026-03-07 |
 | 7. RTCM Relay | v1.2 | 3/3 | Complete | 2026-03-07 |
-| 8. OTA | 2/3 | In Progress|  | - |
+| 8. OTA | v1.2 | 3/3 | Complete | 2026-03-07 |

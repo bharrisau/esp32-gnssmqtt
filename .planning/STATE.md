@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Observations + OTA
 status: completed
-stopped_at: Completed 08-02 OTA implementation — src/ota.rs created and compiling
-last_updated: "2026-03-07T05:09:53.043Z"
+stopped_at: Completed 08-03 OTA wiring — full Phase 8 OTA complete, v1.2 milestone complete
+last_updated: "2026-03-07T05:56:40.504Z"
 last_activity: 2026-03-07 — OTA prerequisites complete, hardware reflash verified
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -20,17 +20,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Core value:** NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real time, with remote reconfiguration of the GNSS module via MQTT.
-**Current focus:** v1.2 Observations + OTA — Phase 8 (OTA)
+**Current focus:** v1.2 Observations + OTA — COMPLETE
 
 ## Current Position
 
-Phase: 8 — OTA (in progress)
-Plan: 08-02 (next)
-Status: Plan 08-01 complete; ready for 08-02
-Last activity: 2026-03-07 — OTA prerequisites complete, hardware reflash verified
+Phase: 8 — OTA (complete)
+Plan: 08-03 (complete — all plans done)
+Status: Phase 8 complete; milestone v1.2 complete
+Last activity: 2026-03-07 — OTA wiring complete, hardware Test 1 verified, v1.2 shipped
 
 ```
-v1.2 progress: [████████░░] 87% (13/15 plans complete)
+v1.2 progress: [██████████] 100% (15/15 plans complete)
 ```
 
 ## Accumulated Context
@@ -48,6 +48,8 @@ All decisions logged in PROJECT.md Key Decisions table.
 - [Phase 08-ota]: CONFIG_ESP_TASK_WDT_TIMEOUT_S=30 chosen over runtime TWDT feed — simpler, sufficient for single OTA thread erase window
 - [Phase 08-ota]: sha256 field required in OTA trigger payload — reject missing sha256 with failed state
 - [Phase 08-ota]: spawn_ota() thread stack 16384 bytes — HTTP + SHA + OTA handle exceed 8192 default
+- [Phase 08-ota]: espflash.toml [idf_format_args] partition_table required — cargo espflash flash silently uses default partition layout without it; OTA slots absent
+- [Phase 08-ota]: mark_running_slot_valid() non-fatal — factory partition has no OTA slot so expect() panics; warn and continue keeps device operational
 
 ### Pending Todos
 
@@ -64,7 +66,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-07T05:09:53.039Z
-Stopped at: Completed 08-02 OTA implementation — src/ota.rs created and compiling
+Last session: 2026-03-07T05:56:40.501Z
+Stopped at: Completed 08-03 OTA wiring — full Phase 8 OTA complete, v1.2 milestone complete
 Resume file: None
-Next action: `/gsd:execute-plan 08-02`
+Next action: Plan next milestone (v1.3) or run `/gsd:plan` for next phase
