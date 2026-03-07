@@ -6,18 +6,23 @@ Rust firmware for the ESP32-C6 (XIAO Seeed) that bridges a UM980 GNSS module to 
 
 v1.1 shipped: full GNSS relay pipeline — UART sentence assembly, per-type NMEA publishing, and remote config forwarding with hash deduplication. All requirements hardware-verified on device FFFEB5.
 
+v1.2 shipped: RTCM3 binary relay (mixed NMEA+RTCM state machine, CRC-24Q verification) and MQTT-triggered OTA firmware updates with dual-partition rollback safety.
+
 ## Core Value
 
 NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real time, with remote reconfiguration of the GNSS module via MQTT.
 
-## Current Milestone: v1.2 Observations + OTA
+## Current Milestone: v1.3 Reliability Hardening
 
-**Goal:** Add RTCM3 binary message relay for RTK/calibration use and MQTT-triggered OTA firmware update with rollback.
+**Goal:** Make the firmware safe to run unattended for weeks — thread supervision with watchdog reboot, auto-restart after extended connectivity loss, zero-alloc hot paths, and MQTT health telemetry.
 
 **Target features:**
-- Mixed NMEA+RTCM byte-stream parsing in gnss.rs (RxState state machine)
-- RTCM frames published raw to `gnss/{device_id}/rtcm/{message_type}`
-- OTA: dual partition table, HTTP pull with SHA256 verify, rollback safety
+- Watchdog heartbeat: critical threads feed a counter; supervisor reboots on silence
+- Reboot-after-timeout: wifi_supervisor triggers restart after configurable extended disconnection
+- Bounded channels everywhere: all mpsc channels sized and documented
+- Zero-alloc RTCM hot path: pre-allocated frame buffer pool at startup
+- MQTT health status: NMEA/RTCM drop counts, free heap, uptime published periodically
+- Stack HWM logging at startup for all spawned threads
 
 ## Requirements
 
@@ -39,15 +44,20 @@ NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real 
 
 ### Active
 
-- [ ] RTCM3 binary relay: mixed NMEA+RTCM stream, publish to `gnss/{device_id}/rtcm/{message_type}` (RTCM-01 through RTCM-05)
-- [ ] OTA firmware update: MQTT trigger → HTTP pull → SHA256 → dual partition write → rollback (OTA-01 through OTA-06)
+- [ ] Channel hardening: all mpsc channels bounded with capacities documented (HARD-01)
+- [ ] UART TX error logging: write failures logged not silently dropped (HARD-02)
+- [ ] Zero-alloc RTCM hot path: pre-allocated frame buffer pool at startup (HARD-03)
+- [ ] Stack HWM logging at startup for all spawned threads (HARD-04)
+- [ ] Thread watchdog: critical threads feed heartbeat; supervisor reboots on silence (WDT-01, WDT-02)
+- [ ] Reboot after extended disconnection: wifi_supervisor restarts device after N minutes offline (RESIL-01, RESIL-02)
+- [ ] MQTT health status topic: drop counts, free heap, uptime published periodically (METR-01, METR-02)
 
 ### Out of Scope
 
 - BLE provisioning — deferred; hardcoded credentials sufficient for development
 - Web portal (SoftAP) provisioning — depends on BLE provisioning
 - TLS/mTLS for MQTT — separate milestone
-- OTA firmware update — requires dual-partition design; separate milestone
+- OTA firmware update — shipped v1.2
 - Full NMEA field parsing — firmware relays, consumers parse downstream
 - Local NMEA buffering across power cycles — real-time relay only
 - JSON-wrapped NMEA publish — raw NMEA preferred
@@ -89,4 +99,4 @@ NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real 
 | UNLOG over CONFIGSAVE for UM980 init | CONFIGSAVE writes NVM; prefer configuring at boot via MQTT retained message | ✓ Good — NVM wear avoided |
 
 ---
-*Last updated: 2026-03-07 after v1.2 milestone start*
+*Last updated: 2026-03-07 after v1.3 milestone start*
