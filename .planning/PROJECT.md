@@ -2,9 +2,9 @@
 
 ## What This Is
 
-Rust firmware for the ESP32-C6 (XIAO Seeed) that bridges a UM980 GNSS module to an MQTT broker over WiFi. The device reads NMEA sentences from the UM980 over UART and publishes each sentence type to a dedicated MQTT topic. Remote UM980 reconfiguration is delivered via a retained MQTT config topic.
+Rust firmware for the ESP32-C6 (XIAO Seeed) that bridges a UM980 GNSS module to an MQTT broker over WiFi. The device reads NMEA sentences from the UM980 over UART, publishes each sentence type to a dedicated MQTT topic in real time, and accepts remote UM980 reconfiguration via a retained MQTT config topic.
 
-v1.0 shipped: scaffold + WiFi/MQTT connectivity + status LED. Device connects, publishes heartbeats, supervises reconnection, and visually reflects state via GPIO15 LED.
+v1.1 shipped: full GNSS relay pipeline — UART sentence assembly, per-type NMEA publishing, and remote config forwarding with hash deduplication. All requirements hardware-verified on device FFFEB5.
 
 ## Core Value
 
@@ -24,12 +24,13 @@ NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real 
 - ✓ WiFi exponential backoff reconnect supervisor — v1.0
 - ✓ USB-serial ↔ UM980 UART bridge (UART0, GPIO16/17) — v1.0
 - ✓ Status LED (GPIO15 active-low): connecting blink / connected steady / error burst — v1.0
+- ✓ Device reads raw NMEA bytes from UM980 UART at 115200 baud 8N1 — v1.1
+- ✓ Each valid NMEA sentence published to `gnss/{device_id}/nmea/{SENTENCE_TYPE}` at QoS 0 — v1.1
+- ✓ Device subscribes to `gnss/{device_id}/config` and forwards payload to UM980 over UART TX with djb2 hash deduplication — v1.1
 
 ### Active
 
-- [ ] Device reads raw NMEA bytes from UM980 UART at 115200 baud 8N1 (UART-01 through UART-04)
-- [ ] Each valid NMEA sentence published to `gnss/{device_id}/nmea/{SENTENCE_TYPE}` (NMEA-01, NMEA-02)
-- [ ] Device subscribes to `gnss/{device_id}/config` and forwards payload to UM980 over UART TX (CONF-01 through CONF-03)
+(None — all v1.1 requirements shipped)
 
 ### Out of Scope
 
@@ -48,12 +49,12 @@ NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real 
 - **GNSS**: UM980 multi-band RTK receiver, UART0 at 115200 baud (GPIO16 TX, GPIO17 RX)
 - **Language**: Rust with std via esp-idf-svc/hal/sys (ESP-IDF v5.3.3)
 - **MQTT broker**: External (Mosquitto/HiveMQ); username/password auth, no TLS in v1
-- **Shipped v1.0**: 698 lines of Rust, 3 phases, 9 plans, device FFFEB5 hardware-verified
-- **UM980 current state**: BASE TIME mode — needs `MODE ROVER` before GNSS relay phase
+- **Shipped v1.1**: 1,088 lines of Rust, 6 phases, 15 plans, device FFFEB5 hardware-verified
+- **UM980 current state**: Configured via retained MQTT config topic at boot; RESET causes reboot (wait required), UNLOG cleans NMEA outputs without reboot; avoid CONFIGSAVE (NVM wear)
 
 ## Constraints
 
-- **Tech stack**: Rust (esp-idf-hal, esp-idf-sys, esp-idf-svc)
+- **Tech stack**: Rust (esp-idf-hal, esp-idf-svc, esp-idf-sys)
 - **Hardware**: ESP32-C6 only
 - **UART**: UM980 fixed at 115200 baud, 8N1
 - **MQTT**: No TLS in v1; standard MQTT 3.1.1
@@ -70,6 +71,12 @@ NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real 
 | UART bridge on UART0/GPIO16-17 (not UART1/GPIO20-21) | Hardware reality — UM980 physically wired to GPIO16/17 | ✓ Corrected during Phase 2 execution |
 | `disable_clean_session: true` | Broker remembers subscriptions across reconnects (not broker restarts) | ✓ Good |
 | LWT lifetime: String declared before MqttClientConfiguration | &str in LwtConfiguration borrows the String; drop order matters | ✓ Required — would cause lifetime compile error otherwise |
+| `Arc<UartDriver>` for GNSS thread sharing | read/write take &self — no Mutex needed | ✓ Good — simpler than Arc<Mutex<UartDriver>> |
+| `sync_channel(64)` for NMEA relay | RX thread must not block on UART reads when relay is slow; bounded drop-on-full | ✓ Good — no relay full warnings at UM980 normal output rate |
+| QoS 0 / retain=false for NMEA relay | Real-time sentences; retransmission of stale positions is harmful | ✓ Good |
+| djb2 hash for config deduplication | Non-cryptographic, adequate for retained MQTT messages | ✓ Good — prevents re-applying identical configs on reconnect |
+| No-serde JSON parsing for config payload | Fixed schema, no special characters in UM980 commands; avoids dependency | ✓ Good |
+| UNLOG over CONFIGSAVE for UM980 init | CONFIGSAVE writes NVM; prefer configuring at boot via MQTT retained message | ✓ Good — NVM wear avoided |
 
 ---
-*Last updated: 2026-03-04 after v1.0 milestone*
+*Last updated: 2026-03-07 after v1.1 milestone*
