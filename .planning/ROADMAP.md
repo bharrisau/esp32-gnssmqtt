@@ -132,7 +132,11 @@ Plans:
   1. If WiFi remains disconnected for 10 minutes (configurable constant), `wifi_supervisor` calls `esp_restart()`; the reboot is logged before it occurs
   2. If WiFi is connected but MQTT remains disconnected for 5 minutes (configurable constant), the MQTT pump signals a reboot; the reboot is logged before it occurs
   3. After a reboot triggered by either timeout, the device reconnects normally — demonstrating the restart resolved the stuck state rather than making it permanent
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 12-01-PLAN.md — Create resil.rs module; add timeout constants; extend wifi_supervisor with RESIL-01 and RESIL-02 checks (RESIL-01, RESIL-02)
+- [ ] 12-02-PLAN.md — Wire MQTT_DISCONNECTED_AT writes into MQTT callback; human verification checkpoint (RESIL-02)
 
 ### Phase 13: Health Telemetry
 **Goal**: Operators can observe device health remotely via a periodic MQTT status message containing uptime, free heap, and message drop counters
