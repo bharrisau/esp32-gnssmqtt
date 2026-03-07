@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Reliability Hardening
 status: completed
-stopped_at: "Completed 11-02 (watchdog wiring: heartbeat counters, supervisor spawn, TWDT panic)"
-last_updated: "2026-03-07T12:54:39.286Z"
+stopped_at: "Completed 12-01 (resilience infrastructure: RESIL-01 WiFi timeout, RESIL-02 MQTT timeout)"
+last_updated: "2026-03-07T13:59:19.567Z"
 last_activity: "2026-03-07 — 09-02 executed: recv_timeout loops on all 6 channels, WiFi consecutive_failures counter"
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 12
-  completed_plans: 12
+  total_plans: 14
+  completed_plans: 13
 ---
 
 # Project State
@@ -62,6 +62,9 @@ Key v1.3 decisions (Phase 9):
 - [Phase 11-thread-watchdog]: Heartbeat in GNSS RX at top of loop{} not inside match arm — UART stall returning Ok(0) would freeze counter if inside Ok(n) arm
 - [Phase 11-thread-watchdog]: spawn_supervisor() as Step 18 (last spawn) — supervisor first check occurs after all monitored threads are live
 - [Phase 11-thread-watchdog]: CONFIG_ESP_TASK_WDT_PANIC=y in sdkconfig.defaults — hardware TWDT reboots if supervisor itself hangs (WDT-02 criterion 3)
+- [Phase 12-resilience]: AtomicU32 not AtomicU64 for MQTT_DISCONNECTED_AT — ESP32 Xtensa target lacks AtomicU64; u32 epoch seconds safe for 5-min RESIL-02 window
+- [Phase 12-resilience]: RESIL-01 uses Option<Instant> local to wifi_supervisor — no cross-thread sharing needed for WiFi disconnect duration tracking
+- [Phase 12-resilience]: MQTT timer cleared in !connected arm of wifi_supervisor — prevents RESIL-02 false-trigger during combined WiFi+MQTT outage
 
 ### Pending Todos
 
@@ -74,7 +77,7 @@ Key v1.3 decisions (Phase 9):
 
 ## Session Continuity
 
-Last session: 2026-03-07T12:23:17.155Z
-Stopped at: Completed 11-02 (watchdog wiring: heartbeat counters, supervisor spawn, TWDT panic)
+Last session: 2026-03-07T13:59:13.500Z
+Stopped at: Completed 12-01 (resilience infrastructure: RESIL-01 WiFi timeout, RESIL-02 MQTT timeout)
 Resume file: None
 Next action: `/gsd:execute-phase <next-phase>` — Phase 10 or as per ROADMAP.md

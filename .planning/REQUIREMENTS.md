@@ -31,8 +31,8 @@
 
 ### Resilience
 
-- [ ] **RESIL-01**: `wifi_supervisor` triggers `esp_restart()` if WiFi has not been connected for a configurable duration (default 10 minutes)
-- [ ] **RESIL-02**: MQTT pump signals a reboot timer; if MQTT stays disconnected for a configurable duration after WiFi is up (default 5 minutes), device restarts
+- [x] **RESIL-01**: `wifi_supervisor` triggers `esp_restart()` if WiFi has not been connected for a configurable duration (default 10 minutes)
+- [x] **RESIL-02**: MQTT pump signals a reboot timer; if MQTT stays disconnected for a configurable duration after WiFi is up (default 5 minutes), device restarts
 
 ### Health Telemetry
 
@@ -72,8 +72,8 @@
 | HARD-04 | Phase 10 | Complete |
 | WDT-01  | Phase 11 | Complete |
 | WDT-02  | Phase 11 | Complete |
-| RESIL-01 | Phase 12 | Pending |
-| RESIL-02 | Phase 12 | Pending |
+| RESIL-01 | Phase 12 | Complete |
+| RESIL-02 | Phase 12 | Complete |
 | METR-01 | Phase 13 | Pending |
 | METR-02 | Phase 13 | Pending |
 
