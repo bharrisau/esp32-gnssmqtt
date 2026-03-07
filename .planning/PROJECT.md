@@ -2,27 +2,13 @@
 
 ## What This Is
 
-Rust firmware for the ESP32-C6 (XIAO Seeed) that bridges a UM980 GNSS module to an MQTT broker over WiFi. The device reads NMEA sentences from the UM980 over UART, publishes each sentence type to a dedicated MQTT topic in real time, and accepts remote UM980 reconfiguration via a retained MQTT config topic.
+Rust firmware for the ESP32-C6 (XIAO Seeed) that bridges a UM980 GNSS module to an MQTT broker over WiFi. The device reads NMEA sentences and RTCM3 correction frames from the UM980 over UART, publishes each to dedicated MQTT topics in real time, accepts remote UM980 reconfiguration via retained MQTT config, supports MQTT-triggered OTA firmware updates with rollback safety, and publishes periodic health telemetry. Designed for unattended long-running operation with automatic recovery from connectivity loss.
 
-v1.1 shipped: full GNSS relay pipeline — UART sentence assembly, per-type NMEA publishing, and remote config forwarding with hash deduplication. All requirements hardware-verified on device FFFEB5.
-
-v1.2 shipped: RTCM3 binary relay (mixed NMEA+RTCM state machine, CRC-24Q verification) and MQTT-triggered OTA firmware updates with dual-partition rollback safety.
+v1.3 shipped: reliability hardening — bounded channels, zero-alloc RTCM hot path, FreeRTOS stack HWM diagnostics, thread watchdog with auto-reboot, resilience timeouts (WiFi + MQTT), and MQTT health heartbeat.
 
 ## Core Value
 
-NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real time, with remote reconfiguration of the GNSS module via MQTT.
-
-## Current Milestone: v1.3 Reliability Hardening
-
-**Goal:** Make the firmware safe to run unattended for weeks — thread supervision with watchdog reboot, auto-restart after extended connectivity loss, zero-alloc hot paths, and MQTT health telemetry.
-
-**Target features:**
-- Watchdog heartbeat: critical threads feed a counter; supervisor reboots on silence
-- Reboot-after-timeout: wifi_supervisor triggers restart after configurable extended disconnection
-- Bounded channels everywhere: all mpsc channels sized and documented
-- Zero-alloc RTCM hot path: pre-allocated frame buffer pool at startup
-- MQTT health status: NMEA/RTCM drop counts, free heap, uptime published periodically
-- Stack HWM logging at startup for all spawned threads
+GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker in real time, with remote reconfiguration, OTA updates, and automatic recovery — safe for unattended operation.
 
 ## Requirements
 
@@ -41,27 +27,32 @@ NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real 
 - ✓ Device reads raw NMEA bytes from UM980 UART at 115200 baud 8N1 — v1.1
 - ✓ Each valid NMEA sentence published to `gnss/{device_id}/nmea/{SENTENCE_TYPE}` at QoS 0 — v1.1
 - ✓ Device subscribes to `gnss/{device_id}/config` and forwards payload to UM980 over UART TX with djb2 hash deduplication — v1.1
+- ✓ RTCM3 frames published to `gnss/{device_id}/rtcm/{msg_type}` with CRC-24Q verification — v1.2
+- ✓ OTA firmware update: MQTT-triggered, HTTP download, SHA-256 verify, dual-slot rollback — v1.2
+- ✓ All mpsc channels bounded (`sync_channel`) with documented capacities; `recv_timeout` on all blocking receives — v1.3
+- ✓ UART TX write failures logged and counted (AtomicU32 UART_TX_ERRORS) — v1.3
+- ✓ RTCM hot path: pre-allocated 4-buffer pool, zero per-frame heap allocation in steady state — v1.3
+- ✓ FreeRTOS stack HWM logged at entry of all 11 spawned threads — v1.3
+- ✓ Thread watchdog: GNSS RX + MQTT pump feed heartbeat atomics; supervisor reboots after 3 missed beats (15s) — v1.3
+- ✓ Auto-reboot after 10min WiFi disconnect or 5min MQTT disconnect while WiFi up — v1.3
+- ✓ JSON health heartbeat (`uptime_s`, `heap_free`, `nmea_drops`, `rtcm_drops`, `uart_tx_errors`) to `/heartbeat` every 30s — v1.3
+- ✓ Retained `"online"` published to `/status` on every MQTT reconnect (clears LWT) — v1.3
 
 ### Active
 
-- [ ] Channel hardening: all mpsc channels bounded with capacities documented (HARD-01)
-- [ ] UART TX error logging: write failures logged not silently dropped (HARD-02)
-- [ ] Zero-alloc RTCM hot path: pre-allocated frame buffer pool at startup (HARD-03)
-- [ ] Stack HWM logging at startup for all spawned threads (HARD-04)
-- [ ] Thread watchdog: critical threads feed heartbeat; supervisor reboots on silence (WDT-01, WDT-02)
-- [ ] Reboot after extended disconnection: wifi_supervisor restarts device after N minutes offline (RESIL-01, RESIL-02)
-- [ ] MQTT health status topic: drop counts, free heap, uptime published periodically (METR-01, METR-02)
+- [ ] UM980 `#`-prefixed query responses routed to `gnss/{device_id}/nmea/response` (shipped post-v1.3, candidate for v1.4)
+- [ ] Free-text UM980 output mirrored to stdout for espflash monitor visibility (shipped post-v1.3)
 
 ### Out of Scope
 
 - BLE provisioning — deferred; hardcoded credentials sufficient for development
 - Web portal (SoftAP) provisioning — depends on BLE provisioning
 - TLS/mTLS for MQTT — separate milestone
-- OTA firmware update — shipped v1.2
 - Full NMEA field parsing — firmware relays, consumers parse downstream
 - Local NMEA buffering across power cycles — real-time relay only
 - JSON-wrapped NMEA publish — raw NMEA preferred
 - Multi-broker publishing — single broker only
+- Remote log streaming — high complexity, deferred to v2
 
 ## Context
 
@@ -69,8 +60,9 @@ NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real 
 - **GNSS**: UM980 multi-band RTK receiver, UART0 at 115200 baud (GPIO16 TX, GPIO17 RX)
 - **Language**: Rust with std via esp-idf-svc/hal/sys (ESP-IDF v5.3.3)
 - **MQTT broker**: External (Mosquitto/HiveMQ); username/password auth, no TLS in v1
-- **Shipped v1.1**: 1,088 lines of Rust, 6 phases, 15 plans, device FFFEB5 hardware-verified
-- **UM980 current state**: Configured via retained MQTT config topic at boot; RESET causes reboot (wait required), UNLOG cleans NMEA outputs without reboot; avoid CONFIGSAVE (NVM wear)
+- **Shipped v1.3**: 2,249 lines of Rust, 13 phases, 24 plans total; device FFFEB5
+- **UM980 UART protocol**: NMEA sentences (`$`-prefix), RTCM3 frames (`0xD3`-prefix), `#`-prefix query responses (checksum-terminated); free-text banners otherwise
+- **UM980 config**: Configured via retained MQTT config topic at boot; RESET causes reboot (wait required), UNLOG cleans NMEA outputs without reboot; avoid CONFIGSAVE (NVM wear)
 
 ## Constraints
 
@@ -97,6 +89,11 @@ NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real 
 | djb2 hash for config deduplication | Non-cryptographic, adequate for retained MQTT messages | ✓ Good — prevents re-applying identical configs on reconnect |
 | No-serde JSON parsing for config payload | Fixed schema, no special characters in UM980 commands; avoids dependency | ✓ Good |
 | UNLOG over CONFIGSAVE for UM980 init | CONFIGSAVE writes NVM; prefer configuring at boot via MQTT retained message | ✓ Good — NVM wear avoided |
+| Pre-allocated RTCM buffer pool (4 × 1029 bytes) | Eliminates per-frame Vec allocation; pool exhaustion drops frame with warn log | ✓ Good — zero heap churn in steady state |
+| Software watchdog via AtomicU32 + supervisor thread | Detects silent hangs without FreeRTOS task handles; hardware TWDT backstop | ✓ Good — 15s software + 30s hardware layered detection |
+| `recv_timeout` on all blocking receives | Prevents threads from hanging indefinitely if producer dies | ✓ Good — all threads now have finite liveness guarantees |
+| Separate `status_tx` channel for heartbeat "online" publish | MQTT callback signals both subscriber and heartbeat on Connected; heartbeat re-publishes retained online on every reconnect | ✓ Good — LWT cleared correctly on all reconnects |
+| `RxState` four-state machine with `FreeLine`/`HashLine` | UM980 sends `#`-prefixed query responses and free-text; state machine cleanly routes each to appropriate sink | ✓ Good — no bytes silently discarded |
 
 ---
-*Last updated: 2026-03-07 after v1.3 milestone start*
+*Last updated: 2026-03-08 after v1.3 milestone*
