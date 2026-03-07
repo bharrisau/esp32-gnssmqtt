@@ -67,6 +67,9 @@ pub fn mqtt_connect(
             EventPayload::Connected(_) => {
                 log::info!("MQTT connected");
                 led_state.store(LedState::Connected as u8, Ordering::Relaxed);
+                // RESIL-02: clear disconnect timer — MQTT is now connected.
+                // Safe from callback: atomic store only — no EspMqttClient methods called.
+                crate::resil::MQTT_DISCONNECTED_AT.store(0, std::sync::atomic::Ordering::Relaxed);
                 // Try to signal subscriber; if channel is full, subscriber is already queued to
                 // re-subscribe on the previous Connected event — this signal can be dropped safely.
                 match subscribe_tx.try_send(()) {
@@ -82,6 +85,14 @@ pub fn mqtt_connect(
             EventPayload::Disconnected => {
                 log::warn!("MQTT disconnected");
                 led_state.store(LedState::Connecting as u8, Ordering::Relaxed);
+                // RESIL-02: record when MQTT disconnected so wifi_supervisor can measure elapsed time.
+                // compare_exchange: only set if currently 0 (not already mid-disconnect tracking).
+                // Safe from callback: atomic store only — no EspMqttClient methods called.
+                crate::resil::MQTT_DISCONNECTED_AT
+                    .compare_exchange(0, crate::resil::now_secs(),
+                        std::sync::atomic::Ordering::Relaxed,
+                        std::sync::atomic::Ordering::Relaxed)
+                    .ok();
             }
             EventPayload::Error(e) => {
                 log::error!("MQTT error: {:?}", e);
