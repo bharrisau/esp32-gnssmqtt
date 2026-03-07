@@ -132,6 +132,12 @@ pub fn spawn_gnss(
     std::thread::Builder::new()
         .stack_size(12288) // increased from 8192: RtcmBody buf is heap (Box) but other frame overhead warrants headroom
         .spawn(move || {
+            // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
+            let hwm_words = unsafe {
+                esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+            };
+            log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+                "GNSS RX", hwm_words, hwm_words * 4);
             let mut state = RxState::Idle;
             let mut read_buf = [0u8; 256];
 
@@ -285,6 +291,12 @@ pub fn spawn_gnss(
     std::thread::Builder::new()
         .stack_size(8192)
         .spawn(move || {
+            // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
+            let hwm_words = unsafe {
+                esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+            };
+            log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+                "GNSS TX", hwm_words, hwm_words * 4);
             loop {
                 match cmd_rx.recv_timeout(crate::config::RELAY_RECV_TIMEOUT) {
                     Ok(line) => {

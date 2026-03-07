@@ -32,6 +32,12 @@ pub fn spawn_relay(
     std::thread::Builder::new()
         .stack_size(8192)
         .spawn(move || {
+            // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
+            let hwm_words = unsafe {
+                esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+            };
+            log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+                "NMEA relay", hwm_words, hwm_words * 4);
             log::info!("NMEA relay thread started");
             loop {
                 match nmea_rx.recv_timeout(crate::config::RELAY_RECV_TIMEOUT) {

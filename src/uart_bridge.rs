@@ -23,6 +23,12 @@ pub fn spawn_bridge(cmd_tx: SyncSender<String>) -> anyhow::Result<()> {
     std::thread::Builder::new()
         .stack_size(8192)
         .spawn(move || {
+            // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
+            let hwm_words = unsafe {
+                esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+            };
+            log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+                "UART bridge", hwm_words, hwm_words * 4);
             let mut line = [0u8; 256];
             let mut line_len: usize = 0;
             let mut buf = [0u8; 64];
