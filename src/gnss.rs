@@ -9,8 +9,8 @@
 //!   `stdout` for `espflash monitor` visibility, forwards a
 //!   `(sentence_type, raw_sentence)` tuple to the caller via an
 //!   `mpsc::SyncSender<(String, String)>` (bounded, 64 slots), and forwards
-//!   verified RTCM frames as `(message_type, complete_frame)` tuples to an
-//!   `mpsc::SyncSender<(u16, Vec<u8>)>` (bounded, 32 slots).
+//!   verified RTCM frames as `RtcmFrame` tuples to an
+//!   `mpsc::SyncSender<RtcmFrame>` (bounded, 32 slots).
 //!
 //! * **TX thread** — blocks on an `mpsc::Receiver<String>` and writes each
 //!   received command line to the UART followed by `\r\n` (UM980 protocol
@@ -19,7 +19,7 @@
 //! `spawn_gnss` is the sole public entry point.  It creates the `UartDriver`,
 //! wraps it in an `Arc` (no `Mutex` needed — `UartDriver::read` and `write`
 //! both take `&self`), spawns both threads, and returns
-//! `(cmd_tx, nmea_rx, rtcm_rx)` to the caller.
+//! `(cmd_tx, nmea_rx, rtcm_rx, free_pool_tx)` to the caller.
 
 use esp_idf_svc::hal::delay::NON_BLOCK;
 use esp_idf_svc::hal::gpio::AnyIOPin;
@@ -30,6 +30,11 @@ use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
+
+/// Type for RTCM frames sent from the GNSS RX thread to the RTCM relay.
+/// Fields: (message_type_12bit, pool_buffer, valid_byte_count).
+/// Buffer is pre-allocated from the RTCM buffer pool — no per-frame heap allocation.
+pub type RtcmFrame = (u16, Box<[u8; 1029]>, usize);
 
 /// Four-state receiver state machine for handling mixed NMEA+RTCM byte streams.
 ///
@@ -74,10 +79,15 @@ fn crc24q(data: &[u8]) -> u32 {
     crc & 0xFFFFFF
 }
 
+/// Number of pre-allocated RTCM frame buffers in the pool.
+/// Pool memory: RTCM_POOL_SIZE × 1029 bytes allocated once at init.
+/// At 1–4 MSM7 frames/sec, 4 buffers provide ample headroom before the relay drains.
+const RTCM_POOL_SIZE: usize = 4;
+
 /// Spawn the GNSS UART hub.
 ///
 /// Initialises `UartDriver` at 115 200 baud with a 4 KiB receive ring buffer,
-/// then spawns an RX thread and a TX thread.  Returns `(cmd_tx, nmea_rx, rtcm_rx)`:
+/// then spawns an RX thread and a TX thread.  Returns `(cmd_tx, nmea_rx, rtcm_rx, free_pool_tx)`:
 ///
 /// * `cmd_tx: SyncSender<String>` — send an ASCII command string here and the TX
 ///   thread will write it to the UM980 with a trailing `\r\n`.
@@ -87,14 +97,17 @@ fn crc24q(data: &[u8]) -> u32 {
 /// * `nmea_rx: Receiver<(String, String)>` — receive `(sentence_type, raw)`
 ///   tuples; `sentence_type` is the field between `$` and the first `,` (e.g.
 ///   `"GNGGA"`, `"GNRMC"`).
-/// * `rtcm_rx: Receiver<(u16, Vec<u8>)>` — receive `(message_type, frame)`
-///   tuples; `message_type` is the 12-bit RTCM3 message type; `frame` is the
-///   complete raw frame (preamble + header + payload + CRC bytes).
+/// * `rtcm_rx: Receiver<RtcmFrame>` — receive `(message_type, pool_buffer, frame_len)`
+///   tuples; `message_type` is the 12-bit RTCM3 message type; `pool_buffer` is the
+///   pre-allocated pool buffer holding the complete raw frame (preamble + header +
+///   payload + CRC bytes); `frame_len` is the number of valid bytes.
+/// * `free_pool_tx: SyncSender<Box<[u8; 1029]>>` — pass to `rtcm_relay::spawn_relay`
+///   so it can return buffers to the pool after publishing each frame.
 pub fn spawn_gnss(
     uart: impl Peripheral<P = impl Uart> + 'static,
     tx_pin: impl Peripheral<P = impl esp_idf_svc::hal::gpio::OutputPin> + 'static,
     rx_pin: impl Peripheral<P = impl esp_idf_svc::hal::gpio::InputPin> + 'static,
-) -> anyhow::Result<(SyncSender<String>, Receiver<(String, String)>, Receiver<(u16, Vec<u8>)>)> {
+) -> anyhow::Result<(SyncSender<String>, Receiver<(String, String)>, Receiver<RtcmFrame>, SyncSender<Box<[u8; 1029]>>)> {
     // Initialise UART0 at 115 200 baud.  rx_fifo_size must be set at driver
     // creation time — there is no sdkconfig option for this in ESP-IDF v5.
     let uart = UartDriver::new(
@@ -116,9 +129,20 @@ pub fn spawn_gnss(
     // Bounded to 64 so the RX thread can drop sentences without blocking UART reads.
     let (nmea_tx, nmea_rx) = mpsc::sync_channel::<(String, String)>(64);
 
-    // Channel: RTCM frames from RX thread to rtcm_relay (Phase 7).
+    // Channel: RTCM frames from RX thread to rtcm_relay (Phase 7, pool-backed since Phase 10).
     // Bounded to 32; at 1-4 frames/sec, full channel means relay is stalled.
-    let (rtcm_tx, rtcm_rx) = mpsc::sync_channel::<(u16, Vec<u8>)>(32);
+    let (rtcm_tx, rtcm_rx) = mpsc::sync_channel::<RtcmFrame>(32);
+
+    // Free pool: pre-allocated Box<[u8; 1029]> buffers circulate between GNSS RX and RTCM relay.
+    // free_pool_rx goes to the RX closure (take a buffer before each frame).
+    // free_pool_tx goes OUT via spawn_gnss return value to rtcm_relay (return buffer after publish).
+    let (free_pool_tx, free_pool_rx) =
+        mpsc::sync_channel::<Box<[u8; 1029]>>(RTCM_POOL_SIZE);
+    for _ in 0..RTCM_POOL_SIZE {
+        free_pool_tx
+            .send(Box::new([0u8; 1029]))
+            .expect("RTCM pool init: send failed — channel full at init?");
+    }
 
     // Channel: command strings from caller to TX thread.
     // Bounded to 16: a config batch is typically ≤ 16 commands (with 100ms delay between sends).
@@ -129,6 +153,8 @@ pub fn spawn_gnss(
     // RX thread — NON_BLOCK polling + state machine byte processing
     // -------------------------------------------------------------------------
     let uart_rx = Arc::clone(&uart);
+    // Clone free_pool_tx for use inside the RX closure (TrySendError::Full return path).
+    let free_pool_tx_clone = free_pool_tx.clone();
     std::thread::Builder::new()
         .stack_size(12288) // increased from 8192: RtcmBody buf is heap (Box) but other frame overhead warrants headroom
         .spawn(move || {
@@ -219,14 +245,26 @@ pub fn spawn_gnss(
                                             RxState::Idle
                                         } else {
                                             let expected = payload_len + 6; // header(3) + payload + crc(3)
-                                            let mut frame_buf = Box::new([0u8; 1029]);
-                                            frame_buf[0] = buf[0];
-                                            frame_buf[1] = buf[1];
-                                            frame_buf[2] = buf[2];
-                                            RxState::RtcmBody {
-                                                buf: frame_buf,
-                                                len: 3,
-                                                expected,
+                                            // Take a buffer from the pre-allocated pool (no heap allocation here).
+                                            match free_pool_rx.try_recv() {
+                                                Ok(mut frame_buf) => {
+                                                    frame_buf[0] = buf[0];
+                                                    frame_buf[1] = buf[1];
+                                                    frame_buf[2] = buf[2];
+                                                    RxState::RtcmBody {
+                                                        buf: frame_buf,
+                                                        len: 3,
+                                                        expected,
+                                                    }
+                                                }
+                                                Err(_) => {
+                                                    // All pool buffers in flight — relay is behind. Drop this frame.
+                                                    log::warn!(
+                                                        "RTCM: buffer pool exhausted ({} slots) — frame dropped",
+                                                        RTCM_POOL_SIZE
+                                                    );
+                                                    RxState::Idle
+                                                }
                                             }
                                         }
                                     } else {
@@ -248,18 +286,23 @@ pub fn spawn_gnss(
                                             // Payload starts at byte index 3 (after 3-byte header)
                                             let msg_type: u16 =
                                                 ((buf[3] as u16) << 4) | ((buf[4] as u16) >> 4);
-                                            let frame = Vec::from(&buf[..expected]);
-                                            match rtcm_tx.try_send((msg_type, frame)) {
+                                            // Send the pool buffer directly — no Vec allocation.
+                                            // On channel full/disconnect: return buf to pool to prevent starvation.
+                                            match rtcm_tx.try_send((msg_type, buf, expected)) {
                                                 Ok(_) => {}
-                                                Err(TrySendError::Full(_)) => {
+                                                Err(TrySendError::Full((_, returned_buf, _))) => {
                                                     log::warn!(
                                                         "RTCM: relay channel full — frame dropped"
                                                     );
+                                                    // MUST return buffer to pool to prevent pool starvation.
+                                                    let _ = free_pool_tx_clone.try_send(returned_buf);
                                                 }
-                                                Err(TrySendError::Disconnected(_)) => {
+                                                Err(TrySendError::Disconnected((_, returned_buf, _))) => {
                                                     log::error!(
                                                         "RTCM: relay channel disconnected"
                                                     );
+                                                    // Return buffer to pool even on disconnect.
+                                                    let _ = free_pool_tx_clone.try_send(returned_buf);
                                                 }
                                             }
                                         } else {
@@ -268,6 +311,8 @@ pub fn spawn_gnss(
                                                 computed,
                                                 stored
                                             );
+                                            // CRC failed — return buffer to pool to prevent starvation.
+                                            let _ = free_pool_tx_clone.try_send(buf);
                                         }
                                         RxState::Idle
                                     } else {
@@ -325,5 +370,5 @@ pub fn spawn_gnss(
         })
         .expect("gnss tx spawn failed");
 
-    Ok((cmd_tx, nmea_rx, rtcm_rx))
+    Ok((cmd_tx, nmea_rx, rtcm_rx, free_pool_tx))
 }
