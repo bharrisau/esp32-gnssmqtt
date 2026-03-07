@@ -18,6 +18,9 @@
 //! 13. Spawn wifi supervisor thread
 //! 14. NMEA relay: spawn_relay(mqtt_client clone, device_id clone, nmea_rx)
 //! 15. Config relay: spawn_config_relay(gnss_cmd_tx clone, config_rx)
+//! 16. RTCM relay: rtcm_relay::spawn_relay(mqtt_client clone, device_id clone, rtcm_rx)
+//!    16b. mark_running_slot_valid() — called after mqtt_connect, before relay threads
+//! 17. OTA task: spawn_ota(mqtt_client clone, device_id clone, ota_rx)
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::gpio::PinDriver;
@@ -35,6 +38,7 @@ mod mqtt;
 mod config_relay;
 mod nmea_relay;
 mod rtcm_relay;
+mod ota;
 mod uart_bridge;
 mod wifi;
 
@@ -107,16 +111,32 @@ fn main() {
         .expect("MQTT connect failed");
     log::info!("MQTT client created");
 
+    // Mark running slot valid — confirms this firmware is functional.
+    // MUST be called after WiFi+MQTT confirms connectivity, before spawning threads.
+    // Safe to call unconditionally: no-op when slot is already VALID (normal boots).
+    // On first boot after OTA, slot is PENDING_VERIFY — this call cancels rollback.
+    // EspOta must be dropped (block scope) before OTA thread calls EspOta::new() later.
+    {
+        let mut ota_marker = esp_idf_svc::ota::EspOta::new()
+            .expect("EspOta singleton at boot — prior EspOta not dropped");
+        ota_marker.mark_running_slot_valid()
+            .expect("mark_running_slot_valid failed");
+        log::info!("Running slot marked valid");
+    }
+
     // Step 9: mpsc channel — pump signals subscriber on every Connected event
     let (subscribe_tx, subscribe_rx) = std::sync::mpsc::channel::<()>();
 
     // Step 9b: Config relay channel — pump sends received MQTT payloads here
     let (config_tx, config_rx) = std::sync::mpsc::channel::<Vec<u8>>();
 
+    // Step 9c: OTA trigger channel — pump sends /ota/trigger payloads here
+    let (ota_tx, ota_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+
     // Step 10: Pump thread — drives connection.next(), never touches client
     std::thread::Builder::new()
         .stack_size(8192)
-        .spawn(move || mqtt::pump_mqtt_events(mqtt_connection, subscribe_tx, config_tx, led_state_mqtt))
+        .spawn(move || mqtt::pump_mqtt_events(mqtt_connection, subscribe_tx, config_tx, ota_tx, led_state_mqtt))
         .expect("pump thread spawn failed");
 
     // Step 11: Subscriber thread — subscribes on Connected (initial + broker restart)
@@ -159,6 +179,12 @@ fn main() {
     rtcm_relay::spawn_relay(mqtt_client.clone(), device_id.clone(), rtcm_rx)
         .expect("RTCM relay thread spawn failed");
     log::info!("RTCM relay started");
+
+    // Step 17: OTA task — receives /ota/trigger payloads, performs HTTP download + flash + reboot.
+    // ota_rx is moved into spawn_ota — do NOT retain a reference here.
+    ota::spawn_ota(mqtt_client.clone(), device_id.clone(), ota_rx)
+        .expect("OTA task spawn failed");
+    log::info!("OTA task started");
 
     log::info!("All subsystems started — device operational");
     let _gnss_cmd_tx = gnss_cmd_tx; // keep Sender alive — TX thread exits if all Senders drop
