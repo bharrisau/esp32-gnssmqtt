@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Observations + OTA
-status: planning
-stopped_at: Completed 08-01 OTA prerequisites — hardware checkpoint approved, ready for 08-02
-last_updated: "2026-03-07T05:05:56.287Z"
-last_activity: 2026-03-07 — Roadmap created; Phase 7 and Phase 8 defined
+status: completed
+stopped_at: Completed 08-02 OTA implementation — src/ota.rs created and compiling
+last_updated: "2026-03-07T05:09:53.043Z"
+last_activity: 2026-03-07 — OTA prerequisites complete, hardware reflash verified
 progress:
   total_phases: 2
   completed_phases: 1
@@ -46,6 +46,8 @@ All decisions logged in PROJECT.md Key Decisions table.
 - [Phase 08-ota]: Removed phy_init partition — ESP-IDF v5 embeds phy calibration in NVS; not required on ESP32-C6
 - [Phase 08-ota]: sha2 = 0.10 with default-features = false + oid feature for no_std SHA-256 streaming OTA verification
 - [Phase 08-ota]: CONFIG_ESP_TASK_WDT_TIMEOUT_S=30 chosen over runtime TWDT feed — simpler, sufficient for single OTA thread erase window
+- [Phase 08-ota]: sha256 field required in OTA trigger payload — reject missing sha256 with failed state
+- [Phase 08-ota]: spawn_ota() thread stack 16384 bytes — HTTP + SHA + OTA handle exceed 8192 default
 
 ### Pending Todos
 
@@ -62,7 +64,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-07T05:05:56.284Z
-Stopped at: Completed 08-01 OTA prerequisites — hardware checkpoint approved, ready for 08-02
+Last session: 2026-03-07T05:09:53.039Z
+Stopped at: Completed 08-02 OTA implementation — src/ota.rs created and compiling
 Resume file: None
 Next action: `/gsd:execute-plan 08-02`

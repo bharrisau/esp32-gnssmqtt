@@ -16,11 +16,11 @@
 ### OTA Firmware Update
 
 - [x] **OTA-01**: Partition table redesigned to `otadata + ota_0 + ota_1` (each ~1.875MB) for 4MB flash; requires `espflash erase-flash` + USB reflash
-- [ ] **OTA-02**: Device subscribes to `gnss/{device_id}/ota/trigger` (QoS 1); payload `{"url":"...","sha256":"..."}` triggers update
-- [ ] **OTA-03**: Device HTTP-pulls firmware binary, verifies SHA256 during streaming download, writes to inactive OTA partition via `EspOta`
+- [x] **OTA-02**: Device subscribes to `gnss/{device_id}/ota/trigger` (QoS 1); payload `{"url":"...","sha256":"..."}` triggers update
+- [x] **OTA-03**: Device HTTP-pulls firmware binary, verifies SHA256 during streaming download, writes to inactive OTA partition via `EspOta`
 - [ ] **OTA-04**: Device reboots into new partition; calls `mark_running_slot_valid()` early in `main()` after WiFi+MQTT confirmed; rolls back to previous slot if not called within watchdog window
-- [ ] **OTA-05**: OTA download runs in dedicated task receiving trigger via `mpsc::channel`; MQTT pump and keep-alive remain active during download
-- [ ] **OTA-06**: Device reports status to `gnss/{device_id}/ota/status` — `{"state":"downloading","progress":N}` / `{"state":"complete"}` / `{"state":"failed","reason":"..."}`
+- [x] **OTA-05**: OTA download runs in dedicated task receiving trigger via `mpsc::channel`; MQTT pump and keep-alive remain active during download
+- [x] **OTA-06**: Device reports status to `gnss/{device_id}/ota/status` — `{"state":"downloading","progress":N}` / `{"state":"complete"}` / `{"state":"failed","reason":"..."}`
 
 ## v2 Requirements
 
@@ -58,11 +58,11 @@
 | RTCM-04 | Phase 7 | Complete |
 | RTCM-05 | Phase 7 | Complete |
 | OTA-01 | Phase 8 | Complete |
-| OTA-02 | Phase 8 | Pending |
-| OTA-03 | Phase 8 | Pending |
+| OTA-02 | Phase 8 | Complete |
+| OTA-03 | Phase 8 | Complete |
 | OTA-04 | Phase 8 | Pending |
-| OTA-05 | Phase 8 | Pending |
-| OTA-06 | Phase 8 | Pending |
+| OTA-05 | Phase 8 | Complete |
+| OTA-06 | Phase 8 | Complete |
 
 **Coverage:**
 - v1 requirements: 11 total
