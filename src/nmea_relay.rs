@@ -15,7 +15,7 @@
 use embedded_svc::mqtt::client::QoS;
 use esp_idf_svc::mqtt::client::EspMqttClient;
 use std::sync::{Arc, Mutex};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 
 /// Spawn the NMEA relay thread.
 ///
@@ -33,24 +33,33 @@ pub fn spawn_relay(
         .stack_size(8192)
         .spawn(move || {
             log::info!("NMEA relay thread started");
-            // `for x in &receiver` blocks until a tuple arrives, then processes it.
-            // Exits only when all SyncSenders are dropped (gnss.rs RX thread exits).
-            for (sentence_type, raw) in &nmea_rx {
-                let topic = format!("gnss/{}/nmea/{}", device_id, sentence_type);
-                // Acquire Mutex per sentence — do NOT hold across loop iterations.
-                // Holding across iterations would starve heartbeat/subscriber threads.
-                match client.lock() {
-                    Err(e) => log::warn!("NMEA relay: mutex poisoned: {:?}", e),
-                    Ok(mut c) => {
-                        match c.enqueue(&topic, QoS::AtMostOnce, false, raw.as_bytes()) {
-                            Ok(_) => {}
-                            Err(e) => log::warn!("NMEA relay: enqueue failed: {:?}", e),
+            loop {
+                match nmea_rx.recv_timeout(crate::config::RELAY_RECV_TIMEOUT) {
+                    Ok((sentence_type, raw)) => {
+                        let topic = format!("gnss/{}/nmea/{}", device_id, sentence_type);
+                        // Acquire Mutex per sentence — do NOT hold across loop iterations.
+                        // Holding across iterations would starve heartbeat/subscriber threads.
+                        match client.lock() {
+                            Err(e) => log::warn!("NMEA relay: mutex poisoned: {:?}", e),
+                            Ok(mut c) => {
+                                match c.enqueue(&topic, QoS::AtMostOnce, false, raw.as_bytes()) {
+                                    Ok(_) => {}
+                                    Err(e) => log::warn!("NMEA relay: enqueue failed: {:?}", e),
+                                }
+                            }
                         }
+                    }
+                    Err(RecvTimeoutError::Timeout) => {
+                        // No NMEA sentence within 5s — GNSS may be idle or pipeline stalled. Continue.
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
+                        log::error!("NMEA relay: receiver closed — thread exiting");
+                        break;
                     }
                 }
             }
-            // All SyncSenders dropped — gnss RX thread has exited.
-            log::error!("NMEA relay: receiver closed — thread exiting");
+            // Dead-end park (gnss RX thread has exited; this thread has nothing to do).
+            loop { std::thread::sleep(std::time::Duration::from_secs(60)); }
         })
         .expect("nmea relay thread spawn failed");
     Ok(())

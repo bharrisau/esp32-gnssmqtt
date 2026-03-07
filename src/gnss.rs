@@ -29,7 +29,7 @@ use esp_idf_svc::hal::units::Hertz;
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TrySendError};
 
 /// Four-state receiver state machine for handling mixed NMEA+RTCM byte streams.
 ///
@@ -285,21 +285,31 @@ pub fn spawn_gnss(
     std::thread::Builder::new()
         .stack_size(8192)
         .spawn(move || {
-            // `cmd_rx.iter()` blocks until a command arrives — correct for
-            // infrequent TX (GNSS commands are sent rarely, not in a tight loop).
-            // Note: recv_timeout() conversion is deferred to Plan 09-02 (HARD-06).
-            for line in cmd_rx.iter() {
-                if let Err(e) = uart_tx.write(line.as_bytes()) {
-                    let n = UART_TX_ERRORS.fetch_add(1, Ordering::Relaxed) + 1;
-                    log::warn!("GNSS TX: write error #{}: {:?}", n, e);
-                }
-                if let Err(e) = uart_tx.write(b"\r\n") {
-                    let n = UART_TX_ERRORS.fetch_add(1, Ordering::Relaxed) + 1;
-                    log::warn!("GNSS TX: CRLF write error #{}: {:?}", n, e);
+            loop {
+                match cmd_rx.recv_timeout(crate::config::RELAY_RECV_TIMEOUT) {
+                    Ok(line) => {
+                        if let Err(e) = uart_tx.write(line.as_bytes()) {
+                            let n = UART_TX_ERRORS.fetch_add(1, Ordering::Relaxed) + 1;
+                            log::warn!("GNSS TX: write error #{}: {:?}", n, e);
+                        }
+                        if let Err(e) = uart_tx.write(b"\r\n") {
+                            let n = UART_TX_ERRORS.fetch_add(1, Ordering::Relaxed) + 1;
+                            log::warn!("GNSS TX: CRLF write error #{}: {:?}", n, e);
+                        }
+                    }
+                    Err(RecvTimeoutError::Timeout) => {
+                        // No command within 5s — normal during idle operation. Continue.
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
+                        log::error!("GNSS TX: cmd channel closed — TX thread exiting");
+                        break;
+                    }
                 }
             }
-            // All SyncSenders were dropped — no more commands can arrive.
-            log::error!("GNSS TX channel closed — TX thread exiting");
+            // Dead-end park (all SyncSenders dropped; thread has nothing to do).
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(60));
+            }
         })
         .expect("gnss tx spawn failed");
 

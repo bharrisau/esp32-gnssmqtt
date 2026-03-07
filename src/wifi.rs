@@ -58,7 +58,7 @@ pub fn wifi_connect(
 /// WiFi up != MQTT up; writing Connected here would show a false green before MQTT is ready.
 pub fn wifi_supervisor(mut wifi: BlockingWifi<EspWifi<'static>>, led_state: Arc<AtomicU8>) -> ! {
     let mut backoff_secs: u64 = 1;
-    let mut max_backoff_failures: u32 = 0;
+    let mut consecutive_failures: u32 = 0;
 
     loop {
         std::thread::sleep(std::time::Duration::from_secs(5));
@@ -67,8 +67,10 @@ pub fn wifi_supervisor(mut wifi: BlockingWifi<EspWifi<'static>>, led_state: Arc<
 
         if !connected {
             log::warn!(
-                "WiFi disconnected. Reconnecting in {}s...",
-                backoff_secs
+                "WiFi disconnected. Reconnecting in {}s (attempt {}/{})...",
+                backoff_secs,
+                consecutive_failures + 1,
+                crate::config::MAX_WIFI_RECONNECT_ATTEMPTS
             );
 
             // Signal "working on reconnect" immediately before the backoff sleep.
@@ -76,36 +78,36 @@ pub fn wifi_supervisor(mut wifi: BlockingWifi<EspWifi<'static>>, led_state: Arc<
 
             std::thread::sleep(std::time::Duration::from_secs(backoff_secs));
 
-            match wifi.connect() {
-                Ok(_) => {
-                    match wifi.wait_netif_up() {
-                        Ok(_) => {
-                            log::info!("WiFi reconnected");
-                            backoff_secs = 1;
-                            max_backoff_failures = 0;
-                        }
-                        Err(e) => {
-                            log::error!("WiFi netif up failed after reconnect: {:?}", e);
-                            if backoff_secs >= 60 {
-                                max_backoff_failures += 1;
-                                if max_backoff_failures >= 3 {
-                                    led_state.store(LedState::Error as u8, Ordering::Relaxed);
-                                }
-                            }
-                            backoff_secs = (backoff_secs * 2).min(60);
-                        }
-                    }
-                }
+            let reconnect_ok = match wifi.connect() {
                 Err(e) => {
                     log::error!("WiFi reconnect failed: {:?}", e);
-                    if backoff_secs >= 60 {
-                        max_backoff_failures += 1;
-                        if max_backoff_failures >= 3 {
-                            led_state.store(LedState::Error as u8, Ordering::Relaxed);
-                        }
-                    }
-                    backoff_secs = (backoff_secs * 2).min(60);
+                    false
                 }
+                Ok(_) => match wifi.wait_netif_up() {
+                    Ok(_) => true,
+                    Err(e) => {
+                        log::error!("WiFi netif up failed after reconnect: {:?}", e);
+                        false
+                    }
+                }
+            };
+
+            if reconnect_ok {
+                log::info!("WiFi reconnected");
+                backoff_secs = 1;
+                consecutive_failures = 0;
+            } else {
+                consecutive_failures += 1;
+                if consecutive_failures >= crate::config::MAX_WIFI_RECONNECT_ATTEMPTS {
+                    // Phase 12 (RESIL-01) will call esp_restart() here.
+                    // For now, log error and set LED error state.
+                    log::error!(
+                        "WiFi: {} consecutive reconnect failures — giving up (will restart in Phase 12)",
+                        consecutive_failures
+                    );
+                    led_state.store(LedState::Error as u8, Ordering::Relaxed);
+                }
+                backoff_secs = (backoff_secs * 2).min(60);
             }
         }
         // If connected: continue — nothing to do this iteration

@@ -15,7 +15,7 @@
 //! command strings are not supported — UM980 commands contain no special
 //! characters so this is not a practical constraint.
 
-use std::sync::mpsc::{Receiver, SyncSender};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender};
 
 /// Spawn the config relay thread.
 ///
@@ -33,30 +33,40 @@ pub fn spawn_config_relay(
             log::info!("Config relay thread started");
             let mut last_hash: u32 = 0;
 
-            for payload in &config_rx {
-                // Guard: empty payload means the retained message was cleared.
-                if payload.is_empty() {
-                    log::info!("Config relay: empty payload — retained message cleared, skipping");
-                    continue;
+            loop {
+                match config_rx.recv_timeout(crate::config::SLOW_RECV_TIMEOUT) {
+                    Ok(payload) => {
+                        // Guard: empty payload means the retained message was cleared.
+                        if payload.is_empty() {
+                            log::info!("Config relay: empty payload — retained message cleared, skipping");
+                            continue;
+                        }
+
+                        let hash = djb2_hash(&payload);
+
+                        if hash == last_hash {
+                            log::info!(
+                                "Config relay: payload unchanged (hash {:#010x}), skipping",
+                                hash
+                            );
+                            continue;
+                        }
+
+                        last_hash = hash;
+                        log::info!("Config relay: new config payload, hash {:#010x}", hash);
+                        apply_config(&payload, &gnss_cmd_tx);
+                    }
+                    Err(RecvTimeoutError::Timeout) => {
+                        // No config payload within 30s — config is operator-triggered and rare. Continue.
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
+                        log::error!("Config relay: channel closed — thread exiting");
+                        break;
+                    }
                 }
-
-                let hash = djb2_hash(&payload);
-
-                if hash == last_hash {
-                    log::info!(
-                        "Config relay: payload unchanged (hash {:#010x}), skipping",
-                        hash
-                    );
-                    continue;
-                }
-
-                last_hash = hash;
-                log::info!("Config relay: new config payload, hash {:#010x}", hash);
-                apply_config(&payload, &gnss_cmd_tx);
             }
 
-            // Channel closed — all Senders dropped (pump exited).
-            log::error!("Config relay: channel closed — thread exiting");
+            // Dead-end park (pump exited; thread has nothing to do).
             loop {
                 std::thread::sleep(std::time::Duration::from_secs(60));
             }

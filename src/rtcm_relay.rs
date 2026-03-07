@@ -13,7 +13,7 @@
 
 use embedded_svc::mqtt::client::QoS;
 use esp_idf_svc::mqtt::client::EspMqttClient;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 
 /// Spawn the RTCM relay thread.
@@ -32,22 +32,31 @@ pub fn spawn_relay(
         .stack_size(8192)
         .spawn(move || {
             log::info!("RTCM relay thread started");
-            // `for x in &receiver` blocks until a tuple arrives, then processes it.
-            // Exits only when all SyncSenders are dropped (gnss.rs RX thread exits).
-            for (message_type, frame) in &rtcm_rx {
-                let topic = format!("gnss/{}/rtcm/{}", device_id, message_type);
-                // Acquire Mutex per frame — do NOT hold across loop iterations.
-                // Holding across iterations would starve heartbeat/subscriber threads.
-                match client.lock() {
-                    Err(e) => log::warn!("RTCM relay: mutex poisoned: {:?}", e),
-                    Ok(mut c) => match c.enqueue(&topic, QoS::AtMostOnce, false, &frame) {
-                        Ok(_) => {}
-                        Err(e) => log::warn!("RTCM relay: enqueue failed: {:?}", e),
-                    },
+            loop {
+                match rtcm_rx.recv_timeout(crate::config::RELAY_RECV_TIMEOUT) {
+                    Ok((message_type, frame)) => {
+                        let topic = format!("gnss/{}/rtcm/{}", device_id, message_type);
+                        // Acquire Mutex per frame — do NOT hold across loop iterations.
+                        // Holding across iterations would starve heartbeat/subscriber threads.
+                        match client.lock() {
+                            Err(e) => log::warn!("RTCM relay: mutex poisoned: {:?}", e),
+                            Ok(mut c) => match c.enqueue(&topic, QoS::AtMostOnce, false, &frame) {
+                                Ok(_) => {}
+                                Err(e) => log::warn!("RTCM relay: enqueue failed: {:?}", e),
+                            },
+                        }
+                    }
+                    Err(RecvTimeoutError::Timeout) => {
+                        // No RTCM frame within 5s — expected at low update rates. Continue.
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
+                        log::error!("RTCM relay: receiver closed — thread exiting");
+                        break;
+                    }
                 }
             }
-            // All SyncSenders dropped — gnss RX thread has exited.
-            log::error!("RTCM relay: receiver closed — thread exiting");
+            // Dead-end park (gnss RX thread has exited; this thread has nothing to do).
+            loop { std::thread::sleep(std::time::Duration::from_secs(60)); }
         })
         .expect("rtcm relay thread spawn failed");
     Ok(())

@@ -16,7 +16,7 @@ use esp_idf_svc::mqtt::client::EspMqttClient;
 use esp_idf_svc::ota::EspOta;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::Duration;
 
 /// Publish a JSON status string to the OTA status topic.
@@ -65,7 +65,19 @@ pub fn ota_task(
     let status_topic = format!("gnss/{}/ota/status", device_id);
     let trigger_topic = format!("gnss/{}/ota/trigger", device_id);
 
-    for payload in &ota_rx {
+    loop {
+    let payload = match ota_rx.recv_timeout(crate::config::SLOW_RECV_TIMEOUT) {
+        Ok(p) => p,
+        Err(RecvTimeoutError::Timeout) => {
+            // No OTA trigger within 30s — OTA is operator-triggered and rare. Continue.
+            continue;
+        }
+        Err(RecvTimeoutError::Disconnected) => {
+            log::error!("OTA: channel closed — ota_rx hung up");
+            break;
+        }
+    };
+    {
         // --- Step 3: Parse trigger JSON ---
         let json = match std::str::from_utf8(&payload) {
             Ok(s) => s.to_owned(),
@@ -314,9 +326,10 @@ pub fn ota_task(
         // --- Step 13: Reboot into new partition ---
         log::info!("OTA: complete — restarting");
         restart();
-    }
+    } // end inner payload processing block
+    } // end outer recv_timeout loop
 
-    log::error!("OTA: channel closed — ota_rx hung up");
+    // Dead-end park (pump exited; thread has nothing to do).
     loop {
         std::thread::sleep(Duration::from_secs(60));
     }

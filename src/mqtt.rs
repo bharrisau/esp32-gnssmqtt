@@ -7,7 +7,7 @@ use esp_idf_svc::mqtt::client::{
 use embedded_svc::mqtt::client::{EventPayload, QoS};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError};
 use crate::led::LedState;
 
 /// Create an MQTT client with LWT configured.
@@ -157,22 +157,33 @@ pub fn subscriber_loop(
 ) -> ! {
     let config_topic = format!("gnss/{}/config", device_id);
     let ota_topic = format!("gnss/{}/ota/trigger", device_id);
-    for () in &subscribe_rx {
-        match client.lock() {
-            Err(e) => log::warn!("Subscriber mutex poisoned: {:?}", e),
-            Ok(mut c) => {
-                match c.subscribe(&config_topic, QoS::AtLeastOnce) {
-                    Ok(_) => log::info!("Subscribed to {}", config_topic),
-                    Err(e) => log::warn!("Subscribe /config failed: {:?}", e),
+    loop {
+        match subscribe_rx.recv_timeout(crate::config::SLOW_RECV_TIMEOUT) {
+            Ok(()) => {
+                match client.lock() {
+                    Err(e) => log::warn!("Subscriber mutex poisoned: {:?}", e),
+                    Ok(mut c) => {
+                        match c.subscribe(&config_topic, QoS::AtLeastOnce) {
+                            Ok(_) => log::info!("Subscribed to {}", config_topic),
+                            Err(e) => log::warn!("Subscribe /config failed: {:?}", e),
+                        }
+                        match c.subscribe(&ota_topic, QoS::AtLeastOnce) {
+                            Ok(_) => log::info!("Subscribed to {}", ota_topic),
+                            Err(e) => log::warn!("Subscribe /ota/trigger failed: {:?}", e),
+                        }
+                    }
                 }
-                match c.subscribe(&ota_topic, QoS::AtLeastOnce) {
-                    Ok(_) => log::info!("Subscribed to {}", ota_topic),
-                    Err(e) => log::warn!("Subscribe /ota/trigger failed: {:?}", e),
-                }
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                // No Connected signal within 30s — normal when MQTT is stable. Continue.
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                log::error!("Subscriber: channel closed — thread exiting");
+                break;
             }
         }
     }
-    log::error!("Subscriber channel closed");
+    // Dead-end park (pump exited; thread has nothing to do).
     loop {
         std::thread::sleep(std::time::Duration::from_secs(60));
     }
