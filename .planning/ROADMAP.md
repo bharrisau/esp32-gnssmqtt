@@ -32,7 +32,7 @@ Archive: `.planning/milestones/v1.1-ROADMAP.md`
 
 ### 🚧 v1.2 Observations + OTA (In Progress)
 
-- [ ] **Phase 7: RTCM Relay** — Mixed NMEA+RTCM byte stream parsing, binary MQTT publish, topic routing fix
+- [x] **Phase 7: RTCM Relay** — Mixed NMEA+RTCM byte stream parsing, binary MQTT publish, topic routing fix (completed 2026-03-07)
 - [ ] **Phase 8: OTA** — Dual-partition table, HTTP firmware pull, rollback safety, status reporting
 
 ## Phase Details
@@ -74,5 +74,5 @@ Plans:
 | 4. UART Pipeline | v1.1 | 2/2 | Complete | 2026-03-06 |
 | 5. NMEA Relay | v1.1 | 2/2 | Complete | 2026-03-07 |
 | 6. Remote Config | v1.1 | 2/2 | Complete | 2026-03-07 |
-| 7. RTCM Relay | 2/3 | In Progress|  | - |
+| 7. RTCM Relay | 3/3 | Complete   | 2026-03-07 | - |
 | 8. OTA | v1.2 | 0/? | Not started | - |
