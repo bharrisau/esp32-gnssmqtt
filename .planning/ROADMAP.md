@@ -41,7 +41,7 @@ Archive: `.planning/milestones/v1.1-ROADMAP.md`
 
 ### v1.3 Reliability Hardening
 
-- [ ] **Phase 9: Channel + Loop Hardening** — Bound all channels, log UART TX errors, cap all loops and blocking receives (2 plans)
+- [x] **Phase 9: Channel + Loop Hardening** — Bound all channels, log UART TX errors, cap all loops and blocking receives (2 plans)
 - [ ] **Phase 10: Memory + Diagnostics** — Pre-allocate RTCM buffer pool; log stack HWM for all threads at startup
 - [ ] **Phase 11: Thread Watchdog** — Heartbeat counter fed by critical threads; supervisor reboots on missed beats
 - [ ] **Phase 12: Resilience** — Auto-reboot after extended WiFi disconnection or MQTT unavailability
@@ -94,7 +94,7 @@ Plans:
 
 Plans:
 - [x] 09-01-PLAN.md — Convert 4 unbounded channels to sync_channel; log UART TX write failures (HARD-01, HARD-02)
-- [ ] 09-02-PLAN.md — Convert 6 blocking recv() calls to recv_timeout(); add MAX_WIFI_RECONNECT_ATTEMPTS constant (HARD-05, HARD-06)
+- [x] 09-02-PLAN.md — Convert 6 blocking recv() calls to recv_timeout(); add MAX_WIFI_RECONNECT_ATTEMPTS constant (HARD-05, HARD-06)
 
 ### Phase 10: Memory + Diagnostics
 **Goal**: RTCM frame delivery uses a pre-allocated buffer pool with zero per-frame heap allocation in steady state, and stack headroom for every thread is visible at startup
@@ -148,7 +148,7 @@ Plans:
 | 6. Remote Config | v1.1 | 2/2 | Complete | 2026-03-07 |
 | 7. RTCM Relay | v1.2 | 3/3 | Complete | 2026-03-07 |
 | 8. OTA | v1.2 | 3/3 | Complete | 2026-03-07 |
-| 9. Channel + Loop Hardening | v1.3 | 1/2 | In progress | - |
+| 9. Channel + Loop Hardening | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 10. Memory + Diagnostics | v1.3 | 0/? | Not started | - |
 | 11. Thread Watchdog | v1.3 | 0/? | Not started | - |
 | 12. Resilience | v1.3 | 0/? | Not started | - |

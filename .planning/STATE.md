@@ -4,13 +4,13 @@ milestone: v1.3
 milestone_name: Reliability Hardening
 status: in_progress
 stopped_at: null
-last_updated: "2026-03-07T10:10:36Z"
-last_activity: 2026-03-07 — Phase 9 plan 09-01 executed (channels bounded + UART TX error logging)
+last_updated: "2026-03-07T10:19:11Z"
+last_activity: 2026-03-07 — Phase 9 complete (09-02 executed: recv_timeout loops + WiFi hardening)
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -20,17 +20,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Core value:** NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real time, with remote reconfiguration of the GNSS module via MQTT.
-**Current focus:** v1.3 Reliability Hardening — executing Phase 9 (09-02 next)
+**Current focus:** v1.3 Reliability Hardening — Phase 9 complete; next phase TBD
 
 ## Current Position
 
-Phase: 9 — Channel + Loop Hardening (in progress)
-Plan: 09-02 (next)
-Status: 09-01 complete; ready for 09-02 (recv_timeout + WiFi loop hardening)
-Last activity: 2026-03-07 — 09-01 executed: all unbounded channels bounded, UART TX errors logged
+Phase: 9 — Channel + Loop Hardening (COMPLETE)
+Plan: 09-02 (complete)
+Status: Both plans complete; Phase 9 done
+Last activity: 2026-03-07 — 09-02 executed: recv_timeout loops on all 6 channels, WiFi consecutive_failures counter
 
 ```
-v1.3 Progress: [=         ] 0/5 phases complete (Phase 9 in progress: 1/2 plans done)
+v1.3 Progress: [==        ] 1/5 phases complete (Phase 9 complete: 2/2 plans done)
 ```
 
 ## Accumulated Context
@@ -51,6 +51,10 @@ Key v1.3 decisions (Phase 9):
 - [Phase 09-01]: config_relay.apply_config() keeps blocking send() — not a hot-path thread; blocking on full 16-slot channel is acceptable
 - [Phase 09-01]: uart_bridge uses try_send — interactive stdin path must not stall on full command channel
 - [Phase 09-01]: UART_TX_ERRORS AtomicU32 counter accumulates write errors; will be read by Phase 13 health telemetry
+- [Phase 09-02]: config.example.rs updated with non-credential constants — project convention: config.rs gitignored, example.rs is committed template
+- [Phase 09-02]: consecutive_failures replaces max_backoff_failures in wifi_supervisor — counts every failure, resets on success, gives accurate at-limit logging
+- [Phase 09-02]: Timeout arm is no-op (continue) in all recv_timeout loops — Phase 11 will feed watchdog heartbeat counters here without structural changes
+- [Phase 09-02]: Dead-end park loop after break preserves -> ! semantics on all affected threads
 
 ### Pending Todos
 
@@ -64,6 +68,6 @@ Key v1.3 decisions (Phase 9):
 ## Session Continuity
 
 Last session: 2026-03-07
-Stopped at: Completed 09-01 (channel bounding + UART TX error logging)
+Stopped at: Completed 09-02 (recv_timeout loops + WiFi consecutive_failures hardening)
 Resume file: None
-Next action: `/gsd:execute-phase 9` — execute 09-02 (recv_timeout + WiFi loop hardening)
+Next action: `/gsd:execute-phase <next-phase>` — Phase 10 or as per ROADMAP.md

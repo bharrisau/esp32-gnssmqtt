@@ -21,8 +21,8 @@
 
 ### Loop Safety
 
-- [ ] **HARD-05**: All loops with an intended termination condition (retry loops, init sequences) have an explicit maximum iteration or duration counter; exceeding the limit results in a logged error and clean exit rather than infinite spin
-- [ ] **HARD-06**: All blocking channel receives use `recv_timeout()` with a documented maximum wait; all blocking I/O and mutex lock operations have explicit timeouts (no unbounded `lock()` or blocking `recv()`)
+- [x] **HARD-05**: All loops with an intended termination condition (retry loops, init sequences) have an explicit maximum iteration or duration counter; exceeding the limit results in a logged error and clean exit rather than infinite spin
+- [x] **HARD-06**: All blocking channel receives use `recv_timeout()` with a documented maximum wait; all blocking I/O and mutex lock operations have explicit timeouts (no unbounded `lock()` or blocking `recv()`)
 
 ### Thread Watchdog
 
@@ -66,8 +66,8 @@
 |-------------|-------|--------|
 | HARD-01 | Phase 9 | Complete (09-01) |
 | HARD-02 | Phase 9 | Complete (09-01) |
-| HARD-05 | Phase 9 | Pending |
-| HARD-06 | Phase 9 | Pending |
+| HARD-05 | Phase 9 | Complete (09-02) |
+| HARD-06 | Phase 9 | Complete (09-02) |
 | HARD-03 | Phase 10 | Pending |
 | HARD-04 | Phase 10 | Pending |
 | WDT-01  | Phase 11 | Pending |
