@@ -168,6 +168,7 @@ pub fn spawn_gnss(
             let mut read_buf = [0u8; 256];
 
             loop {
+                crate::watchdog::GNSS_RX_HEARTBEAT.fetch_add(1, Ordering::Relaxed);
                 match uart_rx.read(&mut read_buf, NON_BLOCK) {
                     Ok(n) if n > 0 => {
                         for &byte in &read_buf[..n] {

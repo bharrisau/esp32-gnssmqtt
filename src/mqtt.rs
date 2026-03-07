@@ -89,6 +89,7 @@ pub fn pump_mqtt_events(
     log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
         "MQTT pump", hwm_words, hwm_words * 4);
     while let Ok(event) = connection.next() {
+        crate::watchdog::MQTT_PUMP_HEARTBEAT.fetch_add(1, Ordering::Relaxed);
         match event.payload() {
             EventPayload::Connected(_) => {
                 log::info!("MQTT connected");
