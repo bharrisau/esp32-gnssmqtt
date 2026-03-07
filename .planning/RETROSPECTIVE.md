@@ -96,9 +96,59 @@
 - Sessions: ~4 (context resets between phases)
 - Notable: All 6 plans executed without escalation; hardware verification passed on first attempt for all phases
 
+## Milestone: v1.3 — Reliability Hardening
+
+**Shipped:** 2026-03-08
+**Phases:** 7 (07-13) | **Plans:** 15 | **Duration:** 2 days
+
+### What Was Built
+
+- Phase 7: Four-state UART RX state machine (NMEA/RTCM/FreeLine/HashLine), CRC-24Q verification, RTCM3 relay to MQTT
+- Phase 8: Dual-slot OTA with rollback, HTTP streaming + SHA-256 verify, MQTT-triggered, mark_valid on successful boot
+- Phase 9: All channels bounded with `sync_channel`; UART TX error counter; `recv_timeout` on all 6 blocking receives
+- Phase 10: Pre-allocated RTCM buffer pool (4 × 1029 bytes); FreeRTOS HWM logged at entry of all 11 threads
+- Phase 11: Software watchdog (AtomicU32 heartbeats, 15s detection) + hardware TWDT backstop (30s)
+- Phase 12: Auto-reboot after 10min WiFi disconnect or 5min MQTT disconnect while WiFi up
+- Phase 13: JSON health heartbeat every 30s; retained "online" on every MQTT reconnect; UM980 query response routing
+
+### What Worked
+
+- **Reliability-first sequencing** — channel hardening → memory → watchdog → resilience → telemetry built each layer on the previous; no rework required
+- **AtomicU32 pattern for cross-thread signalling** — used for watchdog heartbeats, drop counters, UART TX errors, MQTT disconnect timestamp; consistent and lock-free
+- **Pre-allocated pool pattern** — RTCM buffer pool completely eliminated per-frame heap allocation; pool exhaustion handled gracefully without panic
+- **recv_timeout everywhere** — exposed that several threads had no liveness guarantee; systematic conversion was low-risk and high-value
+- **Post-phase improvements** — MQTT reconnect "online" bug and UM980 free-text handling were caught during live hardware testing and fixed cleanly without plan rework
+
+### What Was Inefficient
+
+- `gsd-tools summary-extract --fields one_liner` still returns null for all summaries — MILESTONES.md accomplishments required manual entry again (same issue as v1.1)
+- METR-01 in REQUIREMENTS.md had stale draft text (wrong topic `/status` vs actual `/heartbeat`, wrong interval 60s vs 30s, wrong field count) — not caught until verifier ran
+- v1.2 (Phases 7-8) was not formally declared as a milestone at the time; retrospective coverage starts at v1.3
+
+### Patterns Established
+
+- Separate `status_tx` channel in MQTT callback for heartbeat reconnect signalling — pattern for any logic that needs to react to Connected events without sharing `subscribe_tx`
+- `RxState` enum with `FreeLine`/`HashLine` arms — clean way to handle heterogeneous UART protocols without silently discarding bytes; reuse this for future UM980 response parsing
+- Pool buffer pattern: `sync_channel(N)` pre-filled at init; `try_recv()` at frame start; `try_send` to return on drop/error — zero dynamic allocation, bounded memory
+- Watchdog via two `AtomicU32` counters + supervisor thread checking deltas — simpler than FreeRTOS task handles, works across Rust thread abstraction
+
+### Key Lessons
+
+- Always verify REQUIREMENTS.md text matches the actual implementation spec before writing code — stale draft text in METR-01 caused a documentation inconsistency that verifier caught
+- Post-phase hardware testing is valuable even when automated checks pass — the MQTT reconnect "online" bug was invisible to static analysis
+- `recv_timeout` conversion is a low-effort, high-value hardening pass; do it early in any embedded project with threads
+- UM980 UART protocol has four distinct line types (`$`, `0xD3`, `#`, other) — model them all from the start rather than adding states incrementally
+
+### Cost Observations
+
+- Profile: sonnet throughout
+- Sessions: 2 (one for execution, one for milestone completion)
+- Notable: All 15 plans executed without escalation; two post-phase fixes (MQTT reconnect, UM980 RX) landed cleanly in the same session
+
 ## Cross-Milestone Trends
 
 | Milestone | Phases | Plans | Duration | Notes |
 |-----------|--------|-------|----------|-------|
 | v1.0 Foundation | 3 | 9 | 2 days | First milestone; patterns established |
 | v1.1 GNSS Relay | 3 | 6 | 3 days | Full relay pipeline; hardware-verified throughout |
+| v1.3 Reliability Hardening | 7 | 15 | 2 days | Fast execution; post-phase hardware testing caught real bugs |
