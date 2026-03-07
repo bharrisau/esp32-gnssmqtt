@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
-status: defining_requirements
-stopped_at: —
+status: ready_to_plan
+stopped_at: Phase 14 — roadmap created, ready to plan
 last_updated: "2026-03-08"
-last_activity: "2026-03-08 — Milestone v2.0 started"
+last_activity: "2026-03-08 — v2.0 roadmap created (phases 14-18)"
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 11
   completed_plans: 0
 ---
 
@@ -20,14 +20,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-08)
 
 **Core value:** GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker in real time, with remote reconfiguration, OTA updates, and automatic recovery — safe for unattended operation.
-**Current focus:** v2.0 Field Deployment — defining requirements
+**Current focus:** v2.0 Field Deployment — Phase 14: Quick Additions
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-08 — Milestone v2.0 started
+Phase: 14 of 18 (Quick Additions)
+Plan: 0 of 2 in current phase
+Status: Ready to plan
+Last activity: 2026-03-08 — v2.0 roadmap created; 5 phases defined covering all 21 requirements
+
+Progress: [░░░░░░░░░░] 0%
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 0 (v2.0)
+- Prior milestone (v1.3): 9 plans, ~30 min avg/plan
+- Total v1.x execution time: ~8 hours across 24 plans
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| v2.0 — not started | - | - | - |
+
+**Recent Trend:**
+- v1.3 last 5 plans: stable
+- Trend: Stable
 
 ## Accumulated Context
 
@@ -38,20 +57,20 @@ All decisions from v1.0–v1.3 logged in PROJECT.md Key Decisions table.
 Key carry-forward notes:
 - [Build NOTE]: Fresh clone needs `cargo install ldproxy` and first build needs git submodule init in ESP-IDF dir
 - [OTA NOTE]: Verify `esp-idf-svc-0.51.0` OTA Cargo feature name before any OTA changes
-- [BLE NOTE]: `esp-idf-svc::bt` BLE GATT API was volatile as of mid-2025 — verify stability before BLE provisioning work
+- [BLE NOTE]: BLE provisioning deferred — SoftAP chosen for v2.0; covers WiFi + MQTT in one web UI without custom app
 
 ### Pending Todos
 
-- Verify `esp-idf-svc-0.51.0` OTA Cargo feature name before any OTA changes
-- Verify `esp-idf-svc::bt` BLE GATT API stability before BLE provisioning phase
+- Verify `esp-idf-svc` SoftAP/captive-portal API availability before Phase 15
+- Verify `esp-idf-svc::sntp` API before Phase 14
 
 ### Blockers/Concerns
 
-(none at milestone start)
+(none at phase 14 start)
 
 ## Session Continuity
 
 Last session: 2026-03-08
-Stopped at: Milestone v2.0 start — requirements pending
+Stopped at: v2.0 roadmap created — 5 phases (14-18), 21 requirements mapped
 Resume file: None
-Next action: `/gsd:plan-phase <N>` after roadmap is created
+Next action: `/gsd:plan-phase 14`

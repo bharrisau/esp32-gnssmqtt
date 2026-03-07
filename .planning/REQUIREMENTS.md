@@ -123,33 +123,33 @@
 | RESIL-02 | Phase 12 | Complete |
 | METR-01 | Phase 13 | Complete |
 | METR-02 | Phase 13 | Complete |
-| PROV-01 | — | Pending |
-| PROV-02 | — | Pending |
-| PROV-03 | — | Pending |
-| PROV-04 | — | Pending |
-| PROV-05 | — | Pending |
-| PROV-06 | — | Pending |
-| PROV-07 | — | Pending |
-| PROV-08 | — | Pending |
-| NTRIP-01 | — | Pending |
-| NTRIP-02 | — | Pending |
-| NTRIP-03 | — | Pending |
-| NTRIP-04 | — | Pending |
-| CMD-01 | — | Pending |
-| CMD-02 | — | Pending |
-| LOG-01 | — | Pending |
-| LOG-02 | — | Pending |
-| LOG-03 | — | Pending |
-| MAINT-01 | — | Pending |
-| MAINT-02 | — | Pending |
-| MAINT-03 | — | Pending |
-| TELEM-01 | — | Pending |
+| MAINT-01 | Phase 14 | Pending |
+| MAINT-02 | Phase 14 | Pending |
+| CMD-01 | Phase 14 | Pending |
+| CMD-02 | Phase 14 | Pending |
+| PROV-01 | Phase 15 | Pending |
+| PROV-02 | Phase 15 | Pending |
+| PROV-03 | Phase 15 | Pending |
+| PROV-04 | Phase 15 | Pending |
+| PROV-05 | Phase 15 | Pending |
+| PROV-06 | Phase 15 | Pending |
+| PROV-07 | Phase 15 | Pending |
+| PROV-08 | Phase 15 | Pending |
+| LOG-01 | Phase 16 | Pending |
+| LOG-02 | Phase 16 | Pending |
+| LOG-03 | Phase 16 | Pending |
+| NTRIP-01 | Phase 17 | Pending |
+| NTRIP-02 | Phase 17 | Pending |
+| NTRIP-03 | Phase 17 | Pending |
+| NTRIP-04 | Phase 17 | Pending |
+| TELEM-01 | Phase 18 | Pending |
+| MAINT-03 | Phase 18 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 21 total
-- Mapped to phases: 0
-- Unmapped: 21 ⚠️
+- Mapped to phases: 21
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-08*
-*Last updated: 2026-03-08 after initial v2.0 definition*
+*Last updated: 2026-03-08 after v2.0 roadmap creation (phases 14-18)*
