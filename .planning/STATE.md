@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Reliability Hardening
 status: completed
-stopped_at: Phase 13 context gathered
-last_updated: "2026-03-07T14:37:34.768Z"
+stopped_at: Completed 13-01-PLAN.md
+last_updated: "2026-03-07T14:54:42.096Z"
 last_activity: "2026-03-07 — 09-02 executed: recv_timeout loops on all 6 channels, WiFi consecutive_failures counter"
 progress:
   total_phases: 7
-  completed_phases: 6
-  total_plans: 14
-  completed_plans: 14
+  completed_phases: 7
+  total_plans: 15
+  completed_plans: 15
 ---
 
 # Project State
@@ -67,6 +67,7 @@ Key v1.3 decisions (Phase 9):
 - [Phase 12-resilience]: MQTT timer cleared in !connected arm of wifi_supervisor — prevents RESIL-02 false-trigger during combined WiFi+MQTT outage
 - [Phase 12-resilience]: compare_exchange(0, now_secs()) in Disconnected arm — only first disconnect stamps the timer; subsequent events no-op via .ok()
 - [Phase 12-resilience]: store(0, Relaxed) in Connected arm before subscribe_tx.try_send() — timer cleared as early as possible on reconnect
+- [Phase 13]: HEARTBEAT_INTERVAL_SECS constant added to config.example.rs for operator-visible interval setting; drop counters cumulative since boot (no reset)
 
 ### Pending Todos
 
@@ -79,7 +80,7 @@ Key v1.3 decisions (Phase 9):
 
 ## Session Continuity
 
-Last session: 2026-03-07T14:37:34.764Z
-Stopped at: Phase 13 context gathered
-Resume file: .planning/phases/13-health-telemetry/13-CONTEXT.md
+Last session: 2026-03-07T14:54:42.092Z
+Stopped at: Completed 13-01-PLAN.md
+Resume file: None
 Next action: `/gsd:execute-phase <next-phase>` — Phase 10 or as per ROADMAP.md

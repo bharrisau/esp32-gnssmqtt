@@ -36,8 +36,8 @@
 
 ### Health Telemetry
 
-- [ ] **METR-01**: Device publishes `{"uptime_s":N,"heap_free":N,"nmea_drops":N,"rtcm_drops":N}` to `gnss/{device_id}/status` every 60 seconds
-- [ ] **METR-02**: NMEA and RTCM drop counters are atomic; incremented at each `TrySendError::Full` drop site in gnss.rs
+- [x] **METR-01**: Device publishes `{"uptime_s":N,"heap_free":N,"nmea_drops":N,"rtcm_drops":N}` to `gnss/{device_id}/status` every 60 seconds
+- [x] **METR-02**: NMEA and RTCM drop counters are atomic; incremented at each `TrySendError::Full` drop site in gnss.rs
 
 ## v2 Requirements
 
@@ -74,8 +74,8 @@
 | WDT-02  | Phase 11 | Complete |
 | RESIL-01 | Phase 12 | Complete |
 | RESIL-02 | Phase 12 | Complete |
-| METR-01 | Phase 13 | Pending |
-| METR-02 | Phase 13 | Pending |
+| METR-01 | Phase 13 | Complete |
+| METR-02 | Phase 13 | Complete |
 
 **Coverage:**
 - v1.3 requirements: 12 total

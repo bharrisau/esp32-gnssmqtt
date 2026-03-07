@@ -45,7 +45,7 @@ Archive: `.planning/milestones/v1.1-ROADMAP.md`
 - [x] **Phase 10: Memory + Diagnostics** — Pre-allocate RTCM buffer pool; log stack HWM for all threads at startup (completed 2026-03-07)
 - [x] **Phase 11: Thread Watchdog** — Heartbeat counter fed by critical threads; supervisor reboots on missed beats (completed 2026-03-07)
 - [x] **Phase 12: Resilience** — Auto-reboot after extended WiFi disconnection or MQTT unavailability (completed 2026-03-07)
-- [ ] **Phase 13: Health Telemetry** — Periodic MQTT status publish with uptime, heap, and drop counters
+- [x] **Phase 13: Health Telemetry** — Periodic MQTT status publish with uptime, heap, and drop counters (completed 2026-03-07)
 
 ## Phase Details
 
@@ -167,4 +167,4 @@ Plans:
 | 10. Memory + Diagnostics | 2/2 | Complete    | 2026-03-07 | - |
 | 11. Thread Watchdog | 2/2 | Complete    | 2026-03-07 | - |
 | 12. Resilience | 2/2 | Complete    | 2026-03-07 | - |
-| 13. Health Telemetry | v1.3 | 0/1 | Not started | - |
+| 13. Health Telemetry | 1/1 | Complete   | 2026-03-07 | - |
