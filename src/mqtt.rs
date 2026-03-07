@@ -1,8 +1,7 @@
 //! MQTT client, LWT, connection pump, and heartbeat. Uses EspMqttClient from esp-idf-svc.
 
 use esp_idf_svc::mqtt::client::{
-    EspMqttClient, EspMqttConnection,
-    LwtConfiguration, MqttClientConfiguration,
+    EspMqttClient, LwtConfiguration, MqttClientConfiguration,
 };
 use embedded_svc::mqtt::client::{EventPayload, QoS};
 use std::sync::{Arc, Mutex};
@@ -10,17 +9,24 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError};
 use crate::led::LedState;
 
-/// Create an MQTT client with LWT configured.
+/// Create an MQTT client with LWT configured and event dispatch via callback.
 ///
-/// Returns `(client, connection)` where:
-/// - `client` is wrapped in `Arc<Mutex<>>` for sharing across threads
-/// - `connection` MUST be moved into the pump thread before any publish/subscribe call
+/// Uses `EspMqttClient::new_cb` so no blocking pump thread is needed — events are
+/// dispatched from the ESP-IDF C MQTT task thread directly into the callback closure.
+///
+/// The callback MUST NOT call any `EspMqttClient` methods: the C MQTT task holds its
+/// internal mutex during event dispatch and any re-entrant call will deadlock.
+/// Atomic stores and `SyncSender::try_send` are safe from within the callback.
 ///
 /// LWT: publishes `offline` to `gnss/{device_id}/status` with retain=true on unexpected disconnect.
 /// MQTT output buffer is set to 2048 bytes to support RTCM MSM7 frames up to 1029 bytes.
 pub fn mqtt_connect(
     device_id: &str,
-) -> anyhow::Result<(Arc<Mutex<EspMqttClient<'static>>>, EspMqttConnection)> {
+    subscribe_tx: SyncSender<()>,
+    config_tx: SyncSender<Vec<u8>>,
+    ota_tx: SyncSender<Vec<u8>>,
+    led_state: Arc<AtomicU8>,
+) -> anyhow::Result<Arc<Mutex<EspMqttClient<'static>>>> {
     let broker_url = format!(
         "mqtt://{}:{}",
         crate::config::MQTT_HOST,
@@ -29,7 +35,6 @@ pub fn mqtt_connect(
 
     // IMPORTANT: lwt_topic MUST be declared BEFORE conf in the same scope.
     // LwtConfiguration.topic is &'a str — it must outlive the MqttClientConfiguration.
-    // See research pitfall 1.
     let lwt_topic = format!("gnss/{}/status", device_id);
 
     let conf = MqttClientConfiguration {
@@ -57,39 +62,7 @@ pub fn mqtt_connect(
         ..Default::default()
     };
 
-    let (client, connection) = EspMqttClient::new(&broker_url, &conf)?;
-    Ok((Arc::new(Mutex::new(client)), connection))
-}
-
-/// Drive the MQTT event loop forever.
-///
-/// On every `Connected` event, writes LedState::Connected to the shared LED state and
-/// sends a signal through `subscribe_tx` so that the subscriber thread can (re-)subscribe.
-/// On `Disconnected`, writes LedState::Connecting.
-///
-/// On `Received`, dispatches by topic suffix:
-/// - Topics ending in `/config` are forwarded to `config_tx` (config relay → UM980 UART).
-/// - Topics ending in `/ota/trigger` are forwarded to `ota_tx` (OTA task).
-/// - All other topics are silently ignored.
-///
-/// The pump itself NEVER calls any client method — doing so would deadlock because the
-/// C MQTT task holds its internal mutex while dispatching the event callback (see research
-/// pitfall 2). Atomic stores and mpsc sends are NOT client method calls and are safe here.
-pub fn pump_mqtt_events(
-    mut connection: EspMqttConnection,
-    subscribe_tx: SyncSender<()>,
-    config_tx: SyncSender<Vec<u8>>,   // routes received payloads to config relay
-    ota_tx: SyncSender<Vec<u8>>,      // routes /ota/trigger payloads to OTA task
-    led_state: Arc<AtomicU8>,
-) -> ! {
-    // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
-    let hwm_words = unsafe {
-        esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
-    };
-    log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
-        "MQTT pump", hwm_words, hwm_words * 4);
-    while let Ok(event) = connection.next() {
-        crate::watchdog::MQTT_PUMP_HEARTBEAT.fetch_add(1, Ordering::Relaxed);
+    let client = EspMqttClient::new_cb(&broker_url, &conf, move |event| {
         match event.payload() {
             EventPayload::Connected(_) => {
                 log::info!("MQTT connected");
@@ -99,10 +72,10 @@ pub fn pump_mqtt_events(
                 match subscribe_tx.try_send(()) {
                     Ok(_) => {}
                     Err(TrySendError::Full(_)) => {
-                        log::warn!("pump: subscribe signal channel full — subscriber already queued");
+                        log::warn!("mqtt cb: subscribe signal channel full — subscriber already queued");
                     }
                     Err(TrySendError::Disconnected(_)) => {
-                        log::error!("pump: subscribe channel closed");
+                        log::error!("mqtt cb: subscribe channel closed");
                     }
                 }
             }
@@ -118,32 +91,27 @@ pub fn pump_mqtt_events(
                 // Config and OTA payloads arrive as Details::Complete (single chunk), so topic is always Some here.
                 let t = topic.unwrap_or("");
                 if t.ends_with("/config") {
-                    // Forward config payloads to config_relay → UM980 UART
                     match config_tx.try_send(data.to_vec()) {
                         Ok(_) => {}
-                        Err(TrySendError::Full(_)) => log::warn!("pump: config channel full — payload dropped"),
-                        Err(TrySendError::Disconnected(_)) => log::warn!("pump: config channel closed"),
+                        Err(TrySendError::Full(_)) => log::warn!("mqtt cb: config channel full — payload dropped"),
+                        Err(TrySendError::Disconnected(_)) => log::warn!("mqtt cb: config channel closed"),
                     }
                 } else if t.ends_with("/ota/trigger") {
                     match ota_tx.try_send(data.to_vec()) {
                         Ok(_) => log::info!("OTA trigger received, payload len={}", data.len()),
-                        Err(TrySendError::Full(_)) => log::warn!("pump: OTA channel full — trigger dropped (OTA in progress?)"),
-                        Err(TrySendError::Disconnected(_)) => log::warn!("pump: OTA channel closed"),
+                        Err(TrySendError::Full(_)) => log::warn!("mqtt cb: OTA channel full — trigger dropped (OTA in progress?)"),
+                        Err(TrySendError::Disconnected(_)) => log::warn!("mqtt cb: OTA channel closed"),
                     }
                 }
                 // All other topics: silently ignored
             }
             m @ _ => {
-                log::warn!("Unhandled message: {:?}", m);
+                log::warn!("Unhandled MQTT event: {:?}", m);
             }
         }
-    }
+    })?;
 
-    // Connection closed — should not happen in normal operation.
-    log::error!("MQTT pump exited — connection closed");
-    loop {
-        std::thread::sleep(std::time::Duration::from_secs(60));
-    }
+    Ok(Arc::new(Mutex::new(client)))
 }
 
 /// Subscribe to the device config and OTA trigger topics on every Connected signal from the pump.

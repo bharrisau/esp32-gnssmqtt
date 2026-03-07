@@ -10,17 +10,16 @@
 //! 6. wifi::wifi_connect — WiFi BEFORE MQTT (IP required for TCP)
 //! 7. gnss::spawn_gnss — GNSS pipeline (UART owner, RX + TX threads)
 //!    uart_bridge::spawn_bridge — stdin bridge → GNSS TX channel
-//! 8. mqtt::mqtt_connect — MQTT AFTER WiFi (TCP must be up)
-//! 9. Create subscribe_tx/rx channel
-//! 10. Spawn pump thread (signals subscriber on Connected)
-//! 11. Spawn subscriber thread (subscribes on Connected signal)
-//! 12. Spawn heartbeat thread
-//! 13. Spawn wifi supervisor thread
-//! 14. NMEA relay: spawn_relay(mqtt_client clone, device_id clone, nmea_rx)
-//! 15. Config relay: spawn_config_relay(gnss_cmd_tx clone, config_rx)
-//! 16. RTCM relay: rtcm_relay::spawn_relay(mqtt_client clone, device_id clone, rtcm_rx)
-//!    16b. mark_running_slot_valid() — called after mqtt_connect, before relay threads
-//! 17. OTA task: spawn_ota(mqtt_client clone, device_id clone, ota_rx)
+//! 8. Create subscribe_tx/rx, config_tx/rx, ota_tx/rx channels
+//! 9. mqtt::mqtt_connect — MQTT AFTER WiFi (TCP must be up); callback handles events inline
+//! 10. Spawn subscriber thread (subscribes on Connected signal)
+//! 11. Spawn heartbeat thread
+//! 12. Spawn wifi supervisor thread
+//! 13. NMEA relay: spawn_relay(mqtt_client clone, device_id clone, nmea_rx)
+//! 14. Config relay: spawn_config_relay(gnss_cmd_tx clone, config_rx)
+//! 15. RTCM relay: rtcm_relay::spawn_relay(mqtt_client clone, device_id clone, rtcm_rx)
+//!    15b. mark_running_slot_valid() — called after mqtt_connect, before relay threads
+//! 16. OTA task: spawn_ota(mqtt_client clone, device_id clone, ota_rx)
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::gpio::PinDriver;
@@ -106,9 +105,25 @@ fn main() {
         .expect("UART bridge init failed");
     log::info!("UART bridge started");
 
-    // Step 8: MQTT — after WiFi (IP must be up)
+    // Step 8: Channels — created before mqtt_connect so they can be passed into the callback.
+    // subscribe signal — callback → subscriber
+    // Bounded to 2: at most one Connected event queued while subscriber processes the previous one.
+    let (subscribe_tx, subscribe_rx) = std::sync::mpsc::sync_channel::<()>(2);
+
+    // config payload — callback → config_relay
+    // Bounded to 4: config is operator-triggered (rare). 4 covers a retained message on reconnect
+    // plus a small burst. callback uses try_send() so it never blocks.
+    let (config_tx, config_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(4);
+
+    // OTA trigger — callback → OTA task
+    // Bounded to 1: at most one OTA operation can be queued. A second trigger while OTA is running
+    // is dropped (callback uses try_send). Prevents double-flash from re-delivered retained triggers.
+    let (ota_tx, ota_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(1);
+
+    // Step 9: MQTT — after WiFi (IP must be up). Event dispatch runs in the ESP-IDF C MQTT
+    // task thread via callback; no blocking pump thread needed.
     log::info!("Connecting to MQTT broker...");
-    let (mqtt_client, mqtt_connection) = mqtt::mqtt_connect(&device_id)
+    let mqtt_client = mqtt::mqtt_connect(&device_id, subscribe_tx, config_tx, ota_tx, led_state_mqtt)
         .expect("MQTT connect failed");
     log::info!("MQTT client created");
 
@@ -127,28 +142,7 @@ fn main() {
         }
     }
 
-    // Step 9: subscribe signal — pump → subscriber
-    // Bounded to 2: at most one Connected event queued while subscriber processes the previous one.
-    // A second Connected event (broker restart) while subscriber is busy will queue; beyond 2 is impossible.
-    let (subscribe_tx, subscribe_rx) = std::sync::mpsc::sync_channel::<()>(2);
-
-    // Step 9b: config payload — pump → config_relay
-    // Bounded to 4: config is operator-triggered (rare). 4 covers a retained message on reconnect
-    // plus a small burst. pump uses try_send() so it never blocks connection.next().
-    let (config_tx, config_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(4);
-
-    // Step 9c: OTA trigger — pump → OTA task
-    // Bounded to 1: at most one OTA operation can be queued. A second trigger while OTA is running
-    // is dropped (pump uses try_send). Prevents double-flash from re-delivered retained triggers.
-    let (ota_tx, ota_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(1);
-
-    // Step 10: Pump thread — drives connection.next(), never touches client
-    std::thread::Builder::new()
-        .stack_size(8192)
-        .spawn(move || mqtt::pump_mqtt_events(mqtt_connection, subscribe_tx, config_tx, ota_tx, led_state_mqtt))
-        .expect("pump thread spawn failed");
-
-    // Step 11: Subscriber thread — subscribes on Connected (initial + broker restart)
+    // Step 10: Subscriber thread — subscribes on Connected (initial + broker restart)
     let sub_client = mqtt_client.clone();
     let sub_device_id = device_id.clone();
     std::thread::Builder::new()
