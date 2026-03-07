@@ -50,7 +50,7 @@ pub fn mqtt_connect(
             qos: QoS::AtLeastOnce,
             retain: true,
         }),
-        keep_alive_interval: Some(std::time::Duration::from_secs(60)),
+        keep_alive_interval: Some(std::time::Duration::from_secs(10)),
         reconnect_timeout: Some(std::time::Duration::from_secs(5)),
         disable_clean_session: true,
         out_buffer_size: 2048,  // covers 1029-byte RTCM MSM7 frame + MQTT fixed header + topic overhead
