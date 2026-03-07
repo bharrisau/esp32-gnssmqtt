@@ -15,7 +15,7 @@
 
 ### OTA Firmware Update
 
-- [ ] **OTA-01**: Partition table redesigned to `otadata + ota_0 + ota_1` (each ~1.875MB) for 4MB flash; requires `espflash erase-flash` + USB reflash
+- [x] **OTA-01**: Partition table redesigned to `otadata + ota_0 + ota_1` (each ~1.875MB) for 4MB flash; requires `espflash erase-flash` + USB reflash
 - [ ] **OTA-02**: Device subscribes to `gnss/{device_id}/ota/trigger` (QoS 1); payload `{"url":"...","sha256":"..."}` triggers update
 - [ ] **OTA-03**: Device HTTP-pulls firmware binary, verifies SHA256 during streaming download, writes to inactive OTA partition via `EspOta`
 - [ ] **OTA-04**: Device reboots into new partition; calls `mark_running_slot_valid()` early in `main()` after WiFi+MQTT confirmed; rolls back to previous slot if not called within watchdog window
@@ -57,7 +57,7 @@
 | RTCM-03 | Phase 7 | Complete |
 | RTCM-04 | Phase 7 | Complete |
 | RTCM-05 | Phase 7 | Complete |
-| OTA-01 | Phase 8 | Pending |
+| OTA-01 | Phase 8 | Complete |
 | OTA-02 | Phase 8 | Pending |
 | OTA-03 | Phase 8 | Pending |
 | OTA-04 | Phase 8 | Pending |

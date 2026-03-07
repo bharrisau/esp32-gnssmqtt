@@ -80,4 +80,4 @@ Plans:
 | 5. NMEA Relay | v1.1 | 2/2 | Complete | 2026-03-07 |
 | 6. Remote Config | v1.1 | 2/2 | Complete | 2026-03-07 |
 | 7. RTCM Relay | v1.2 | 3/3 | Complete | 2026-03-07 |
-| 8. OTA | v1.2 | 0/3 | Not started | - |
+| 8. OTA | 1/3 | In Progress|  | - |

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Observations + OTA
 status: planning
-stopped_at: Completed 07-rtcm-relay/07-03-PLAN.md
-last_updated: "2026-03-07T03:26:52.795Z"
+stopped_at: "Checkpoint: 08-01 Task 3 — hardware USB reflash required before OTA partition takes effect"
+last_updated: "2026-03-07T04:07:28.334Z"
 last_activity: 2026-03-07 — Roadmap created; Phase 7 and Phase 8 defined
 progress:
   total_phases: 2
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 6
+  completed_plans: 4
 ---
 
 # Project State
@@ -43,6 +43,9 @@ All decisions logged in PROJECT.md Key Decisions table.
 - [Phase 07-rtcm-relay]: Silent drop for non-/config topics in pump_mqtt_events to avoid log spam during Phase 8 OTA retain playback
 - [Phase 07-rtcm-relay]: out_buffer_size: 2048 in MqttClientConfiguration to support 1029-byte RTCM MSM7 frames
 - [Phase 07-rtcm-relay]: Plan 07-03 wiring was pre-completed as auto-fix in 07-01 — all main.rs changes (mod rtcm_relay, 3-value destructure, spawn_relay call) already in place; firmware compiles cleanly
+- [Phase 08-ota]: Removed phy_init partition — ESP-IDF v5 embeds phy calibration in NVS; not required on ESP32-C6
+- [Phase 08-ota]: sha2 = 0.10 with default-features = false + oid feature for no_std SHA-256 streaming OTA verification
+- [Phase 08-ota]: CONFIG_ESP_TASK_WDT_TIMEOUT_S=30 chosen over runtime TWDT feed — simpler, sufficient for single OTA thread erase window
 
 ### Pending Todos
 
@@ -59,7 +62,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-07T03:23:42.338Z
-Stopped at: Completed 07-rtcm-relay/07-03-PLAN.md
+Last session: 2026-03-07T04:07:28.331Z
+Stopped at: Checkpoint: 08-01 Task 3 — hardware USB reflash required before OTA partition takes effect
 Resume file: None
 Next action: `/gsd:plan-phase 7`
