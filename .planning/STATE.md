@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Reliability Hardening
 status: completed
-stopped_at: "Completed 12-01 (resilience infrastructure: RESIL-01 WiFi timeout, RESIL-02 MQTT timeout)"
-last_updated: "2026-03-07T13:59:19.567Z"
+stopped_at: "Completed 12-02 (MQTT callback wired for RESIL-02: disconnect stamps MQTT_DISCONNECTED_AT, reconnect clears it)"
+last_updated: "2026-03-07T14:07:39.089Z"
 last_activity: "2026-03-07 — 09-02 executed: recv_timeout loops on all 6 channels, WiFi consecutive_failures counter"
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 14
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -65,6 +65,8 @@ Key v1.3 decisions (Phase 9):
 - [Phase 12-resilience]: AtomicU32 not AtomicU64 for MQTT_DISCONNECTED_AT — ESP32 Xtensa target lacks AtomicU64; u32 epoch seconds safe for 5-min RESIL-02 window
 - [Phase 12-resilience]: RESIL-01 uses Option<Instant> local to wifi_supervisor — no cross-thread sharing needed for WiFi disconnect duration tracking
 - [Phase 12-resilience]: MQTT timer cleared in !connected arm of wifi_supervisor — prevents RESIL-02 false-trigger during combined WiFi+MQTT outage
+- [Phase 12-resilience]: compare_exchange(0, now_secs()) in Disconnected arm — only first disconnect stamps the timer; subsequent events no-op via .ok()
+- [Phase 12-resilience]: store(0, Relaxed) in Connected arm before subscribe_tx.try_send() — timer cleared as early as possible on reconnect
 
 ### Pending Todos
 
@@ -77,7 +79,7 @@ Key v1.3 decisions (Phase 9):
 
 ## Session Continuity
 
-Last session: 2026-03-07T13:59:13.500Z
-Stopped at: Completed 12-01 (resilience infrastructure: RESIL-01 WiFi timeout, RESIL-02 MQTT timeout)
+Last session: 2026-03-07T14:07:35.061Z
+Stopped at: Completed 12-02 (MQTT callback wired for RESIL-02: disconnect stamps MQTT_DISCONNECTED_AT, reconnect clears it)
 Resume file: None
 Next action: `/gsd:execute-phase <next-phase>` — Phase 10 or as per ROADMAP.md

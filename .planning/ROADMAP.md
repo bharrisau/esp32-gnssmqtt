@@ -44,7 +44,7 @@ Archive: `.planning/milestones/v1.1-ROADMAP.md`
 - [x] **Phase 9: Channel + Loop Hardening** — Bound all channels, log UART TX errors, cap all loops and blocking receives (2 plans)
 - [x] **Phase 10: Memory + Diagnostics** — Pre-allocate RTCM buffer pool; log stack HWM for all threads at startup (completed 2026-03-07)
 - [x] **Phase 11: Thread Watchdog** — Heartbeat counter fed by critical threads; supervisor reboots on missed beats (completed 2026-03-07)
-- [ ] **Phase 12: Resilience** — Auto-reboot after extended WiFi disconnection or MQTT unavailability
+- [x] **Phase 12: Resilience** — Auto-reboot after extended WiFi disconnection or MQTT unavailability (completed 2026-03-07)
 - [ ] **Phase 13: Health Telemetry** — Periodic MQTT status publish with uptime, heap, and drop counters
 
 ## Phase Details
@@ -163,5 +163,5 @@ Plans:
 | 9. Channel + Loop Hardening | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 10. Memory + Diagnostics | 2/2 | Complete    | 2026-03-07 | - |
 | 11. Thread Watchdog | 2/2 | Complete    | 2026-03-07 | - |
-| 12. Resilience | 1/2 | In Progress|  | - |
+| 12. Resilience | 2/2 | Complete   | 2026-03-07 | - |
 | 13. Health Telemetry | v1.3 | 0/? | Not started | - |
