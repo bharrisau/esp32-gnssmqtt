@@ -37,3 +37,7 @@ CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 # OTA: extend task watchdog to 30s to survive partition erase (takes 4-8s on ESP32-C6).
 # The default 5s fires during EspOta::initiate_update() which erases the full ~1.875MB slot.
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=30
+# Software WDT (Phase 11) catches hangs in 15s (3 × 5s); hardware TWDT fires at 30s as backstop.
+# CONFIG_ESP_TASK_WDT_PANIC=y makes TWDT fatal — reboots if the supervisor itself hangs
+# (idle task stops being scheduled). Without this, TWDT only logs (no reboot).
+CONFIG_ESP_TASK_WDT_PANIC=y

@@ -195,6 +195,12 @@ fn main() {
         .expect("OTA task spawn failed");
     log::info!("OTA task started");
 
+    // Step 18: Watchdog supervisor — spawned last so all critical threads are running before monitoring begins.
+    // Detects silent hangs in GNSS RX and MQTT pump threads; calls esp_restart() after 3 missed beats (15s).
+    watchdog::spawn_supervisor()
+        .expect("watchdog supervisor spawn failed");
+    log::info!("Watchdog supervisor started");
+
     log::info!("All subsystems started — device operational");
     let _gnss_cmd_tx = gnss_cmd_tx; // keep Sender alive — TX thread exits if all Senders drop
     loop {
