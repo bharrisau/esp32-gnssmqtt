@@ -62,6 +62,12 @@ pub fn ota_task(
     device_id: String,
     ota_rx: Receiver<Vec<u8>>,
 ) -> ! {
+    // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
+    let hwm_words = unsafe {
+        esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+    };
+    log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+        "OTA task", hwm_words, hwm_words * 4);
     let status_topic = format!("gnss/{}/ota/status", device_id);
     let trigger_topic = format!("gnss/{}/ota/trigger", device_id);
 

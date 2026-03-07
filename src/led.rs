@@ -36,6 +36,12 @@ impl LedState {
 ///
 /// Intended to run in a dedicated thread spawned in main.rs (Plan 03-03).
 pub fn led_task(mut pin: PinDriver<'static, Gpio15, Output>, state: Arc<AtomicU8>) -> ! {
+    // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
+    let hwm_words = unsafe {
+        esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+    };
+    log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+        "LED task", hwm_words, hwm_words * 4);
     let mut elapsed_ms: u64 = 0;
     let mut prev_state = LedState::Connecting;
     let mut connected_on = false; // track whether LED is already driven on for Connected state

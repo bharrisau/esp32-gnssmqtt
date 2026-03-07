@@ -82,6 +82,12 @@ pub fn pump_mqtt_events(
     ota_tx: SyncSender<Vec<u8>>,      // routes /ota/trigger payloads to OTA task
     led_state: Arc<AtomicU8>,
 ) -> ! {
+    // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
+    let hwm_words = unsafe {
+        esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+    };
+    log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+        "MQTT pump", hwm_words, hwm_words * 4);
     while let Ok(event) = connection.next() {
         match event.payload() {
             EventPayload::Connected(_) => {
@@ -155,6 +161,12 @@ pub fn subscriber_loop(
     device_id: String,
     subscribe_rx: Receiver<()>,
 ) -> ! {
+    // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
+    let hwm_words = unsafe {
+        esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+    };
+    log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+        "MQTT sub", hwm_words, hwm_words * 4);
     let config_topic = format!("gnss/{}/config", device_id);
     let ota_topic = format!("gnss/{}/ota/trigger", device_id);
     loop {
@@ -200,6 +212,12 @@ pub fn heartbeat_loop(
     client: Arc<Mutex<EspMqttClient<'static>>>,
     device_id: String,
 ) -> ! {
+    // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
+    let hwm_words = unsafe {
+        esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+    };
+    log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+        "MQTT hb", hwm_words, hwm_words * 4);
     let topic = format!("gnss/{}/heartbeat", device_id);
     log::info!("Heartbeat thread started, topic: {}", topic);
 

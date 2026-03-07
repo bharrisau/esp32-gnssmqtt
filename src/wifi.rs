@@ -57,6 +57,12 @@ pub fn wifi_connect(
 /// Note: LedState::Connected is NOT written here — that is the MQTT pump's responsibility.
 /// WiFi up != MQTT up; writing Connected here would show a false green before MQTT is ready.
 pub fn wifi_supervisor(mut wifi: BlockingWifi<EspWifi<'static>>, led_state: Arc<AtomicU8>) -> ! {
+    // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
+    let hwm_words = unsafe {
+        esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+    };
+    log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+        "WiFi sup", hwm_words, hwm_words * 4);
     let mut backoff_secs: u64 = 1;
     let mut consecutive_failures: u32 = 0;
 
