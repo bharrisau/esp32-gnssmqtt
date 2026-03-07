@@ -65,8 +65,10 @@ pub fn mqtt_connect(
 /// sends a signal through `subscribe_tx` so that the subscriber thread can (re-)subscribe.
 /// On `Disconnected`, writes LedState::Connecting.
 ///
-/// On `Received`, copies `data` to a Vec and sends it through `config_tx` to the config
-/// relay thread. Using an mpsc channel send here is safe — it is NOT a client method call.
+/// On `Received`, dispatches by topic suffix:
+/// - Topics ending in `/config` are forwarded to `config_tx` (config relay → UM980 UART).
+/// - All other topics (e.g. `/ota/trigger`) are silently ignored here; Phase 8 will
+///   add an `ota_tx` channel and route `/ota/trigger` payloads through it.
 ///
 /// The pump itself NEVER calls any client method — doing so would deadlock because the
 /// C MQTT task holds its internal mutex while dispatching the event callback (see research
@@ -91,12 +93,19 @@ pub fn pump_mqtt_events(
             EventPayload::Error(e) => {
                 log::error!("MQTT error: {:?}", e);
             }
-            EventPayload::Received { data, .. } => {
-                // data: &[u8] — MUST copy before this arm returns; MQTT stack reuses buffer
-                match config_tx.send(data.to_vec()) {
-                    Ok(_) => {}
-                    Err(e) => log::warn!("Config relay channel closed: {:?}", e),
+            EventPayload::Received { topic, data, .. } => {
+                // topic: Option<&str> — None on chunked subsequent frames; Some(...) for complete messages.
+                // Config and OTA payloads arrive as Details::Complete (single chunk), so topic is always Some here.
+                let t = topic.unwrap_or("");
+                if t.ends_with("/config") {
+                    // Forward config payloads to config_relay → UM980 UART
+                    match config_tx.send(data.to_vec()) {
+                        Ok(_) => {}
+                        Err(e) => log::warn!("Config relay channel closed: {:?}", e),
+                    }
                 }
+                // /ota/trigger and all other topics: silently ignored here.
+                // Phase 8 will add ota_tx channel and route /ota/trigger payloads.
             }
             m @ _ => {
                 log::warn!("Unhandled message: {:?}", m);

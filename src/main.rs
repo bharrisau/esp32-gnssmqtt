@@ -34,6 +34,7 @@ mod led;
 mod mqtt;
 mod config_relay;
 mod nmea_relay;
+mod rtcm_relay;
 mod uart_bridge;
 mod wifi;
 
@@ -86,7 +87,8 @@ fn main() {
     log::info!("WiFi connected");
 
     // Step 7: GNSS pipeline — exclusive UART ownership, RX + TX threads
-    let (gnss_cmd_tx, nmea_rx) = gnss::spawn_gnss(
+    // spawn_gnss returns (cmd_tx, nmea_rx, rtcm_rx); rtcm_rx is wired to rtcm_relay below.
+    let (gnss_cmd_tx, nmea_rx, rtcm_rx) = gnss::spawn_gnss(
         peripherals.uart0,
         peripherals.pins.gpio16,  // TX line to UM980
         peripherals.pins.gpio17,  // RX line from UM980
@@ -151,6 +153,12 @@ fn main() {
     config_relay::spawn_config_relay(gnss_cmd_tx.clone(), config_rx)
         .expect("Config relay thread spawn failed");
     log::info!("Config relay started");
+
+    // Step 16: RTCM relay — receives verified RTCM3 frames from gnss RX thread, publishes to MQTT.
+    // rtcm_rx is moved into spawn_relay — do NOT retain a reference here.
+    rtcm_relay::spawn_relay(mqtt_client.clone(), device_id.clone(), rtcm_rx)
+        .expect("RTCM relay thread spawn failed");
+    log::info!("RTCM relay started");
 
     log::info!("All subsystems started — device operational");
     let _gnss_cmd_tx = gnss_cmd_tx; // keep Sender alive — TX thread exits if all Senders drop
