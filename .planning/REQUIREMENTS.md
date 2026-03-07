@@ -61,8 +61,8 @@
 
 ### Command Relay (CMD)
 
-- [ ] **CMD-01**: Device subscribes to `gnss/{device_id}/command` and forwards each message as a raw UM980 command over UART
-- [ ] **CMD-02**: Command topic is non-retained; each publish triggers exactly one command send with no deduplication
+- [x] **CMD-01**: Device subscribes to `gnss/{device_id}/command` and forwards each message as a raw UM980 command over UART
+- [x] **CMD-02**: Command topic is non-retained; each publish triggers exactly one command send with no deduplication
 
 ### Remote Logging (LOG)
 
@@ -72,7 +72,7 @@
 
 ### Maintenance (MAINT)
 
-- [ ] **MAINT-01**: Device reboots when `gnss/{device_id}/ota/trigger` payload is `"reboot"`
+- [x] **MAINT-01**: Device reboots when `gnss/{device_id}/ota/trigger` payload is `"reboot"`
 - [x] **MAINT-02**: Device syncs wall-clock time via SNTP on WiFi connect; timestamps appear in log output
 - [ ] **MAINT-03**: OTA firmware update validated on hardware (device FFFEB5) as explicit sign-off gate before v2.0 milestone is marked complete
 
@@ -123,10 +123,10 @@
 | RESIL-02 | Phase 12 | Complete |
 | METR-01 | Phase 13 | Complete |
 | METR-02 | Phase 13 | Complete |
-| MAINT-01 | Phase 14 | Pending |
+| MAINT-01 | Phase 14 | Complete |
 | MAINT-02 | Phase 14 | Complete |
-| CMD-01 | Phase 14 | Pending |
-| CMD-02 | Phase 14 | Pending |
+| CMD-01 | Phase 14 | Complete |
+| CMD-02 | Phase 14 | Complete |
 | PROV-01 | Phase 15 | Pending |
 | PROV-02 | Phase 15 | Pending |
 | PROV-03 | Phase 15 | Pending |

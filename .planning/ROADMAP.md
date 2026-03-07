@@ -59,7 +59,7 @@ Archive: `.planning/milestones/v1.3-ROADMAP.md`
 
 **Milestone Goal:** Enable unattended outdoor RTK operation with runtime WiFi/MQTT provisioning, NTRIP corrections pipeline, remote log streaming, and command relay — no firmware recompile needed for field configuration.
 
-- [ ] **Phase 14: Quick Additions** — SNTP time sync, command relay topic, and reboot trigger extend existing subsystems with minimal new code
+- [x] **Phase 14: Quick Additions** — SNTP time sync, command relay topic, and reboot trigger extend existing subsystems with minimal new code (completed 2026-03-07)
 - [ ] **Phase 15: Provisioning** — SoftAP web UI lets users configure WiFi and MQTT credentials without recompiling firmware; stored in NVS with multi-AP failover
 - [ ] **Phase 16: Remote Logging** — ESP-IDF log output forwarded to MQTT with re-entrancy guard preventing feedback loops; level configurable at runtime
 - [ ] **Phase 17: NTRIP Client** — TCP connection to NTRIP caster streams RTCM3 corrections directly to UM980 UART, enabling RTK fix
@@ -161,7 +161,7 @@ Plans:
 | 11. Thread Watchdog | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 12. Resilience | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 13. Health Telemetry | v1.3 | 1/1 | Complete | 2026-03-08 |
-| 14. Quick Additions | 1/2 | In Progress|  | - |
+| 14. Quick Additions | 2/2 | Complete   | 2026-03-07 | - |
 | 15. Provisioning | v2.0 | 0/3 | Not started | - |
 | 16. Remote Logging | v2.0 | 0/2 | Not started | - |
 | 17. NTRIP Client | v2.0 | 0/2 | Not started | - |
