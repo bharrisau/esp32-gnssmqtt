@@ -4,7 +4,7 @@ milestone: v1.3
 milestone_name: Reliability Hardening
 status: completed
 stopped_at: "Completed 11-02 (watchdog wiring: heartbeat counters, supervisor spawn, TWDT panic)"
-last_updated: "2026-03-07T12:23:17.159Z"
+last_updated: "2026-03-07T12:54:39.286Z"
 last_activity: "2026-03-07 — 09-02 executed: recv_timeout loops on all 6 channels, WiFi consecutive_failures counter"
 progress:
   total_phases: 7

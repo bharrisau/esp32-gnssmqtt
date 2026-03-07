@@ -158,6 +158,6 @@ Plans:
 | 8. OTA | v1.2 | 3/3 | Complete | 2026-03-07 |
 | 9. Channel + Loop Hardening | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 10. Memory + Diagnostics | 2/2 | Complete    | 2026-03-07 | - |
-| 11. Thread Watchdog | 2/2 | Complete   | 2026-03-07 | - |
+| 11. Thread Watchdog | 2/2 | Complete    | 2026-03-07 | - |
 | 12. Resilience | v1.3 | 0/? | Not started | - |
 | 13. Health Telemetry | v1.3 | 0/? | Not started | - |
