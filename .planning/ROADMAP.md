@@ -153,7 +153,7 @@ Plans:
 | 7. RTCM Relay | v1.2 | 3/3 | Complete | 2026-03-07 |
 | 8. OTA | v1.2 | 3/3 | Complete | 2026-03-07 |
 | 9. Channel + Loop Hardening | v1.3 | 2/2 | Complete | 2026-03-07 |
-| 10. Memory + Diagnostics | v1.3 | 0/2 | Not started | - |
+| 10. Memory + Diagnostics | 1/2 | In Progress|  | - |
 | 11. Thread Watchdog | v1.3 | 0/? | Not started | - |
 | 12. Resilience | v1.3 | 0/? | Not started | - |
 | 13. Health Telemetry | v1.3 | 0/? | Not started | - |

@@ -17,7 +17,7 @@
 
 ### Stack / Diagnostics
 
-- [ ] **HARD-04**: FreeRTOS task stack high-water mark (HWM) is logged at startup for every spawned thread
+- [x] **HARD-04**: FreeRTOS task stack high-water mark (HWM) is logged at startup for every spawned thread
 
 ### Loop Safety
 
@@ -69,7 +69,7 @@
 | HARD-05 | Phase 9 | Complete (09-02) |
 | HARD-06 | Phase 9 | Complete (09-02) |
 | HARD-03 | Phase 10 | Pending |
-| HARD-04 | Phase 10 | Pending |
+| HARD-04 | Phase 10 | Complete |
 | WDT-01  | Phase 11 | Pending |
 | WDT-02  | Phase 11 | Pending |
 | RESIL-01 | Phase 12 | Pending |
