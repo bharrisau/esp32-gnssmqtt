@@ -1,10 +1,10 @@
 # Requirements: esp32-gnssmqtt
 
-**Defined:** 2026-03-07
-**Milestone:** v1.3 Reliability Hardening
-**Core Value:** NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real time, with remote reconfiguration of the GNSS module via MQTT.
+**Defined:** 2026-03-08
+**Milestone:** v2.0 Field Deployment
+**Core Value:** GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker in real time, with remote reconfiguration, OTA updates, and automatic recovery — safe for unattended operation.
 
-## v1.3 Requirements
+## v1.3 Requirements (Complete)
 
 ### Channel Hardening
 
@@ -39,35 +39,82 @@
 - [x] **METR-01**: Device publishes `{"uptime_s":N,"heap_free":N,"nmea_drops":N,"rtcm_drops":N}` to `gnss/{device_id}/status` every 60 seconds
 - [x] **METR-02**: NMEA and RTCM drop counters are atomic; incremented at each `TrySendError::Full` drop site in gnss.rs
 
-## v2 Requirements
+## v2.0 Requirements
 
-### Hardening (deferred)
+### Provisioning (PROV)
+
+- [ ] **PROV-01**: Device enters SoftAP hotspot mode on first boot when no WiFi credentials exist in NVS
+- [ ] **PROV-02**: User can open captive-portal web UI to enter WiFi SSID and password
+- [ ] **PROV-03**: User can configure MQTT broker (host, port, username, password) via provisioning web UI
+- [ ] **PROV-04**: User can store up to 3 WiFi networks via web UI; all persisted to NVS
+- [ ] **PROV-05**: On all WiFi failures, device retries stored networks indefinitely with backoff; does not auto-enter SoftAP
+- [ ] **PROV-06**: GPIO9 held low for 3s enters SoftAP mode; device exits back to WiFi mode after 300s with no client connected (timer paused while a client is associated)
+- [ ] **PROV-07**: MQTT payload `"softap"` to `gnss/{device_id}/ota/trigger` enters SoftAP mode; same 300s no-client timeout applies
+- [ ] **PROV-08**: LED shows a distinct flash pattern while in SoftAP mode (different from connecting/connected/error)
+
+### NTRIP Client (NTRIP)
+
+- [ ] **NTRIP-01**: Device connects to configured NTRIP caster and streams RTCM3 corrections to UM980 UART
+- [ ] **NTRIP-02**: NTRIP settings (host, port, mountpoint, user, pass) configurable via retained MQTT topic `gnss/{device_id}/ntrip/config`
+- [ ] **NTRIP-03**: NTRIP client reconnects automatically on connection loss
+- [ ] **NTRIP-04**: NTRIP connection state included in health heartbeat
+
+### Command Relay (CMD)
+
+- [ ] **CMD-01**: Device subscribes to `gnss/{device_id}/command` and forwards each message as a raw UM980 command over UART
+- [ ] **CMD-02**: Command topic is non-retained; each publish triggers exactly one command send with no deduplication
+
+### Remote Logging (LOG)
+
+- [ ] **LOG-01**: ESP-IDF log output forwarded to `gnss/{device_id}/log` MQTT topic at QoS 0; log hook uses re-entrancy guard so MQTT enqueue/send paths are excluded from capture, preventing feedback loops
+- [ ] **LOG-02**: Log level threshold configurable via retained MQTT topic
+- [ ] **LOG-03**: Log publishing is non-blocking; messages dropped silently when MQTT is disconnected or channel is full
+
+### Maintenance (MAINT)
+
+- [ ] **MAINT-01**: Device reboots when `gnss/{device_id}/ota/trigger` payload is `"reboot"`
+- [ ] **MAINT-02**: Device syncs wall-clock time via SNTP on WiFi connect; timestamps appear in log output
+- [ ] **MAINT-03**: OTA firmware update validated on hardware (device FFFEB5) as explicit sign-off gate before v2.0 milestone is marked complete
+
+### Telemetry (TELEM)
+
+- [ ] **TELEM-01**: Health heartbeat includes GNSS fix type, satellite count, and HDOP parsed from the most recent GGA sentence
+
+## Future Requirements
+
+### Hardening
 
 - **HARD-07**: All heap allocations moved to startup; steady-state zero-alloc for NMEA path (NMEA strings currently allocated per-sentence)
 
-### Metrics / Telemetry (deferred)
+### Security
 
-- **METR-03**: Remote log streaming to MQTT
+- **SEC-F01**: TLS/mTLS for MQTT — separate milestone
+- **SEC-F02**: Authenticated provisioning web UI (portal password)
+
+### Provisioning
+
+- **PROV-F01**: BLE provisioning if a standard tool (no custom app) can configure both WiFi and MQTT credentials
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| BLE provisioning | Future milestone — esp-idf-svc::bt API volatile as of mid-2025 |
-| TLS/mTLS for MQTT | Separate security milestone |
-| HTTPS for OTA | Requires mbedTLS + certificate management; defer to security milestone |
 | Full NMEA field parsing | Firmware relays raw; consumers parse downstream |
-| Remote log streaming | High complexity, deferred to v2 |
+| Local NMEA buffering across power cycles | Real-time relay only |
+| JSON-wrapped NMEA publish | Raw NMEA preferred |
 | Multi-broker publishing | Single broker only |
+| TLS/mTLS for MQTT | Separate security milestone |
+| BLE provisioning | Requires custom app to also configure MQTT; SoftAP covers both in web UI |
+| HTTPS for OTA | Requires mbedTLS + certificate management; defer to security milestone |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HARD-01 | Phase 9 | Complete (09-01) |
-| HARD-02 | Phase 9 | Complete (09-01) |
-| HARD-05 | Phase 9 | Complete (09-02) |
-| HARD-06 | Phase 9 | Complete (09-02) |
+| HARD-01 | Phase 9 | Complete |
+| HARD-02 | Phase 9 | Complete |
+| HARD-05 | Phase 9 | Complete |
+| HARD-06 | Phase 9 | Complete |
 | HARD-03 | Phase 10 | Complete |
 | HARD-04 | Phase 10 | Complete |
 | WDT-01  | Phase 11 | Complete |
@@ -76,12 +123,33 @@
 | RESIL-02 | Phase 12 | Complete |
 | METR-01 | Phase 13 | Complete |
 | METR-02 | Phase 13 | Complete |
+| PROV-01 | — | Pending |
+| PROV-02 | — | Pending |
+| PROV-03 | — | Pending |
+| PROV-04 | — | Pending |
+| PROV-05 | — | Pending |
+| PROV-06 | — | Pending |
+| PROV-07 | — | Pending |
+| PROV-08 | — | Pending |
+| NTRIP-01 | — | Pending |
+| NTRIP-02 | — | Pending |
+| NTRIP-03 | — | Pending |
+| NTRIP-04 | — | Pending |
+| CMD-01 | — | Pending |
+| CMD-02 | — | Pending |
+| LOG-01 | — | Pending |
+| LOG-02 | — | Pending |
+| LOG-03 | — | Pending |
+| MAINT-01 | — | Pending |
+| MAINT-02 | — | Pending |
+| MAINT-03 | — | Pending |
+| TELEM-01 | — | Pending |
 
 **Coverage:**
-- v1.3 requirements: 12 total
-- Mapped to phases: 12
-- Unmapped: 0
+- v2.0 requirements: 21 total
+- Mapped to phases: 0
+- Unmapped: 21 ⚠️
 
 ---
-*Requirements defined: 2026-03-07*
-*Last updated: 2026-03-07 after roadmap creation (Phases 9-13)*
+*Requirements defined: 2026-03-08*
+*Last updated: 2026-03-08 after initial v2.0 definition*
