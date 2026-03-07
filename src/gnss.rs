@@ -57,7 +57,16 @@ enum RxState {
 ///
 /// Incremented atomically on every failed `uart_tx.write()` call.
 /// Will be read by the health telemetry subsystem (Phase 13).
-static UART_TX_ERRORS: AtomicU32 = AtomicU32::new(0);
+pub static UART_TX_ERRORS: AtomicU32 = AtomicU32::new(0);
+
+/// Running count of NMEA sentences dropped due to full relay channel (TrySendError::Full).
+/// Incremented atomically; read by health telemetry (Phase 13). Cumulative since boot.
+pub static NMEA_DROPS: AtomicU32 = AtomicU32::new(0);
+
+/// Running count of RTCM frames dropped due to full relay channel (TrySendError::Full).
+/// Incremented atomically; read by health telemetry (Phase 13). Cumulative since boot.
+/// Note: RTCM pool-exhaustion drops (in RtcmHeader arm) are separate and NOT counted here.
+pub static RTCM_DROPS: AtomicU32 = AtomicU32::new(0);
 
 /// CRC-24Q: polynomial 0x864CFB, init 0, no reflection, no XOR out.
 ///
@@ -207,6 +216,7 @@ pub fn spawn_gnss(
                                                 match nmea_tx.try_send((sentence_type, s.to_string())) {
                                                     Ok(_) => {}
                                                     Err(TrySendError::Full(_)) => {
+                                                        NMEA_DROPS.fetch_add(1, Ordering::Relaxed);
                                                         log::warn!(
                                                             "NMEA: relay channel full — sentence dropped"
                                                         );
@@ -292,6 +302,7 @@ pub fn spawn_gnss(
                                             match rtcm_tx.try_send((msg_type, buf, expected)) {
                                                 Ok(_) => {}
                                                 Err(TrySendError::Full((_, returned_buf, _))) => {
+                                                    RTCM_DROPS.fetch_add(1, Ordering::Relaxed);
                                                     log::warn!(
                                                         "RTCM: relay channel full — frame dropped"
                                                     );
