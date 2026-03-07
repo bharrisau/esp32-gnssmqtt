@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: GNSS Relay
-status: complete
-stopped_at: Milestone v1.1 complete
+milestone: v1.2
+milestone_name: Observations + OTA
+status: planning
+stopped_at: Defining requirements
 last_updated: "2026-03-07"
-last_activity: "2026-03-07 — v1.1 GNSS Relay milestone complete — all 6 phases, 15 plans hardware-verified on device FFFEB5"
+last_activity: "2026-03-07 — Milestone v1.2 started — requirements defined, roadmap pending"
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 15
-  completed_plans: 15
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,12 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Core value:** NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real time, with remote reconfiguration of the GNSS module via MQTT.
-**Current focus:** Planning next milestone
+**Current focus:** v1.2 Observations + OTA — Phase 7 (RTCM relay)
 
 ## Current Position
 
-Milestone v1.1 GNSS Relay — COMPLETE
-All 6 phases (01-06), 15 plans complete and hardware-verified on device FFFEB5.
+Phase: Not started (defining requirements for Phase 7)
+Plan: —
+Status: Roadmap creation in progress
+Last activity: 2026-03-07 — Milestone v1.2 started
 
 ## Accumulated Context
 

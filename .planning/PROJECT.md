@@ -10,6 +10,15 @@ v1.1 shipped: full GNSS relay pipeline — UART sentence assembly, per-type NMEA
 
 NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real time, with remote reconfiguration of the GNSS module via MQTT.
 
+## Current Milestone: v1.2 Observations + OTA
+
+**Goal:** Add RTCM3 binary message relay for RTK/calibration use and MQTT-triggered OTA firmware update with rollback.
+
+**Target features:**
+- Mixed NMEA+RTCM byte-stream parsing in gnss.rs (RxState state machine)
+- RTCM frames published raw to `gnss/{device_id}/rtcm/{message_type}`
+- OTA: dual partition table, HTTP pull with SHA256 verify, rollback safety
+
 ## Requirements
 
 ### Validated
@@ -30,7 +39,8 @@ NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real 
 
 ### Active
 
-(None — all v1.1 requirements shipped)
+- [ ] RTCM3 binary relay: mixed NMEA+RTCM stream, publish to `gnss/{device_id}/rtcm/{message_type}` (RTCM-01 through RTCM-05)
+- [ ] OTA firmware update: MQTT trigger → HTTP pull → SHA256 → dual partition write → rollback (OTA-01 through OTA-06)
 
 ### Out of Scope
 
@@ -79,4 +89,4 @@ NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real 
 | UNLOG over CONFIGSAVE for UM980 init | CONFIGSAVE writes NVM; prefer configuring at boot via MQTT retained message | ✓ Good — NVM wear avoided |
 
 ---
-*Last updated: 2026-03-07 after v1.1 milestone*
+*Last updated: 2026-03-07 after v1.2 milestone start*
