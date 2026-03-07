@@ -4,7 +4,7 @@ milestone: v1.3
 milestone_name: Reliability Hardening
 status: completed
 stopped_at: Completed 10-02 (RTCM buffer pool; zero per-frame heap allocation)
-last_updated: "2026-03-07T11:24:45.421Z"
+last_updated: "2026-03-07T11:31:43.207Z"
 last_activity: "2026-03-07 — 09-02 executed: recv_timeout loops on all 6 channels, WiFi consecutive_failures counter"
 progress:
   total_phases: 7
