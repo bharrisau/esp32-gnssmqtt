@@ -1,73 +1,86 @@
 # Requirements: esp32-gnssmqtt
 
 **Defined:** 2026-03-07
+**Milestone:** v1.3 Reliability Hardening
 **Core Value:** NMEA sentences from the UM980 are reliably delivered to the MQTT broker in real time, with remote reconfiguration of the GNSS module via MQTT.
 
-## v1 Requirements
+## v1.3 Requirements
 
-### RTCM Binary Relay
+### Channel Hardening
 
-- [x] **RTCM-01**: gnss.rs RX thread handles mixed NMEA+RTCM byte stream via `RxState` state machine (Idle / NmeaLine / RtcmHeader / RtcmBody); 1029-byte RTCM frame buffer
-- [x] **RTCM-02**: RTCM3 frames detected by 0xD3 preamble, 10-bit length parsed, CRC-24Q verified; invalid frames trigger resync (scan for next 0xD3/$)
-- [x] **RTCM-03**: Verified RTCM frames delivered via bounded `sync_channel(32)` as `(u16, Vec<u8>)` (message_type, complete_frame) to `rtcm_relay.rs`
-- [x] **RTCM-04**: Raw RTCM frames published to `gnss/{device_id}/rtcm/{message_type}` at QoS 0, retain=false; MQTT `out_buffer_size` bumped to 2048
-- [x] **RTCM-05**: `pump_mqtt_events` routes by topic (`/config` vs `/ota/trigger`) — fixes latent bug where all `Received` events route to `config_tx`
+- [ ] **HARD-01**: All mpsc channels use `sync_channel` with explicit bounded capacities; capacities documented in code comments (fixes: cmd_rx, subscribe_tx, config_tx, ota_tx)
+- [ ] **HARD-02**: UART TX write failures are logged (not silently ignored via `let _ = ...`); per-failure error counter incremented
 
-### OTA Firmware Update
+### Memory
 
-- [x] **OTA-01**: Partition table redesigned to `otadata + ota_0 + ota_1` (each ~1.875MB) for 4MB flash; requires `espflash erase-flash` + USB reflash
-- [x] **OTA-02**: Device subscribes to `gnss/{device_id}/ota/trigger` (QoS 1); payload `{"url":"...","sha256":"..."}` triggers update
-- [x] **OTA-03**: Device HTTP-pulls firmware binary, verifies SHA256 during streaming download, writes to inactive OTA partition via `EspOta`
-- [x] **OTA-04**: Device reboots into new partition; calls `mark_running_slot_valid()` early in `main()` after WiFi+MQTT confirmed; rolls back to previous slot if not called within watchdog window
-- [x] **OTA-05**: OTA download runs in dedicated task receiving trigger via `mpsc::channel`; MQTT pump and keep-alive remain active during download
-- [x] **OTA-06**: Device reports status to `gnss/{device_id}/ota/status` — `{"state":"downloading","progress":N}` / `{"state":"complete"}` / `{"state":"failed","reason":"..."}`
+- [ ] **HARD-03**: RTCM frame delivery uses a pre-allocated buffer pool at startup; no per-frame `Vec` allocation in steady state
+
+### Stack / Diagnostics
+
+- [ ] **HARD-04**: FreeRTOS task stack high-water mark (HWM) is logged at startup for every spawned thread
+
+### Loop Safety
+
+- [ ] **HARD-05**: All loops with an intended termination condition (retry loops, init sequences) have an explicit maximum iteration or duration counter; exceeding the limit results in a logged error and clean exit rather than infinite spin
+- [ ] **HARD-06**: All blocking channel receives use `recv_timeout()` with a documented maximum wait; all blocking I/O and mutex lock operations have explicit timeouts (no unbounded `lock()` or blocking `recv()`)
+
+### Thread Watchdog
+
+- [ ] **WDT-01**: Each critical thread (GNSS RX, MQTT pump) feeds a shared atomic watchdog counter at a regular interval (≤ 5s)
+- [ ] **WDT-02**: A watchdog supervisor thread detects if any critical thread misses 3 consecutive heartbeats and triggers `esp_restart()`
+
+### Resilience
+
+- [ ] **RESIL-01**: `wifi_supervisor` triggers `esp_restart()` if WiFi has not been connected for a configurable duration (default 10 minutes)
+- [ ] **RESIL-02**: MQTT pump signals a reboot timer; if MQTT stays disconnected for a configurable duration after WiFi is up (default 5 minutes), device restarts
+
+### Health Telemetry
+
+- [ ] **METR-01**: Device publishes `{"uptime_s":N,"heap_free":N,"nmea_drops":N,"rtcm_drops":N}` to `gnss/{device_id}/status` every 60 seconds
+- [ ] **METR-02**: NMEA and RTCM drop counters are atomic; incremented at each `TrySendError::Full` drop site in gnss.rs
 
 ## v2 Requirements
 
-### Hardening
+### Hardening (deferred)
 
-- **HARD-01**: All mpsc channels bounded with explicit capacities documented
-- **HARD-02**: All loop exit conditions explicit; no unbounded retry loops
-- **HARD-03**: All heap allocations moved to startup; steady-state zero-alloc
-- **HARD-04**: FreeRTOS task stack high-water mark logged at startup
+- **HARD-07**: All heap allocations moved to startup; steady-state zero-alloc for NMEA path (NMEA strings currently allocated per-sentence)
 
-### Metrics / Telemetry
+### Metrics / Telemetry (deferred)
 
-- **METR-01**: Device publishes temperature, voltage, uptime to `gnss/{device_id}/status` periodically
-- **METR-02**: Queue depths and stack HWM reported in status payload
 - **METR-03**: Remote log streaming to MQTT
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Base64 RTCM encoding | 33% overhead with no benefit — MQTT is a binary protocol |
-| HTTPS for OTA | Requires mbedTLS + certificate management; defer to security milestone |
-| Baud rate change from 115200 | Not needed — RTCM MSM4 at 1Hz adds ~9% UART load; 115200 sufficient |
-| BLE provisioning | Deferred to future milestone |
+| BLE provisioning | Future milestone — esp-idf-svc::bt API volatile as of mid-2025 |
 | TLS/mTLS for MQTT | Separate security milestone |
+| HTTPS for OTA | Requires mbedTLS + certificate management; defer to security milestone |
 | Full NMEA field parsing | Firmware relays raw; consumers parse downstream |
+| Remote log streaming | High complexity, deferred to v2 |
+| Multi-broker publishing | Single broker only |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RTCM-01 | Phase 7 | Complete |
-| RTCM-02 | Phase 7 | Complete |
-| RTCM-03 | Phase 7 | Complete |
-| RTCM-04 | Phase 7 | Complete |
-| RTCM-05 | Phase 7 | Complete |
-| OTA-01 | Phase 8 | Complete |
-| OTA-02 | Phase 8 | Complete |
-| OTA-03 | Phase 8 | Complete |
-| OTA-04 | Phase 8 | Complete |
-| OTA-05 | Phase 8 | Complete |
-| OTA-06 | Phase 8 | Complete |
+| HARD-01 | TBD | Pending |
+| HARD-02 | TBD | Pending |
+| HARD-03 | TBD | Pending |
+| HARD-04 | TBD | Pending |
+| HARD-05 | TBD | Pending |
+| HARD-06 | TBD | Pending |
+| WDT-01  | TBD | Pending |
+| WDT-02  | TBD | Pending |
+| RESIL-01 | TBD | Pending |
+| RESIL-02 | TBD | Pending |
+| METR-01 | TBD | Pending |
+| METR-02 | TBD | Pending |
 
 **Coverage:**
-- v1 requirements: 11 total
-- Mapped to phases: 11
-- Unmapped: 0 ✓
+- v1.3 requirements: 12 total
+- Mapped to phases: 0 (pending roadmap)
+- Unmapped: 12
 
 ---
 *Requirements defined: 2026-03-07*
