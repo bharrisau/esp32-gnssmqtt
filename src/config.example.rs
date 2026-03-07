@@ -43,3 +43,17 @@ pub const WDT_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_se
 /// 3 checks × WDT_CHECK_INTERVAL (5s) = 15s maximum hang detection window.
 /// Hardware TWDT (CONFIG_ESP_TASK_WDT_TIMEOUT_S=30) fires if the supervisor itself hangs.
 pub const WDT_MISS_THRESHOLD: u32 = 3;
+
+/// Reboot if WiFi has not been connected for this duration (RESIL-01).
+///
+/// Default: 10 minutes. Covers transient AP restarts without false-triggering.
+/// For dev testing, set to Duration::from_secs(30) — restore to 600s before final commit.
+pub const WIFI_DISCONNECT_REBOOT_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(10 * 60);
+
+/// Reboot if MQTT has not been connected for this duration while WiFi is up (RESIL-02).
+///
+/// Default: 5 minutes. Shorter than RESIL-01 because WiFi-up + MQTT-down is a stuck
+/// state not self-resolved by WiFi reconnect logic.
+/// For dev testing, set to 30 — restore to 300 before final commit.
+pub const MQTT_DISCONNECT_REBOOT_SECS: u32 = 5 * 60;
