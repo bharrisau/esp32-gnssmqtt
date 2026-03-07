@@ -29,3 +29,11 @@ CONFIG_LOG_DEFAULT_LEVEL=3
 # There is NO CONFIG_UART_RX_BUFFER_SIZE Kconfig option in ESP-IDF v5.
 # The UART RX ring buffer size is set at runtime via uart_driver_install().
 # Phase 2 MUST pass rx_buffer_size >= 4096 (see src/config.rs UART_RX_BUF_SIZE).
+
+# OTA: enable bootloader rollback — new firmware must call mark_running_slot_valid()
+# or the bootloader rolls back to the previous slot on the next reboot.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# OTA: extend task watchdog to 30s to survive partition erase (takes 4-8s on ESP32-C6).
+# The default 5s fires during EspOta::initiate_update() which erases the full ~1.875MB slot.
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=30

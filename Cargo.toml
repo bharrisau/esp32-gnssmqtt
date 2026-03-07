@@ -8,6 +8,7 @@ rust-version = "1.77"
 
 [dependencies]
 log = "0.4"
+sha2 = { version = "0.10", default-features = false, features = ["oid"] }
 anyhow = "1"
 embedded-svc = "=0.28.1"
 esp-idf-svc = { version = "=0.51.0", features = [] }
