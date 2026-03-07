@@ -32,3 +32,14 @@ pub const SLOW_RECV_TIMEOUT: std::time::Duration = std::time::Duration::from_sec
 /// After this many consecutive failures, LedState::Error is set.
 /// Phase 12 (RESIL-01) will add esp_restart() at this threshold.
 pub const MAX_WIFI_RECONNECT_ATTEMPTS: u32 = 20;
+
+/// Watchdog supervisor check interval.
+/// Each critical thread must update its heartbeat counter at least this often.
+/// GNSS RX loop (10ms poll) and MQTT pump (connection.next() events) update far more frequently.
+/// Software WDT fires at 3 × 5s = 15s; hardware TWDT at 30s is the backstop.
+pub const WDT_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Number of consecutive missed heartbeat checks before triggering esp_restart().
+/// 3 checks × WDT_CHECK_INTERVAL (5s) = 15s maximum hang detection window.
+/// Hardware TWDT (CONFIG_ESP_TASK_WDT_TIMEOUT_S=30) fires if the supervisor itself hangs.
+pub const WDT_MISS_THRESHOLD: u32 = 3;
