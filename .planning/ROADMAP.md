@@ -74,5 +74,5 @@ Plans:
 | 4. UART Pipeline | v1.1 | 2/2 | Complete | 2026-03-06 |
 | 5. NMEA Relay | v1.1 | 2/2 | Complete | 2026-03-07 |
 | 6. Remote Config | v1.1 | 2/2 | Complete | 2026-03-07 |
-| 7. RTCM Relay | 3/3 | Complete   | 2026-03-07 | - |
+| 7. RTCM Relay | 3/3 | Complete    | 2026-03-07 | - |
 | 8. OTA | v1.2 | 0/? | Not started | - |

@@ -4,7 +4,7 @@ milestone: v1.2
 milestone_name: Observations + OTA
 status: planning
 stopped_at: Completed 07-rtcm-relay/07-03-PLAN.md
-last_updated: "2026-03-07T03:23:42.341Z"
+last_updated: "2026-03-07T03:26:52.795Z"
 last_activity: 2026-03-07 — Roadmap created; Phase 7 and Phase 8 defined
 progress:
   total_phases: 2
