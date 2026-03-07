@@ -8,8 +8,8 @@
 
 ### Channel Hardening
 
-- [ ] **HARD-01**: All mpsc channels use `sync_channel` with explicit bounded capacities; capacities documented in code comments (fixes: cmd_rx, subscribe_tx, config_tx, ota_tx)
-- [ ] **HARD-02**: UART TX write failures are logged (not silently ignored via `let _ = ...`); per-failure error counter incremented
+- [x] **HARD-01**: All mpsc channels use `sync_channel` with explicit bounded capacities; capacities documented in code comments (fixes: cmd_rx, subscribe_tx, config_tx, ota_tx)
+- [x] **HARD-02**: UART TX write failures are logged (not silently ignored via `let _ = ...`); per-failure error counter incremented
 
 ### Memory
 
@@ -64,8 +64,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HARD-01 | Phase 9 | Pending |
-| HARD-02 | Phase 9 | Pending |
+| HARD-01 | Phase 9 | Complete (09-01) |
+| HARD-02 | Phase 9 | Complete (09-01) |
 | HARD-05 | Phase 9 | Pending |
 | HARD-06 | Phase 9 | Pending |
 | HARD-03 | Phase 10 | Pending |

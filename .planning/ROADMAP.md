@@ -41,7 +41,7 @@ Archive: `.planning/milestones/v1.1-ROADMAP.md`
 
 ### v1.3 Reliability Hardening
 
-- [ ] **Phase 9: Channel + Loop Hardening** — Bound all channels, log UART TX errors, cap all loops and blocking receives
+- [ ] **Phase 9: Channel + Loop Hardening** — Bound all channels, log UART TX errors, cap all loops and blocking receives (2 plans)
 - [ ] **Phase 10: Memory + Diagnostics** — Pre-allocate RTCM buffer pool; log stack HWM for all threads at startup
 - [ ] **Phase 11: Thread Watchdog** — Heartbeat counter fed by critical threads; supervisor reboots on missed beats
 - [ ] **Phase 12: Resilience** — Auto-reboot after extended WiFi disconnection or MQTT unavailability
@@ -90,7 +90,11 @@ Plans:
   2. A UART TX write failure emits a log message and increments a per-failure error counter rather than being silently discarded via `let _ = ...`
   3. Every retry or init-sequence loop contains an explicit maximum iteration count or deadline; exceeding the limit logs an error and exits the loop cleanly rather than spinning indefinitely
   4. Every blocking channel receive uses `recv_timeout()` with a documented duration; no unbounded `recv()` or `lock()` call exists on any hot-path thread
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [x] 09-01-PLAN.md — Convert 4 unbounded channels to sync_channel; log UART TX write failures (HARD-01, HARD-02)
+- [ ] 09-02-PLAN.md — Convert 6 blocking recv() calls to recv_timeout(); add MAX_WIFI_RECONNECT_ATTEMPTS constant (HARD-05, HARD-06)
 
 ### Phase 10: Memory + Diagnostics
 **Goal**: RTCM frame delivery uses a pre-allocated buffer pool with zero per-frame heap allocation in steady state, and stack headroom for every thread is visible at startup
@@ -144,7 +148,7 @@ Plans:
 | 6. Remote Config | v1.1 | 2/2 | Complete | 2026-03-07 |
 | 7. RTCM Relay | v1.2 | 3/3 | Complete | 2026-03-07 |
 | 8. OTA | v1.2 | 3/3 | Complete | 2026-03-07 |
-| 9. Channel + Loop Hardening | v1.3 | 0/? | Not started | - |
+| 9. Channel + Loop Hardening | v1.3 | 1/2 | In progress | - |
 | 10. Memory + Diagnostics | v1.3 | 0/? | Not started | - |
 | 11. Thread Watchdog | v1.3 | 0/? | Not started | - |
 | 12. Resilience | v1.3 | 0/? | Not started | - |
