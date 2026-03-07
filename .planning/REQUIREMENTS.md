@@ -26,8 +26,8 @@
 
 ### Thread Watchdog
 
-- [ ] **WDT-01**: Each critical thread (GNSS RX, MQTT pump) feeds a shared atomic watchdog counter at a regular interval (≤ 5s)
-- [ ] **WDT-02**: A watchdog supervisor thread detects if any critical thread misses 3 consecutive heartbeats and triggers `esp_restart()`
+- [x] **WDT-01**: Each critical thread (GNSS RX, MQTT pump) feeds a shared atomic watchdog counter at a regular interval (≤ 5s)
+- [x] **WDT-02**: A watchdog supervisor thread detects if any critical thread misses 3 consecutive heartbeats and triggers `esp_restart()`
 
 ### Resilience
 
@@ -70,8 +70,8 @@
 | HARD-06 | Phase 9 | Complete (09-02) |
 | HARD-03 | Phase 10 | Complete |
 | HARD-04 | Phase 10 | Complete |
-| WDT-01  | Phase 11 | Pending |
-| WDT-02  | Phase 11 | Pending |
+| WDT-01  | Phase 11 | Complete |
+| WDT-02  | Phase 11 | Complete |
 | RESIL-01 | Phase 12 | Pending |
 | RESIL-02 | Phase 12 | Pending |
 | METR-01 | Phase 13 | Pending |

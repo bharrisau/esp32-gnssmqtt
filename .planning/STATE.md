@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Reliability Hardening
 status: completed
-stopped_at: Completed 10-02 (RTCM buffer pool; zero per-frame heap allocation)
-last_updated: "2026-03-07T11:31:43.207Z"
+stopped_at: "Completed 11-01 (watchdog module: heartbeat counters + supervisor thread)"
+last_updated: "2026-03-07T12:17:58.451Z"
 last_activity: "2026-03-07 — 09-02 executed: recv_timeout loops on all 6 channels, WiFi consecutive_failures counter"
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 10
-  completed_plans: 10
+  total_plans: 12
+  completed_plans: 11
 ---
 
 # Project State
@@ -57,6 +57,8 @@ Key v1.3 decisions (Phase 9):
 - [Phase 09-02]: Dead-end park loop after break preserves -> ! semantics on all affected threads
 - [Phase 10-memory-diagnostics]: esp_idf_svc::sys full path for HWM calls — no new use imports needed, direct Cargo.toml dep accessible via full path in Rust 2021
 - [Phase 10-memory-diagnostics]: RTCM_POOL_SIZE=4 buffers (4116 bytes) allocated once at spawn_gnss init; pool exhaustion drops frame with warn log; buffer returned on all error paths
+- [Phase 11-01]: spawn_supervisor() call deferred to Plan 02 — module declaration only in Plan 01 so Plan 02 compiler errors are isolated to wiring
+- [Phase 11-01]: 4096-byte stack for watchdog supervisor: no I/O or buffers, only loop + arithmetic + log
 
 ### Pending Todos
 
@@ -69,7 +71,7 @@ Key v1.3 decisions (Phase 9):
 
 ## Session Continuity
 
-Last session: 2026-03-07T11:24:45.417Z
-Stopped at: Completed 10-02 (RTCM buffer pool; zero per-frame heap allocation)
+Last session: 2026-03-07T12:17:41.247Z
+Stopped at: Completed 11-01 (watchdog module: heartbeat counters + supervisor thread)
 Resume file: None
 Next action: `/gsd:execute-phase <next-phase>` — Phase 10 or as per ROADMAP.md
