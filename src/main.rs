@@ -117,8 +117,10 @@ fn main() {
     // On first boot after OTA, slot is PENDING_VERIFY — this call cancels rollback.
     // EspOta must be dropped (block scope) before OTA thread calls EspOta::new() later.
     {
+        log::info!("OTA: calling EspOta::new()");
         let mut ota_marker = esp_idf_svc::ota::EspOta::new()
             .expect("EspOta singleton at boot — prior EspOta not dropped");
+        log::info!("OTA: EspOta::new() succeeded, calling mark_running_slot_valid()");
         ota_marker.mark_running_slot_valid()
             .expect("mark_running_slot_valid failed");
         log::info!("Running slot marked valid");
