@@ -28,7 +28,8 @@ use esp_idf_svc::hal::uart::{config::Config, Uart, UartDriver};
 use esp_idf_svc::hal::units::Hertz;
 use std::io::Write;
 use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver, Sender, TrySendError};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
 
 /// Four-state receiver state machine for handling mixed NMEA+RTCM byte streams.
 ///
@@ -46,6 +47,12 @@ enum RxState {
     // + enum discriminant + len field; heap allocation is the safe approach.
     RtcmBody { buf: Box<[u8; 1029]>, len: usize, expected: usize },
 }
+
+/// Running count of UART TX write errors in the GNSS TX thread.
+///
+/// Incremented atomically on every failed `uart_tx.write()` call.
+/// Will be read by the health telemetry subsystem (Phase 13).
+static UART_TX_ERRORS: AtomicU32 = AtomicU32::new(0);
 
 /// CRC-24Q: polynomial 0x864CFB, init 0, no reflection, no XOR out.
 ///
@@ -72,8 +79,11 @@ fn crc24q(data: &[u8]) -> u32 {
 /// Initialises `UartDriver` at 115 200 baud with a 4 KiB receive ring buffer,
 /// then spawns an RX thread and a TX thread.  Returns `(cmd_tx, nmea_rx, rtcm_rx)`:
 ///
-/// * `cmd_tx: Sender<String>` — send an ASCII command string here and the TX
+/// * `cmd_tx: SyncSender<String>` — send an ASCII command string here and the TX
 ///   thread will write it to the UM980 with a trailing `\r\n`.
+///   Bounded to 16: a config batch is typically ≤ 16 commands (with 100ms delay
+///   between sends). Capacity 16 prevents config_relay from blocking UART TX drain
+///   on large batches.
 /// * `nmea_rx: Receiver<(String, String)>` — receive `(sentence_type, raw)`
 ///   tuples; `sentence_type` is the field between `$` and the first `,` (e.g.
 ///   `"GNGGA"`, `"GNRMC"`).
@@ -84,7 +94,7 @@ pub fn spawn_gnss(
     uart: impl Peripheral<P = impl Uart> + 'static,
     tx_pin: impl Peripheral<P = impl esp_idf_svc::hal::gpio::OutputPin> + 'static,
     rx_pin: impl Peripheral<P = impl esp_idf_svc::hal::gpio::InputPin> + 'static,
-) -> anyhow::Result<(Sender<String>, Receiver<(String, String)>, Receiver<(u16, Vec<u8>)>)> {
+) -> anyhow::Result<(SyncSender<String>, Receiver<(String, String)>, Receiver<(u16, Vec<u8>)>)> {
     // Initialise UART0 at 115 200 baud.  rx_fifo_size must be set at driver
     // creation time — there is no sdkconfig option for this in ESP-IDF v5.
     let uart = UartDriver::new(
@@ -111,7 +121,9 @@ pub fn spawn_gnss(
     let (rtcm_tx, rtcm_rx) = mpsc::sync_channel::<(u16, Vec<u8>)>(32);
 
     // Channel: command strings from caller to TX thread.
-    let (cmd_tx, cmd_rx) = mpsc::channel::<String>();
+    // Bounded to 16: a config batch is typically ≤ 16 commands (with 100ms delay between sends).
+    // Capacity 16 prevents config_relay from blocking UART TX drain on large batches.
+    let (cmd_tx, cmd_rx) = mpsc::sync_channel::<String>(16);
 
     // -------------------------------------------------------------------------
     // RX thread — NON_BLOCK polling + state machine byte processing
@@ -273,13 +285,20 @@ pub fn spawn_gnss(
     std::thread::Builder::new()
         .stack_size(8192)
         .spawn(move || {
-            // `for line in &cmd_rx` blocks until a command arrives — correct for
+            // `cmd_rx.iter()` blocks until a command arrives — correct for
             // infrequent TX (GNSS commands are sent rarely, not in a tight loop).
-            for line in &cmd_rx {
-                let _ = uart_tx.write(line.as_bytes());
-                let _ = uart_tx.write(b"\r\n");
+            // Note: recv_timeout() conversion is deferred to Plan 09-02 (HARD-06).
+            for line in cmd_rx.iter() {
+                if let Err(e) = uart_tx.write(line.as_bytes()) {
+                    let n = UART_TX_ERRORS.fetch_add(1, Ordering::Relaxed) + 1;
+                    log::warn!("GNSS TX: write error #{}: {:?}", n, e);
+                }
+                if let Err(e) = uart_tx.write(b"\r\n") {
+                    let n = UART_TX_ERRORS.fetch_add(1, Ordering::Relaxed) + 1;
+                    log::warn!("GNSS TX: CRLF write error #{}: {:?}", n, e);
+                }
             }
-            // All Senders were dropped — no more commands can arrive.
+            // All SyncSenders were dropped — no more commands can arrive.
             log::error!("GNSS TX channel closed — TX thread exiting");
         })
         .expect("gnss tx spawn failed");

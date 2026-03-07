@@ -126,14 +126,20 @@ fn main() {
         }
     }
 
-    // Step 9: mpsc channel — pump signals subscriber on every Connected event
-    let (subscribe_tx, subscribe_rx) = std::sync::mpsc::channel::<()>();
+    // Step 9: subscribe signal — pump → subscriber
+    // Bounded to 2: at most one Connected event queued while subscriber processes the previous one.
+    // A second Connected event (broker restart) while subscriber is busy will queue; beyond 2 is impossible.
+    let (subscribe_tx, subscribe_rx) = std::sync::mpsc::sync_channel::<()>(2);
 
-    // Step 9b: Config relay channel — pump sends received MQTT payloads here
-    let (config_tx, config_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    // Step 9b: config payload — pump → config_relay
+    // Bounded to 4: config is operator-triggered (rare). 4 covers a retained message on reconnect
+    // plus a small burst. pump uses try_send() so it never blocks connection.next().
+    let (config_tx, config_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(4);
 
-    // Step 9c: OTA trigger channel — pump sends /ota/trigger payloads here
-    let (ota_tx, ota_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    // Step 9c: OTA trigger — pump → OTA task
+    // Bounded to 1: at most one OTA operation can be queued. A second trigger while OTA is running
+    // is dropped (pump uses try_send). Prevents double-flash from re-delivered retained triggers.
+    let (ota_tx, ota_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(1);
 
     // Step 10: Pump thread — drives connection.next(), never touches client
     std::thread::Builder::new()

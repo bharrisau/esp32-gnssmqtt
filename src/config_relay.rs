@@ -15,7 +15,7 @@
 //! command strings are not supported — UM980 commands contain no special
 //! characters so this is not a practical constraint.
 
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{Receiver, SyncSender};
 
 /// Spawn the config relay thread.
 ///
@@ -24,7 +24,7 @@ use std::sync::mpsc::{Receiver, Sender};
 ///
 /// Returns `Ok(())` immediately after spawning (non-blocking).
 pub fn spawn_config_relay(
-    gnss_cmd_tx: Sender<String>,
+    gnss_cmd_tx: SyncSender<String>,
     config_rx: Receiver<Vec<u8>>,
 ) -> anyhow::Result<()> {
     std::thread::Builder::new()
@@ -82,7 +82,7 @@ fn djb2_hash(data: &[u8]) -> u32 {
 ///
 /// On `gnss_cmd_tx.send()` failure, logs an error and returns immediately —
 /// remaining commands in the batch are abandoned (no panic).
-fn apply_config(payload: &[u8], gnss_cmd_tx: &Sender<String>) {
+fn apply_config(payload: &[u8], gnss_cmd_tx: &SyncSender<String>) {
     let text = match std::str::from_utf8(payload) {
         Ok(s) => s,
         Err(e) => {

@@ -5,6 +5,7 @@
 //! writing to UART directly.  Development use only.
 
 use std::io::{Read, Write};
+use std::sync::mpsc::SyncSender;
 
 /// Spawn the stdin line-editor bridge (Thread B only).
 ///
@@ -13,7 +14,7 @@ use std::io::{Read, Write};
 /// `cmd_tx` to the GNSS TX thread which writes it to the UM980 with `\r\n`.
 ///
 /// Returns `Ok(())` immediately after spawning; the thread runs indefinitely.
-pub fn spawn_bridge(cmd_tx: std::sync::mpsc::Sender<String>) -> anyhow::Result<()> {
+pub fn spawn_bridge(cmd_tx: SyncSender<String>) -> anyhow::Result<()> {
     // Thread B — USB → UM980: line-editing with local echo and backspace support.
     //
     // espflash monitor (host) is line-buffered — it only renders received bytes when it
@@ -49,8 +50,15 @@ pub fn spawn_bridge(cmd_tx: std::sync::mpsc::Sender<String>) -> anyhow::Result<(
                                     let _ = std::io::stdout().flush();
                                     if line_len > 0 {
                                         let s = String::from_utf8_lossy(&line[..line_len]).into_owned();
-                                        cmd_tx.send(s)
-                                            .unwrap_or_else(|e| log::warn!("UART bridge: GNSS cmd channel closed: {:?}", e));
+                                        match cmd_tx.try_send(s) {
+                                            Ok(_) => {}
+                                            Err(std::sync::mpsc::TrySendError::Full(_)) => {
+                                                log::warn!("UART bridge: GNSS cmd channel full — command dropped");
+                                            }
+                                            Err(std::sync::mpsc::TrySendError::Disconnected(_)) => {
+                                                log::warn!("UART bridge: GNSS cmd channel closed");
+                                            }
+                                        }
                                         line_len = 0;
                                     }
                                 }

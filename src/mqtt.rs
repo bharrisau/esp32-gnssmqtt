@@ -7,7 +7,7 @@ use esp_idf_svc::mqtt::client::{
 use embedded_svc::mqtt::client::{EventPayload, QoS};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
 use crate::led::LedState;
 
 /// Create an MQTT client with LWT configured.
@@ -77,9 +77,9 @@ pub fn mqtt_connect(
 /// pitfall 2). Atomic stores and mpsc sends are NOT client method calls and are safe here.
 pub fn pump_mqtt_events(
     mut connection: EspMqttConnection,
-    subscribe_tx: Sender<()>,
-    config_tx: Sender<Vec<u8>>,   // routes received payloads to config relay
-    ota_tx: Sender<Vec<u8>>,      // routes /ota/trigger payloads to OTA task
+    subscribe_tx: SyncSender<()>,
+    config_tx: SyncSender<Vec<u8>>,   // routes received payloads to config relay
+    ota_tx: SyncSender<Vec<u8>>,      // routes /ota/trigger payloads to OTA task
     led_state: Arc<AtomicU8>,
 ) -> ! {
     while let Ok(event) = connection.next() {
@@ -87,7 +87,17 @@ pub fn pump_mqtt_events(
             EventPayload::Connected(_) => {
                 log::info!("MQTT connected");
                 led_state.store(LedState::Connected as u8, Ordering::Relaxed);
-                let _ = subscribe_tx.send(());
+                // Try to signal subscriber; if channel is full, subscriber is already queued to
+                // re-subscribe on the previous Connected event — this signal can be dropped safely.
+                match subscribe_tx.try_send(()) {
+                    Ok(_) => {}
+                    Err(TrySendError::Full(_)) => {
+                        log::warn!("pump: subscribe signal channel full — subscriber already queued");
+                    }
+                    Err(TrySendError::Disconnected(_)) => {
+                        log::error!("pump: subscribe channel closed");
+                    }
+                }
             }
             EventPayload::Disconnected => {
                 log::warn!("MQTT disconnected");
@@ -102,14 +112,16 @@ pub fn pump_mqtt_events(
                 let t = topic.unwrap_or("");
                 if t.ends_with("/config") {
                     // Forward config payloads to config_relay → UM980 UART
-                    match config_tx.send(data.to_vec()) {
+                    match config_tx.try_send(data.to_vec()) {
                         Ok(_) => {}
-                        Err(e) => log::warn!("Config relay channel closed: {:?}", e),
+                        Err(TrySendError::Full(_)) => log::warn!("pump: config channel full — payload dropped"),
+                        Err(TrySendError::Disconnected(_)) => log::warn!("pump: config channel closed"),
                     }
                 } else if t.ends_with("/ota/trigger") {
-                    match ota_tx.send(data.to_vec()) {
+                    match ota_tx.try_send(data.to_vec()) {
                         Ok(_) => log::info!("OTA trigger received, payload len={}", data.len()),
-                        Err(e) => log::warn!("OTA channel closed: {:?}", e),
+                        Err(TrySendError::Full(_)) => log::warn!("pump: OTA channel full — trigger dropped (OTA in progress?)"),
+                        Err(TrySendError::Disconnected(_)) => log::warn!("pump: OTA channel closed"),
                     }
                 }
                 // All other topics: silently ignored
