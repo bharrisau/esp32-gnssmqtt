@@ -8,7 +8,6 @@
 //! the pump thread would block connection.next() calls, causing keep-alive timeouts.
 
 use embedded_svc::http::client::Client as HttpClient;
-use embedded_svc::io::Read;
 use embedded_svc::mqtt::client::QoS;
 use esp_idf_svc::hal::reset::restart;
 use esp_idf_svc::http::client::{Configuration as HttpConfig, EspHttpConnection};
@@ -97,6 +96,15 @@ pub fn ota_task(
                 continue;
             }
         };
+
+        // MAINT-01: handle "reboot" payload before attempting OTA JSON parse.
+        // Use .trim() to tolerate trailing whitespace/newlines from MQTT clients.
+        // restart() is already imported at the top of this file and diverges (never returns).
+        if json.trim() == "reboot" {
+            log::info!("OTA: 'reboot' payload received — restarting device");
+            std::thread::sleep(std::time::Duration::from_millis(200)); // let log line flush
+            restart();
+        }
 
         let url = match extract_json_str(&json, "url") {
             Some(u) => u.to_owned(),
