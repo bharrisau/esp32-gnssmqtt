@@ -73,7 +73,7 @@
 ### Maintenance (MAINT)
 
 - [ ] **MAINT-01**: Device reboots when `gnss/{device_id}/ota/trigger` payload is `"reboot"`
-- [ ] **MAINT-02**: Device syncs wall-clock time via SNTP on WiFi connect; timestamps appear in log output
+- [x] **MAINT-02**: Device syncs wall-clock time via SNTP on WiFi connect; timestamps appear in log output
 - [ ] **MAINT-03**: OTA firmware update validated on hardware (device FFFEB5) as explicit sign-off gate before v2.0 milestone is marked complete
 
 ### Telemetry (TELEM)
@@ -124,7 +124,7 @@
 | METR-01 | Phase 13 | Complete |
 | METR-02 | Phase 13 | Complete |
 | MAINT-01 | Phase 14 | Pending |
-| MAINT-02 | Phase 14 | Pending |
+| MAINT-02 | Phase 14 | Complete |
 | CMD-01 | Phase 14 | Pending |
 | CMD-02 | Phase 14 | Pending |
 | PROV-01 | Phase 15 | Pending |
