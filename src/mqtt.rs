@@ -17,6 +17,7 @@ use crate::led::LedState;
 /// - `connection` MUST be moved into the pump thread before any publish/subscribe call
 ///
 /// LWT: publishes `offline` to `gnss/{device_id}/status` with retain=true on unexpected disconnect.
+/// MQTT output buffer is set to 2048 bytes to support RTCM MSM7 frames up to 1029 bytes.
 pub fn mqtt_connect(
     device_id: &str,
 ) -> anyhow::Result<(Arc<Mutex<EspMqttClient<'static>>>, EspMqttConnection)> {
@@ -52,6 +53,7 @@ pub fn mqtt_connect(
         keep_alive_interval: Some(std::time::Duration::from_secs(60)),
         reconnect_timeout: Some(std::time::Duration::from_secs(5)),
         disable_clean_session: true,
+        out_buffer_size: 2048,  // covers 1029-byte RTCM MSM7 frame + MQTT fixed header + topic overhead
         ..Default::default()
     };
 
