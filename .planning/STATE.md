@@ -4,7 +4,7 @@ milestone: v1.3
 milestone_name: Reliability Hardening
 status: completed
 stopped_at: "Completed 12-02 (MQTT callback wired for RESIL-02: disconnect stamps MQTT_DISCONNECTED_AT, reconnect clears it)"
-last_updated: "2026-03-07T14:07:39.089Z"
+last_updated: "2026-03-07T14:17:08.633Z"
 last_activity: "2026-03-07 — 09-02 executed: recv_timeout loops on all 6 channels, WiFi consecutive_failures counter"
 progress:
   total_phases: 7
