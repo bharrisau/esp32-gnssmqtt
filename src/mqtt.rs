@@ -69,8 +69,8 @@ pub fn mqtt_connect(
 ///
 /// On `Received`, dispatches by topic suffix:
 /// - Topics ending in `/config` are forwarded to `config_tx` (config relay → UM980 UART).
-/// - All other topics (e.g. `/ota/trigger`) are silently ignored here; Phase 8 will
-///   add an `ota_tx` channel and route `/ota/trigger` payloads through it.
+/// - Topics ending in `/ota/trigger` are forwarded to `ota_tx` (OTA task).
+/// - All other topics are silently ignored.
 ///
 /// The pump itself NEVER calls any client method — doing so would deadlock because the
 /// C MQTT task holds its internal mutex while dispatching the event callback (see research
@@ -78,7 +78,8 @@ pub fn mqtt_connect(
 pub fn pump_mqtt_events(
     mut connection: EspMqttConnection,
     subscribe_tx: Sender<()>,
-    config_tx: Sender<Vec<u8>>,   // NEW — routes received payloads to config relay
+    config_tx: Sender<Vec<u8>>,   // routes received payloads to config relay
+    ota_tx: Sender<Vec<u8>>,      // routes /ota/trigger payloads to OTA task
     led_state: Arc<AtomicU8>,
 ) -> ! {
     while let Ok(event) = connection.next() {
@@ -105,9 +106,13 @@ pub fn pump_mqtt_events(
                         Ok(_) => {}
                         Err(e) => log::warn!("Config relay channel closed: {:?}", e),
                     }
+                } else if t.ends_with("/ota/trigger") {
+                    match ota_tx.send(data.to_vec()) {
+                        Ok(_) => log::info!("OTA trigger received, payload len={}", data.len()),
+                        Err(e) => log::warn!("OTA channel closed: {:?}", e),
+                    }
                 }
-                // /ota/trigger and all other topics: silently ignored here.
-                // Phase 8 will add ota_tx channel and route /ota/trigger payloads.
+                // All other topics: silently ignored
             }
             m @ _ => {
                 log::warn!("Unhandled message: {:?}", m);
@@ -122,11 +127,15 @@ pub fn pump_mqtt_events(
     }
 }
 
-/// Subscribe to the device config topic on every Connected signal from the pump.
+/// Subscribe to the device config and OTA trigger topics on every Connected signal from the pump.
 ///
 /// By the time this thread receives a signal, the pump has already called
 /// `connection.next()` again, which releases the C MQTT internal mutex — so
 /// `subscribe()` here is safe (no deadlock).
+///
+/// Subscribes to both /config and /ota/trigger at QoS::AtLeastOnce on each Connected
+/// signal. AtLeastOnce for /ota/trigger ensures retained trigger messages are delivered
+/// on reconnect (and cleared by the empty-payload publish in ota.rs after successful OTA).
 ///
 /// Handles both initial connection and broker restarts (CONN-04).
 pub fn subscriber_loop(
@@ -134,14 +143,21 @@ pub fn subscriber_loop(
     device_id: String,
     subscribe_rx: Receiver<()>,
 ) -> ! {
-    let topic = format!("gnss/{}/config", device_id);
+    let config_topic = format!("gnss/{}/config", device_id);
+    let ota_topic = format!("gnss/{}/ota/trigger", device_id);
     for () in &subscribe_rx {
         match client.lock() {
             Err(e) => log::warn!("Subscriber mutex poisoned: {:?}", e),
-            Ok(mut c) => match c.subscribe(&topic, QoS::AtLeastOnce) {
-                Ok(_) => log::info!("Subscribed to {}", topic),
-                Err(e) => log::warn!("Subscribe failed: {:?}", e),
-            },
+            Ok(mut c) => {
+                match c.subscribe(&config_topic, QoS::AtLeastOnce) {
+                    Ok(_) => log::info!("Subscribed to {}", config_topic),
+                    Err(e) => log::warn!("Subscribe /config failed: {:?}", e),
+                }
+                match c.subscribe(&ota_topic, QoS::AtLeastOnce) {
+                    Ok(_) => log::info!("Subscribed to {}", ota_topic),
+                    Err(e) => log::warn!("Subscribe /ota/trigger failed: {:?}", e),
+                }
+            }
         }
     }
     log::error!("Subscriber channel closed");
