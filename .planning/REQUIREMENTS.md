@@ -7,10 +7,10 @@
 
 ### RTCM Binary Relay
 
-- [ ] **RTCM-01**: gnss.rs RX thread handles mixed NMEA+RTCM byte stream via `RxState` state machine (Idle / NmeaLine / RtcmHeader / RtcmBody); 1029-byte RTCM frame buffer
-- [ ] **RTCM-02**: RTCM3 frames detected by 0xD3 preamble, 10-bit length parsed, CRC-24Q verified; invalid frames trigger resync (scan for next 0xD3/$)
-- [ ] **RTCM-03**: Verified RTCM frames delivered via bounded `sync_channel(32)` as `(u16, Vec<u8>)` (message_type, complete_frame) to `rtcm_relay.rs`
-- [ ] **RTCM-04**: Raw RTCM frames published to `gnss/{device_id}/rtcm/{message_type}` at QoS 0, retain=false; MQTT `out_buffer_size` bumped to 2048
+- [x] **RTCM-01**: gnss.rs RX thread handles mixed NMEA+RTCM byte stream via `RxState` state machine (Idle / NmeaLine / RtcmHeader / RtcmBody); 1029-byte RTCM frame buffer
+- [x] **RTCM-02**: RTCM3 frames detected by 0xD3 preamble, 10-bit length parsed, CRC-24Q verified; invalid frames trigger resync (scan for next 0xD3/$)
+- [x] **RTCM-03**: Verified RTCM frames delivered via bounded `sync_channel(32)` as `(u16, Vec<u8>)` (message_type, complete_frame) to `rtcm_relay.rs`
+- [x] **RTCM-04**: Raw RTCM frames published to `gnss/{device_id}/rtcm/{message_type}` at QoS 0, retain=false; MQTT `out_buffer_size` bumped to 2048
 - [ ] **RTCM-05**: `pump_mqtt_events` routes by topic (`/config` vs `/ota/trigger`) — fixes latent bug where all `Received` events route to `config_tx`
 
 ### OTA Firmware Update
@@ -52,10 +52,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RTCM-01 | Phase 7 | Pending |
-| RTCM-02 | Phase 7 | Pending |
-| RTCM-03 | Phase 7 | Pending |
-| RTCM-04 | Phase 7 | Pending |
+| RTCM-01 | Phase 7 | Complete |
+| RTCM-02 | Phase 7 | Complete |
+| RTCM-03 | Phase 7 | Complete |
+| RTCM-04 | Phase 7 | Complete |
 | RTCM-05 | Phase 7 | Pending |
 | OTA-01 | Phase 8 | Pending |
 | OTA-02 | Phase 8 | Pending |

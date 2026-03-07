@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Observations + OTA
-status: roadmap_complete
-stopped_at: Roadmap created — ready to plan Phase 7
-last_updated: "2026-03-07"
-last_activity: "2026-03-07 — Roadmap created for v1.2 (Phases 7-8); 11/11 requirements mapped"
+status: planning
+stopped_at: Completed 07-rtcm-relay 07-02-PLAN.md
+last_updated: "2026-03-07T03:18:29.262Z"
+last_activity: 2026-03-07 — Roadmap created; Phase 7 and Phase 8 defined
 progress:
   total_phases: 2
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 3
+  completed_plans: 1
 ---
 
 # Project State
@@ -39,6 +38,8 @@ v1.2 progress: [          ] 0% (0/2 phases)
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+- [Phase 07-rtcm-relay]: Box<[u8; 1029]> for RtcmBody buffer to avoid stack overflow even with 12288 stack
+- [Phase 07-rtcm-relay]: Complete RTCM frame published (preamble+header+payload+CRC) not just payload for independent CRC verification by consumers
 
 ### Pending Todos
 
@@ -55,7 +56,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-03-07
-Stopped at: Roadmap created for v1.2
+Last session: 2026-03-07T03:18:29.259Z
+Stopped at: Completed 07-rtcm-relay 07-02-PLAN.md
 Resume file: None
 Next action: `/gsd:plan-phase 7`
