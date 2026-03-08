@@ -109,11 +109,11 @@ Plans:
   2. Publishing MQTT or processing subscriptions does not generate additional log entries that appear on the log topic (no feedback loop)
   3. Publishing a log level string to the log config topic changes which messages are forwarded immediately, without reboot
   4. Log publishing does not stall the calling thread when MQTT is disconnected or the channel is full; messages are silently dropped
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 16-01: ESP-IDF log hook with re-entrancy guard and MQTT forwarding
-- [ ] 16-02: Level config topic and drop-on-full channel
+- [ ] 16-01-PLAN.md — C vprintf hook (log_shim.c), Rust relay module (log_relay.rs), build system integration (LOG-01, LOG-03)
+- [ ] 16-02-PLAN.md — Wire log relay into main.rs, /log/level subscription and runtime level apply in mqtt.rs (LOG-01, LOG-02, LOG-03)
 
 ### Phase 17: NTRIP Client
 **Goal**: The device connects to a configured NTRIP caster over TCP and streams RTCM3 correction data to the UM980 UART, enabling RTK fix; connection settings are configurable at runtime via MQTT without reboot
@@ -162,7 +162,7 @@ Plans:
 | 12. Resilience | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 13. Health Telemetry | v1.3 | 1/1 | Complete | 2026-03-08 |
 | 14. Quick Additions | v2.0 | 2/2 | Complete | 2026-03-07 |
-| 15. Provisioning | 3/3 | Complete    | 2026-03-08 | - |
+| 15. Provisioning | v2.0 | 3/3 | Complete | 2026-03-08 |
 | 16. Remote Logging | v2.0 | 0/2 | Not started | - |
 | 17. NTRIP Client | v2.0 | 0/2 | Not started | - |
 | 18. Telemetry and OTA Validation | v2.0 | 0/2 | Not started | - |
