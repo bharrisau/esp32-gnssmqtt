@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: completed
-stopped_at: Completed 17-02-PLAN.md
-last_updated: "2026-03-08T14:15:35.753Z"
+stopped_at: Completed 17-03-PLAN.md
+last_updated: "2026-03-08T14:21:10.093Z"
 last_activity: "2026-03-08 — Phase 15 plan 03 executed; GPIO9 monitor, MQTT "softap" trigger, LedState::SoftAP pattern added"
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
   percent: 100
 ---
 
@@ -56,6 +56,7 @@ Progress: [██████████] 100%
 | Phase 16-remote-logging P02 | 3 | 2 tasks | 2 files |
 | Phase 17-ntrip-client P01 | 4 | 2 tasks | 2 files |
 | Phase 17 P02 | 8 | 2 tasks | 2 files |
+| Phase 17-ntrip-client P03 | 3 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,9 @@ Key carry-forward notes:
 - [Phase 17-01]: Custom inline base64 encoder avoids adding base64 crate dependency; NTRIP config no deduplication (reconnect on repeat payload)
 - [Phase 17]: ntrip/config dispatch placed BEFORE /config branch to prevent routing collision (both end with /config)
 - [Phase 17]: NTRIP_BACKOFF_STEPS kept in ntrip_client.rs as module-local const — no config.rs addition needed
+- [Phase 17-03]: strip_ansi uses byte scan (no regex crate) matching ESC-bracket pattern for ANSI SGR sequences from C vprintf path
+- [Phase 17-03]: UM980 reboot monitor uses warning fallback — NVS-backed gnss config re-apply deferred (config_relay reads MQTT channel not NVS)
+- [Phase 17-03]: um980_reboot channel bounded to 1 to coalesce rapid reboot signals; sentence_type cloned before nmea_tx move for reboot check
 
 ### Pending Todos
 
@@ -105,7 +109,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-08T14:15:35.748Z
-Stopped at: Completed 17-02-PLAN.md
+Last session: 2026-03-08T14:21:10.089Z
+Stopped at: Completed 17-03-PLAN.md
 Resume file: None
 Next action: Phase 15 complete — all 8 PROV requirements done. Proceed to next phase.
