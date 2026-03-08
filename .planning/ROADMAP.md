@@ -163,6 +163,6 @@ Plans:
 | 13. Health Telemetry | v1.3 | 1/1 | Complete | 2026-03-08 |
 | 14. Quick Additions | v2.0 | 2/2 | Complete | 2026-03-07 |
 | 15. Provisioning | v2.0 | 3/3 | Complete | 2026-03-08 |
-| 16. Remote Logging | 2/2 | Complete   | 2026-03-08 | - |
+| 16. Remote Logging | 2/2 | Complete    | 2026-03-08 | - |
 | 17. NTRIP Client | v2.0 | 0/2 | Not started | - |
 | 18. Telemetry and OTA Validation | v2.0 | 0/2 | Not started | - |
