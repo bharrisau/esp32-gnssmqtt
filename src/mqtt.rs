@@ -31,6 +31,7 @@ pub fn mqtt_connect(
     config_tx: SyncSender<Vec<u8>>,
     ota_tx: SyncSender<Vec<u8>>,
     cmd_relay_tx: SyncSender<Vec<u8>>,   // NEW — CMD-01
+    log_level_tx: SyncSender<Vec<u8>>,  // NEW — LOG-02
     led_state: Arc<AtomicU8>,
 ) -> anyhow::Result<Arc<Mutex<EspMqttClient<'static>>>> {
     let broker_url = format!("mqtt://{}:{}", host, port);
@@ -125,6 +126,13 @@ pub fn mqtt_connect(
                         Err(TrySendError::Full(_)) => log::warn!("mqtt cb: command channel full — command dropped"),
                         Err(TrySendError::Disconnected(_)) => log::warn!("mqtt cb: command channel closed"),
                     }
+                } else if t.ends_with("/log/level") {
+                    // LOG-02: runtime log level change — silently drop if channel full.
+                    match log_level_tx.try_send(data.to_vec()) {
+                        Ok(_) => {}
+                        Err(TrySendError::Full(_)) => {}    // silently drop — level change can wait
+                        Err(TrySendError::Disconnected(_)) => {}
+                    }
                 }
                 // All other topics: silently ignored
             }
@@ -180,6 +188,13 @@ pub fn subscriber_loop(
                             Ok(_) => log::info!("Subscribed to {}", command_topic),
                             Err(e) => log::warn!("Subscribe /command failed: {:?}", e),
                         }
+                        // LOG-02: subscribe to runtime log level topic.
+                        // AtLeastOnce so a retained level setting persists across broker reconnects.
+                        let log_level_topic = format!("gnss/{}/log/level", device_id);
+                        match c.subscribe(&log_level_topic, QoS::AtLeastOnce) {
+                            Ok(_) => log::info!("Subscribed to {}", log_level_topic),
+                            Err(e) => log::warn!("Subscribe /log/level failed: {:?}", e),
+                        }
                     }
                 }
             }
@@ -231,6 +246,56 @@ pub fn command_relay_task(
             }
             Err(RecvTimeoutError::Disconnected) => {
                 log::error!("Command relay: channel closed — thread parking");
+                loop { std::thread::sleep(std::time::Duration::from_secs(60)); }
+            }
+        }
+    }
+}
+
+/// Parse a log level string payload and apply it via EspLogger::set_target_level.
+///
+/// Accepts "error", "warn", "info", "debug", "verbose" (case-sensitive).
+/// Unknown values are logged and ignored. All errors from set_target_level are logged.
+/// Does not use log:: while the re-entrancy guard may be active — uses a local logger instance.
+fn apply_log_level(payload: &[u8]) {
+    let level_str = match std::str::from_utf8(payload) {
+        Ok(s) => s.trim(),
+        Err(_) => return,
+    };
+    let filter = match level_str {
+        "error"   => log::LevelFilter::Error,
+        "warn"    => log::LevelFilter::Warn,
+        "info"    => log::LevelFilter::Info,
+        "debug"   => log::LevelFilter::Debug,
+        "verbose" => log::LevelFilter::Trace,
+        _ => {
+            log::warn!("log level: unknown value {:?}", level_str);
+            return;
+        }
+    };
+    if let Err(e) = esp_idf_svc::log::set_target_level("*", filter) {
+        log::warn!("log level set failed: {:?}", e);
+    } else {
+        log::info!("Log level changed to: {}", level_str);
+    }
+}
+
+/// Drain the log_level channel and apply level changes via apply_log_level.
+///
+/// Mirrors the pattern of command_relay_task: recv_timeout loop, HWM at entry,
+/// park on channel close. LOG-02: each received payload is applied immediately.
+pub fn log_level_relay_task(log_level_rx: Receiver<Vec<u8>>) -> ! {
+    let hwm_words = unsafe {
+        esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+    };
+    log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+        "log level relay", hwm_words, hwm_words * 4);
+    loop {
+        match log_level_rx.recv_timeout(crate::config::SLOW_RECV_TIMEOUT) {
+            Ok(payload) => apply_log_level(&payload),
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => {
+                log::error!("log_level_relay: channel closed — thread parking");
                 loop { std::thread::sleep(std::time::Duration::from_secs(60)); }
             }
         }
