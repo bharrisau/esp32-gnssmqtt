@@ -256,7 +256,13 @@ pub fn command_relay_task(
 ///
 /// Accepts "error", "warn", "info", "debug", "verbose" (case-sensitive).
 /// Unknown values are logged and ignored. All errors from set_target_level are logged.
-/// Does not use log:: while the re-entrancy guard may be active — uses a local logger instance.
+///
+/// Two filters must be updated together:
+///   - esp_idf_svc::log::set_target_level: updates ESP-IDF's C-level tag filter (used by
+///     EspLogger::should_log and the vprintf hook path for C component logs).
+///   - log::set_max_level: updates Rust's log crate filter. Without this, Rust log:: calls
+///     at the old level still reach MqttLogger::log() because the crate checks its own
+///     max_level before even calling the logger — esp_log_level_set alone has no effect.
 fn apply_log_level(payload: &[u8]) {
     let level_str = match std::str::from_utf8(payload) {
         Ok(s) => s.trim(),
@@ -275,9 +281,13 @@ fn apply_log_level(payload: &[u8]) {
     };
     if let Err(e) = esp_idf_svc::log::set_target_level("*", filter) {
         log::warn!("log level set failed: {:?}", e);
-    } else {
-        log::info!("Log level changed to: {}", level_str);
+        return;
     }
+    // Sync Rust's own filter — must happen after set_target_level succeeds.
+    // Confirmation uses warn! so it remains visible when transitioning to warn level.
+    // (At error level the warn confirmation is also suppressed — acceptable.)
+    log::set_max_level(filter);
+    log::warn!("Log level → {}", level_str);
 }
 
 /// Drain the log_level channel and apply level changes via apply_log_level.

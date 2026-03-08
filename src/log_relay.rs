@@ -70,19 +70,27 @@ impl log::Log for MqttLogger {
             return;
         }
         if let Some(tx) = LOG_TX.get() {
-            let msg = format!(
-                "{} ({}) {}: {}",
-                match record.level() {
-                    log::Level::Error => "E",
-                    log::Level::Warn  => "W",
-                    log::Level::Info  => "I",
-                    log::Level::Debug => "D",
-                    log::Level::Trace => "V",
-                },
-                unsafe { esp_idf_svc::sys::esp_log_timestamp() },
-                record.target(),
-                record.args(),
-            );
+            let marker = match record.level() {
+                log::Level::Error => "E",
+                log::Level::Warn  => "W",
+                log::Level::Info  => "I",
+                log::Level::Debug => "D",
+                log::Level::Trace => "V",
+            };
+            // Match EspLogger's timestamp source: system time (SNTP wall clock) when
+            // esp_idf_log_timestamp_source_system is configured, otherwise RTOS ticks.
+            // Using the same source keeps MQTT and UART timestamps consistent.
+            #[cfg(esp_idf_log_timestamp_source_system)]
+            let ts = unsafe {
+                std::ffi::CStr::from_ptr(esp_idf_svc::sys::esp_log_system_timestamp())
+                    .to_str()
+                    .unwrap_or("?")
+                    .to_owned()
+            };
+            #[cfg(not(esp_idf_log_timestamp_source_system))]
+            let ts = unsafe { esp_idf_svc::sys::esp_log_timestamp() }.to_string();
+
+            let msg = format!("{} ({}) {}: {}", marker, ts, record.target(), record.args());
             let _ = tx.try_send(msg);
         }
     }
