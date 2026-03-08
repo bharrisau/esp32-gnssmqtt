@@ -54,9 +54,9 @@
 
 ### NTRIP Client (NTRIP)
 
-- [ ] **NTRIP-01**: Device connects to configured NTRIP caster and streams RTCM3 corrections to UM980 UART
+- [x] **NTRIP-01**: Device connects to configured NTRIP caster and streams RTCM3 corrections to UM980 UART
 - [ ] **NTRIP-02**: NTRIP settings (host, port, mountpoint, user, pass) configurable via retained MQTT topic `gnss/{device_id}/ntrip/config`
-- [ ] **NTRIP-03**: NTRIP client reconnects automatically on connection loss
+- [x] **NTRIP-03**: NTRIP client reconnects automatically on connection loss
 - [ ] **NTRIP-04**: NTRIP connection state included in health heartbeat
 
 ### Command Relay (CMD)
@@ -138,9 +138,9 @@
 | LOG-01 | Phase 16 | Complete |
 | LOG-02 | Phase 16 | Complete |
 | LOG-03 | Phase 16 | Complete |
-| NTRIP-01 | Phase 17 | Pending |
+| NTRIP-01 | Phase 17 | Complete |
 | NTRIP-02 | Phase 17 | Pending |
-| NTRIP-03 | Phase 17 | Pending |
+| NTRIP-03 | Phase 17 | Complete |
 | NTRIP-04 | Phase 17 | Pending |
 | TELEM-01 | Phase 18 | Pending |
 | MAINT-03 | Phase 18 | Pending |
