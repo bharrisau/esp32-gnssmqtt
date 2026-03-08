@@ -78,7 +78,7 @@
 
 ### Telemetry (TELEM)
 
-- [ ] **TELEM-01**: Health heartbeat includes GNSS fix type, satellite count, and HDOP parsed from the most recent GGA sentence
+- [x] **TELEM-01**: Health heartbeat includes GNSS fix type, satellite count, and HDOP parsed from the most recent GGA sentence
 
 ## Future Requirements
 
@@ -142,7 +142,7 @@
 | NTRIP-02 | Phase 17 | Complete |
 | NTRIP-03 | Phase 17 | Complete |
 | NTRIP-04 | Phase 17 | Complete |
-| TELEM-01 | Phase 18 | Pending |
+| TELEM-01 | Phase 18 | Complete |
 | MAINT-03 | Phase 18 | Pending |
 
 **Coverage:**
