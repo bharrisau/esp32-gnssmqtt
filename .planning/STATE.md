@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: completed
-stopped_at: Completed 17-01-PLAN.md
-last_updated: "2026-03-08T14:11:12.831Z"
+stopped_at: Completed 17-02-PLAN.md
+last_updated: "2026-03-08T14:15:35.753Z"
 last_activity: "2026-03-08 — Phase 15 plan 03 executed; GPIO9 monitor, MQTT "softap" trigger, LedState::SoftAP pattern added"
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
   percent: 100
 ---
 
@@ -55,6 +55,7 @@ Progress: [██████████] 100%
 | Phase 16 P01 | 6 | 2 tasks | 5 files |
 | Phase 16-remote-logging P02 | 3 | 2 tasks | 2 files |
 | Phase 17-ntrip-client P01 | 4 | 2 tasks | 2 files |
+| Phase 17 P02 | 8 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,8 @@ Key carry-forward notes:
 - [Phase 17-01]: spawn_gnss returns Arc<UartDriver<'static>> as 5th tuple element; main.rs update deferred to Plan 02
 - [Phase 17-01]: RTCM correction bytes written directly to Arc<UartDriver> (not gnss_cmd_tx String channel) to avoid binary data corruption
 - [Phase 17-01]: Custom inline base64 encoder avoids adding base64 crate dependency; NTRIP config no deduplication (reconnect on repeat payload)
+- [Phase 17]: ntrip/config dispatch placed BEFORE /config branch to prevent routing collision (both end with /config)
+- [Phase 17]: NTRIP_BACKOFF_STEPS kept in ntrip_client.rs as module-local const — no config.rs addition needed
 
 ### Pending Todos
 
@@ -102,7 +105,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-08T14:11:12.827Z
-Stopped at: Completed 17-01-PLAN.md
+Last session: 2026-03-08T14:15:35.748Z
+Stopped at: Completed 17-02-PLAN.md
 Resume file: None
 Next action: Phase 15 complete — all 8 PROV requirements done. Proceed to next phase.
