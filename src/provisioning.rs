@@ -9,6 +9,7 @@ use embedded_svc::wifi::{AccessPointConfiguration, AuthMethod, Configuration};
 use esp_idf_svc::http::server::{Configuration as HttpConfig, EspHttpServer};
 use embedded_svc::http::{Headers, Method};
 use embedded_svc::io::Write;
+use std::net::UdpSocket;
 
 const PROV_HTML: &str = "<!DOCTYPE html>\
 <html><head><title>GNSS Setup</title></head><body>\
@@ -275,6 +276,105 @@ pub fn run_softap_portal(
     server.fn_handler("/redirect", Method::Get, move |req| {
         req.into_ok_response()?.write_all(redirect_html)
     })?;
+
+    // Captive portal DNS hijack: respond to all DNS A queries with 192.168.71.1.
+    // This causes any device connected to the SoftAP to resolve all hostnames to
+    // the portal IP, triggering the OS captive portal detection flow.
+    // Thread is not explicitly stopped — it will exit when the ESP32 reboots after
+    // credential save (the reboot happens in a spawned thread after 1s delay).
+    std::thread::Builder::new()
+        .stack_size(4096)
+        .spawn(move || {
+            let hwm_words = unsafe {
+                esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+            };
+            log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+                "DNS hijack", hwm_words, hwm_words * 4);
+
+            let socket = match UdpSocket::bind("0.0.0.0:53") {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("DNS hijack: failed to bind UDP port 53: {:?}", e);
+                    return;
+                }
+            };
+
+            // Set read timeout so the thread can periodically yield rather than
+            // blocking indefinitely.
+            if let Err(e) = socket.set_read_timeout(Some(std::time::Duration::from_secs(2))) {
+                log::warn!("DNS hijack: set_read_timeout failed: {:?}", e);
+            }
+
+            log::info!("DNS hijack: listening on UDP port 53");
+            let mut buf = [0u8; 512];
+
+            loop {
+                match socket.recv_from(&mut buf) {
+                    Ok((len, src)) => {
+                        if len < 12 {
+                            continue; // too short to be a valid DNS query
+                        }
+                        // Only respond to queries (QR=0), not responses.
+                        if buf[2] & 0x80 != 0 {
+                            continue; // already a response — ignore
+                        }
+                        // Only respond if QDCOUNT is non-zero.
+                        let qdcount = u16::from_be_bytes([buf[4], buf[5]]);
+                        if qdcount == 0 {
+                            continue; // nothing to answer
+                        }
+
+                        // Build DNS response: copy header, set QR+AA bits, set ANCOUNT=1.
+                        // Append one A record RR pointing to 192.168.71.1.
+                        let mut resp = Vec::with_capacity(len + 16);
+
+                        // Copy the query packet verbatim as the response base
+                        resp.extend_from_slice(&buf[..len]);
+
+                        // Set QR bit (bit 15 of flags word at bytes 2-3): response
+                        // Set AA bit (bit 10 of flags word): authoritative answer
+                        // Clear RCODE (bits 3:0): no error
+                        resp[2] = (resp[2] | 0x80) & 0xFF; // QR=1
+                        resp[3] = (resp[3] | 0x04) & 0xF4; // AA=1, clear RCODE
+                        // Set ANCOUNT to 1 (bytes 6-7)
+                        resp[6] = 0x00;
+                        resp[7] = 0x01;
+                        // Clear NSCOUNT and ARCOUNT (bytes 8-11) — no NS or AR records
+                        resp[8] = 0x00; resp[9] = 0x00;
+                        resp[10] = 0x00; resp[11] = 0x00;
+
+                        // Append answer RR:
+                        // NAME: pointer to offset 12 (start of question QNAME)
+                        resp.extend_from_slice(&[0xC0, 0x0C]);
+                        // TYPE: A (1)
+                        resp.extend_from_slice(&[0x00, 0x01]);
+                        // CLASS: IN (1)
+                        resp.extend_from_slice(&[0x00, 0x01]);
+                        // TTL: 30 seconds (short: clients re-query quickly when AP disappears)
+                        resp.extend_from_slice(&[0x00, 0x00, 0x00, 0x1E]);
+                        // RDLENGTH: 4 (IPv4 address)
+                        resp.extend_from_slice(&[0x00, 0x04]);
+                        // RDATA: 192.168.71.1
+                        resp.extend_from_slice(&[192, 168, 71, 1]);
+
+                        if let Err(e) = socket.send_to(&resp, src) {
+                            log::warn!("DNS hijack: send_to {:?} failed: {:?}", src, e);
+                        }
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock
+                               || e.kind() == std::io::ErrorKind::TimedOut => {
+                        // Read timeout — normal idle state. Loop and wait for next query.
+                    }
+                    Err(e) => {
+                        log::warn!("DNS hijack: recv_from error: {:?}", e);
+                        // Brief sleep to avoid tight error loop on persistent socket errors.
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                }
+            }
+        })
+        .expect("DNS hijack thread spawn failed");
+    log::info!("DNS hijack started — all DNS queries will resolve to 192.168.71.1");
 
     // Step 5: 300-second no-client timeout loop. Keeps server alive in scope.
     let mut no_client_since = std::time::Instant::now();
