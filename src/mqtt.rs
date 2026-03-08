@@ -393,10 +393,22 @@ pub fn heartbeat_loop(
                 let ntrip_state = crate::ntrip_client::NTRIP_STATE.load(Ordering::Relaxed);
                 let ntrip_str = if ntrip_state == 1 { "connected" } else { "disconnected" };
 
+                // TELEM-01: include GNSS fix quality fields in heartbeat.
+                let fix_type_raw = crate::gnss_state::GGA_FIX_TYPE.load(Ordering::Relaxed);
+                let sats_raw = crate::gnss_state::GGA_SATELLITES.load(Ordering::Relaxed);
+                let hdop_raw = crate::gnss_state::GGA_HDOP_X10.load(Ordering::Relaxed);
+                let fix_type_json = if fix_type_raw == 0xFF { "null".to_string() } else { fix_type_raw.to_string() };
+                let sats_json = if sats_raw == 0xFF { "null".to_string() } else { sats_raw.to_string() };
+                let hdop_json = if hdop_raw == 0xFFFF { "null".to_string() } else {
+                    format!("{:.1}", hdop_raw as f32 / 10.0)
+                };
+
                 let json = format!(
                     "{{\"uptime_s\":{},\"heap_free\":{},\"nmea_drops\":{},\"rtcm_drops\":{},\
-                     \"uart_tx_errors\":{},\"ntrip\":\"{}\"}}",
-                    uptime_s, heap_free, nmea_drops, rtcm_drops, uart_tx_errors, ntrip_str
+                     \"uart_tx_errors\":{},\"ntrip\":\"{}\",\
+                     \"fix_type\":{},\"satellites\":{},\"hdop\":{}}}",
+                    uptime_s, heap_free, nmea_drops, rtcm_drops, uart_tx_errors, ntrip_str,
+                    fix_type_json, sats_json, hdop_json
                 );
 
                 log::info!("Heartbeat: {}", json);
