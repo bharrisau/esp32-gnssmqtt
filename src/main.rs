@@ -20,6 +20,7 @@
 //! 15. RTCM relay: rtcm_relay::spawn_relay(mqtt_client clone, device_id clone, rtcm_rx)
 //!    15b. mark_running_slot_valid() — called after mqtt_connect, before relay threads
 //! 16. OTA task: spawn_ota(mqtt_client clone, device_id clone, ota_rx, nvs clone)
+//! 17b. NTRIP client: spawn_ntrip_client(uart_arc clone, ntrip_config_rx, nvs clone)
 //! 17. Watchdog supervisor (spawned last of critical threads)
 //! 9.5. log_relay::spawn_log_relay — activates MQTT log forwarding (LOG-01)
 //! 9.6. Log level relay thread — applies /log/level runtime changes (LOG-02)
@@ -39,6 +40,7 @@ mod gnss;
 mod led;
 mod log_relay;
 mod mqtt;
+mod ntrip_client;
 mod config_relay;
 mod nmea_relay;
 mod rtcm_relay;
@@ -153,8 +155,9 @@ fn main() {
     log::info!("SNTP initialized — wall-clock time will sync in background");
 
     // Step 7: GNSS pipeline — exclusive UART ownership, RX + TX threads
-    // spawn_gnss returns (cmd_tx, nmea_rx, rtcm_rx, free_pool_tx); rtcm_rx + free_pool_tx wired to rtcm_relay below.
-    let (gnss_cmd_tx, nmea_rx, rtcm_rx, free_pool_tx) = gnss::spawn_gnss(
+    // spawn_gnss returns (cmd_tx, nmea_rx, rtcm_rx, free_pool_tx, uart_arc);
+    // uart_arc passed to spawn_ntrip_client (Step 17b) for direct RTCM byte writes.
+    let (gnss_cmd_tx, nmea_rx, rtcm_rx, free_pool_tx, uart_arc) = gnss::spawn_gnss(
         peripherals.uart0,
         peripherals.pins.gpio16,  // TX line to UM980
         peripherals.pins.gpio17,  // RX line from UM980
@@ -195,6 +198,10 @@ fn main() {
     // Bounded to 4: operator-triggered and rare; retained level message on reconnect + burst.
     let (log_level_tx, log_level_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(4);
 
+    // ntrip config — callback → ntrip_client thread
+    // Bounded to 4: operator-triggered; retained message on reconnect + burst.
+    let (ntrip_config_tx, ntrip_config_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(4);
+
     // Step 9: MQTT — after WiFi (IP must be up). Event dispatch runs in the ESP-IDF C MQTT
     // task thread via callback; no blocking pump thread needed.
     log::info!("Connecting to MQTT broker...");
@@ -204,7 +211,9 @@ fn main() {
         mqtt_port,
         &mqtt_user_str,
         &mqtt_pass_str,
-        subscribe_tx, status_tx, config_tx, ota_tx, cmd_relay_tx, log_level_tx, led_state_mqtt,
+        subscribe_tx, status_tx, config_tx, ota_tx, cmd_relay_tx, log_level_tx,
+        ntrip_config_tx,   // NTRIP-02
+        led_state_mqtt,
     ).expect("MQTT connect failed");
     log::info!("MQTT client created");
 
@@ -292,6 +301,11 @@ fn main() {
     ota::spawn_ota(mqtt_client.clone(), device_id.clone(), ota_rx, nvs.clone())
         .expect("OTA task spawn failed");
     log::info!("OTA task started");
+
+    // Step 17b: NTRIP client — streams RTCM3 corrections from configured caster to UM980 UART (NTRIP-01..04)
+    ntrip_client::spawn_ntrip_client(Arc::clone(&uart_arc), ntrip_config_rx, nvs.clone())
+        .expect("NTRIP client spawn failed");
+    log::info!("NTRIP client started");
 
     // Step 18: Watchdog supervisor — spawned last so all critical threads are running before monitoring begins.
     // Detects silent hangs in GNSS RX and MQTT pump threads; calls esp_restart() after 3 missed beats (15s).
