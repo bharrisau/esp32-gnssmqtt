@@ -43,6 +43,66 @@ pub fn wifi_connect(
     Ok(wifi)
 }
 
+/// Connect to the first available network from a list of stored credentials (PROV-05).
+///
+/// Cycles through all networks up to 3 times before giving up.
+/// For each attempt: stop → reconfigure → start → connect → wait_netif_up.
+/// stop() + start() before each reconfigure is required for reliable network switching.
+///
+/// PROV-05: Does NOT enter SoftAP mode on failure. The RESIL-01 reboot timer in
+/// wifi_supervisor handles sustained WiFi failure recovery.
+pub fn wifi_connect_any(
+    modem: impl esp_idf_svc::hal::peripheral::Peripheral<P = esp_idf_svc::hal::modem::Modem> + 'static,
+    sysloop: EspSystemEventLoop,
+    nvs: EspDefaultNvsPartition,
+    networks: Vec<(String, String)>,
+) -> anyhow::Result<BlockingWifi<EspWifi<'static>>> {
+    let mut wifi = BlockingWifi::wrap(
+        EspWifi::new(modem, sysloop.clone(), Some(nvs))?,
+        sysloop,
+    )?;
+
+    if networks.is_empty() {
+        anyhow::bail!("wifi_connect_any: no networks provided");
+    }
+
+    let max_attempts = networks.len() * 3;
+    for (attempt, (ssid, pass)) in networks.iter().cycle().take(max_attempts).enumerate() {
+        log::info!(
+            "WiFi: attempt {}/{} — SSID '{}'",
+            attempt + 1,
+            max_attempts,
+            ssid
+        );
+
+        wifi.set_configuration(&Configuration::Client(ClientConfiguration {
+            ssid: ssid.as_str().try_into().unwrap_or_default(),
+            password: pass.as_str().try_into().unwrap_or_default(),
+            auth_method: AuthMethod::WPA2Personal,
+            ..Default::default()
+        }))?;
+
+        // start() required before connect(); stop() required before next reconfigure.
+        let _ = wifi.start();
+
+        match wifi.connect() {
+            Ok(_) => match wifi.wait_netif_up() {
+                Ok(_) => {
+                    log::info!("WiFi connected to '{}'", ssid);
+                    return Ok(wifi);
+                }
+                Err(e) => log::warn!("WiFi netif_up failed for '{}': {:?}", ssid, e),
+            },
+            Err(e) => log::warn!("WiFi connect failed for '{}': {:?}", ssid, e),
+        }
+
+        let _ = wifi.stop();
+        std::thread::sleep(std::time::Duration::from_secs(2));
+    }
+
+    anyhow::bail!("wifi_connect_any: all {} attempts failed", max_attempts)
+}
+
 /// WiFi reconnect supervisor.
 ///
 /// Runs forever in a dedicated thread. Polls connection state every 5 seconds.
