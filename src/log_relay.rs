@@ -1,23 +1,31 @@
-//! Log relay — captures ESP-IDF vprintf output and publishes to MQTT.
+//! Log relay — captures all log output (Rust + C components) and publishes to MQTT.
 //!
 //! Architecture:
-//!   1. `install_mqtt_log_hook()` (in log_shim.c, called from main.rs in Plan 02) installs
-//!      the vprintf hook. Every log line calls `rust_log_try_send` via FFI.
-//!   2. `rust_log_try_send` drops the message into LOG_TX (a bounded sync_channel).
-//!      try_send is used — never blocks — satisfying LOG-03.
+//!   Rust `log::` calls bypass `esp_log_vprintf_func` entirely — EspLogger writes directly
+//!   to the newlib stdout FILE* via fwrite. Two complementary capture paths are used:
+//!
+//!   1. `MqttLogger` (Rust path): composite `log::Log` implementation wrapping EspLogger.
+//!      Intercepts at the trait level so every `log::info!()` etc. is forwarded to LOG_TX.
+//!      Installed via `log::set_boxed_logger` in place of `EspLogger::initialize_default()`.
+//!
+//!   2. vprintf hook (C path): `install_mqtt_log_hook()` (log_shim.c) replaces
+//!      `esp_log_vprintf_func`. C component logs (wifi, tcp/ip, etc.) that go through
+//!      `esp_log_write` reach `rust_log_try_send` via FFI and into LOG_TX.
+//!
 //!   3. The relay thread drains LOG_TX and publishes each message to
 //!      `gnss/{device_id}/log` at QoS 0 (AtMostOnce).
 //!
 //! Re-entrancy guard:
-//!   LOG_REENTERING is set to true before any MQTT publish work and cleared after.
-//!   log_shim.c checks `rust_log_is_reentering()` before forwarding — if the relay
-//!   thread itself logs (which it must NOT do), the guard prevents a feedback loop.
+//!   LOG_REENTERING is set to true while the relay thread is inside the MQTT publish path.
+//!   Both MqttLogger::log() and log_shim.c check this before forwarding — preventing a
+//!   feedback loop if the MQTT stack or relay thread itself emits log output.
 //!   CRITICAL: the relay thread's publish path must NEVER call any log:: macro.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{sync_channel, SyncSender};
 use embedded_svc::mqtt::client::QoS;
+use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::mqtt::client::EspMqttClient;
 
 /// Re-entrancy guard: set to true while the relay thread is inside the MQTT publish path.
@@ -27,6 +35,60 @@ static LOG_REENTERING: AtomicBool = AtomicBool::new(false);
 /// Global sender end of the log channel. Stored here so `rust_log_try_send` can reach it
 /// without any allocation or locking on the hot path.
 static LOG_TX: std::sync::OnceLock<SyncSender<String>> = std::sync::OnceLock::new();
+
+/// Composite logger: wraps EspLogger for UART output and also forwards to LOG_TX for MQTT.
+///
+/// Rust's `log::` calls bypass `esp_log_vprintf_func` entirely (EspLogger writes directly
+/// to the newlib stdout FILE*). Intercepting here at the `log::Log` trait level is the
+/// only reliable way to capture Rust module logs for MQTT relay.
+pub struct MqttLogger {
+    inner: EspLogger,
+}
+
+impl MqttLogger {
+    /// Install as the global Rust logger. Call once, before any `log::` use.
+    /// Equivalent to `EspLogger::initialize_default()` but also enables MQTT forwarding.
+    pub fn initialize() {
+        let logger = Box::new(MqttLogger { inner: EspLogger::new() });
+        let max_level = logger.inner.get_max_level();
+        log::set_boxed_logger(logger).expect("logger already set");
+        log::set_max_level(max_level);
+    }
+}
+
+impl log::Log for MqttLogger {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        self.inner.enabled(metadata)
+    }
+
+    fn log(&self, record: &log::Record) {
+        // UART output via EspLogger (preserves existing behavior, handles level filtering)
+        self.inner.log(record);
+
+        // MQTT forwarding: skip if relay thread is publishing (re-entrancy guard)
+        if LOG_REENTERING.load(Ordering::Relaxed) {
+            return;
+        }
+        if let Some(tx) = LOG_TX.get() {
+            let msg = format!(
+                "{} ({}) {}: {}",
+                match record.level() {
+                    log::Level::Error => "E",
+                    log::Level::Warn  => "W",
+                    log::Level::Info  => "I",
+                    log::Level::Debug => "D",
+                    log::Level::Trace => "V",
+                },
+                unsafe { esp_idf_svc::sys::esp_log_timestamp() },
+                record.target(),
+                record.args(),
+            );
+            let _ = tx.try_send(msg);
+        }
+    }
+
+    fn flush(&self) {}
+}
 
 /// FFI: Called from log_shim.c to check if we are currently publishing a log message.
 /// Returns 1 if re-entering (skip MQTT path), 0 otherwise.

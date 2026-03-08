@@ -2,7 +2,7 @@
 //!
 //! Initialization order is MANDATORY:
 //! 1. esp_idf_svc::sys::link_patches() — MUST be first, applies linker patches
-//! 2. EspLogger::initialize_default() — MUST be before any log:: calls
+//! 2. log_relay::MqttLogger::initialize() — MUST be before any log:: calls
 //! 3. Peripherals::take() — take hardware ownership
 //! 3b-3e. LED state Arc + GPIO15 PinDriver + LED thread spawn
 //! 4. EspSystemEventLoop::take() — required by WiFi
@@ -28,7 +28,6 @@
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::gpio::PinDriver;
 use esp_idf_svc::hal::prelude::*;
-use esp_idf_svc::log::EspLogger;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sntp;
 use std::sync::Arc;
@@ -55,12 +54,16 @@ fn main() {
     // Omitting this causes a hard fault at boot.
     esp_idf_svc::sys::link_patches();
 
-    // Step 2: Initialize the ESP-IDF logging backend.
-    // MUST be called before any log::info!/warn!/error! calls.
-    EspLogger::initialize_default();
+    // Step 2: Install composite logger — MUST be before any log:: calls.
+    // MqttLogger wraps EspLogger for UART output and also forwards to the MQTT log channel
+    // once spawn_log_relay initializes LOG_TX. Rust log:: calls bypass esp_log_vprintf_func
+    // entirely (EspLogger writes directly to newlib stdout), so the vprintf hook alone is
+    // insufficient for Rust module logs — this composite logger is required.
+    log_relay::MqttLogger::initialize();
 
-    // Step 2b: Install vprintf hook — captures all ESP-IDF log output for MQTT forwarding.
-    // MUST be after EspLogger::initialize_default() so the original vprintf is already set.
+    // Step 2b: Install vprintf hook — captures C component logs (wifi, tcp/ip, etc.) that
+    // go through esp_log_write → esp_log_vprintf_func. MUST be after MqttLogger::initialize()
+    // so the original vprintf is already set. Complements MqttLogger (which covers Rust logs).
     // Early log messages before MQTT connects are silently dropped (LOG_TX not yet initialized).
     extern "C" {
         fn install_mqtt_log_hook();
