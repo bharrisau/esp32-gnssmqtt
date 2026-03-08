@@ -96,6 +96,9 @@ fn main() {
     // Step 6: WiFi — SoftAP if no credentials or force_softap flag; STA otherwise.
     let wifi = if force_softap || !has_credentials {
         log::info!("Entering SoftAP provisioning mode...");
+        // Signal SoftAP LED pattern (PROV-08) before blocking in portal.
+        // led_state_wifi is still in scope here (not yet moved into wifi_supervisor thread).
+        led_state_wifi.store(crate::led::LedState::SoftAP as u8, std::sync::atomic::Ordering::Relaxed);
         let mut softap_wifi = esp_idf_svc::wifi::BlockingWifi::wrap(
             esp_idf_svc::wifi::EspWifi::new(peripherals.modem, sysloop.clone(), Some(nvs.clone()))
                 .expect("EspWifi new failed in SoftAP path"),
@@ -251,7 +254,8 @@ fn main() {
 
     // Step 17: OTA task — receives /ota/trigger payloads, performs HTTP download + flash + reboot.
     // ota_rx is moved into spawn_ota — do NOT retain a reference here.
-    ota::spawn_ota(mqtt_client.clone(), device_id.clone(), ota_rx)
+    // nvs clone passed for PROV-07: "softap" payload triggers set_force_softap + restart.
+    ota::spawn_ota(mqtt_client.clone(), device_id.clone(), ota_rx, nvs.clone())
         .expect("OTA task spawn failed");
     log::info!("OTA task started");
 

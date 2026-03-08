@@ -1,21 +1,23 @@
 //! LED state module — drives GPIO15 (active-low) with blink patterns for WiFi+MQTT state.
 //!
 //! LedState variants:
-//! - Connecting (0): 200ms on / 200ms off repeating
+//! - Connecting (0): 200ms on / 200ms off repeating; 400ms cycle
 //! - Connected  (1): steady on
 //! - Error      (2): 3× rapid pulse (100ms on / 100ms off) then 700ms off; 1300ms cycle
+//! - SoftAP     (3): 500ms on / 500ms off repeating; 1000ms cycle (PROV-08)
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 use esp_idf_hal::gpio::{Gpio15, Output, PinDriver};
 
-/// Three LED states reflecting WiFi + MQTT connectivity.
+/// Four LED states reflecting WiFi + MQTT connectivity and provisioning mode.
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq)]
 pub enum LedState {
     Connecting = 0,
     Connected  = 1,
     Error      = 2,
+    SoftAP     = 3,  // 500ms on / 500ms off — 1000ms cycle (PROV-08)
 }
 
 impl LedState {
@@ -23,6 +25,7 @@ impl LedState {
         match v {
             1 => LedState::Connected,
             2 => LedState::Error,
+            3 => LedState::SoftAP,
             _ => LedState::Connecting,
         }
     }
@@ -83,6 +86,16 @@ pub fn led_task(mut pin: PinDriver<'static, Gpio15, Output>, state: Arc<AtomicU8
                     pin.set_low().ok();
                 } else {
                     pin.set_high().ok();
+                }
+            }
+            LedState::SoftAP => {
+                // 500ms on / 500ms off — 1000ms cycle (PROV-08)
+                // Visually distinct from Connecting (400ms cycle) and Error (1300ms triple-pulse)
+                let pos = elapsed_ms % 1000;
+                if pos < 500 {
+                    pin.set_low().ok();   // LED on
+                } else {
+                    pin.set_high().ok();  // LED off
                 }
             }
         }

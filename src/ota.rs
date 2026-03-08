@@ -12,6 +12,7 @@ use embedded_svc::mqtt::client::QoS;
 use esp_idf_svc::hal::reset::restart;
 use esp_idf_svc::http::client::{Configuration as HttpConfig, EspHttpConnection};
 use esp_idf_svc::mqtt::client::EspMqttClient;
+use esp_idf_svc::nvs::{EspNvsPartition, NvsDefault};
 use esp_idf_svc::ota::EspOta;
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
@@ -60,6 +61,7 @@ pub fn ota_task(
     mqtt_client: Arc<Mutex<EspMqttClient<'static>>>,
     device_id: String,
     ota_rx: Receiver<Vec<u8>>,
+    nvs: EspNvsPartition<NvsDefault>,
 ) -> ! {
     // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
     let hwm_words = unsafe {
@@ -103,6 +105,15 @@ pub fn ota_task(
         if json.trim() == "reboot" {
             log::info!("OTA: 'reboot' payload received — restarting device");
             std::thread::sleep(std::time::Duration::from_millis(200)); // let log line flush
+            restart();
+        }
+
+        // PROV-07: handle "softap" payload — enter SoftAP mode on next boot.
+        // Check before OTA JSON parse. Same short-circuit pattern as "reboot" above.
+        if json.trim() == "softap" {
+            log::info!("OTA: 'softap' payload received — entering SoftAP mode");
+            crate::provisioning::set_force_softap(&nvs);
+            std::thread::sleep(std::time::Duration::from_millis(200)); // let log flush
             restart();
         }
 
@@ -362,10 +373,11 @@ pub fn spawn_ota(
     mqtt_client: Arc<Mutex<EspMqttClient<'static>>>,
     device_id: String,
     ota_rx: Receiver<Vec<u8>>,
+    nvs: EspNvsPartition<NvsDefault>,
 ) -> anyhow::Result<()> {
     std::thread::Builder::new()
         .stack_size(16384)
-        .spawn(move || ota_task(mqtt_client, device_id, ota_rx))
+        .spawn(move || ota_task(mqtt_client, device_id, ota_rx, nvs))
         .map(|_| ())
         .map_err(Into::into)
 }
