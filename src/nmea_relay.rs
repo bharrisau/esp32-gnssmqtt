@@ -14,6 +14,7 @@
 
 use embedded_svc::mqtt::client::QoS;
 use esp_idf_svc::mqtt::client::EspMqttClient;
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 
@@ -42,6 +43,10 @@ pub fn spawn_relay(
             loop {
                 match nmea_rx.recv_timeout(crate::config::RELAY_RECV_TIMEOUT) {
                     Ok((sentence_type, raw)) => {
+                        // TELEM-01: parse GGA fix quality into shared atomics for heartbeat.
+                        if sentence_type.ends_with("GGA") {
+                            parse_gga_into_atomics(&raw);
+                        }
                         let topic = format!("gnss/{}/nmea/{}", device_id, sentence_type);
                         // Acquire Mutex per sentence — do NOT hold across loop iterations.
                         // Holding across iterations would starve heartbeat/subscriber threads.
@@ -69,4 +74,38 @@ pub fn spawn_relay(
         })
         .expect("nmea relay thread spawn failed");
     Ok(())
+}
+
+/// Parse a GGA sentence and update the shared gnss_state atomics.
+///
+/// Field layout (comma-delimited):
+///   [0] $GNGGA  [1] time  [2] lat  [3] N/S  [4] lon  [5] E/W
+///   [6] fix_quality  [7] num_sats  [8] hdop  ...
+///
+/// Only updates an atomic if the corresponding field is non-empty and parseable.
+/// Sentences with fewer than 9 fields are silently ignored (malformed/truncated).
+fn parse_gga_into_atomics(raw: &str) {
+    let fields: Vec<&str> = raw.split(',').collect();
+    if fields.len() < 9 {
+        return; // malformed or truncated GGA — leave atomics unchanged
+    }
+    // Field 6: fix quality (0=no fix, 1=SPS, 2=DGPS, 4=RTK Fixed, 5=RTK Float)
+    if !fields[6].is_empty() {
+        if let Ok(fix) = fields[6].parse::<u8>() {
+            crate::gnss_state::GGA_FIX_TYPE.store(fix, Ordering::Relaxed);
+        }
+    }
+    // Field 7: satellite count
+    if !fields[7].is_empty() {
+        if let Ok(sats) = fields[7].parse::<u8>() {
+            crate::gnss_state::GGA_SATELLITES.store(sats, Ordering::Relaxed);
+        }
+    }
+    // Field 8: HDOP — store as ×10 integer (no AtomicF32 in std)
+    // Guard: only write if non-empty and parse succeeds.
+    if !fields[8].is_empty() {
+        if let Ok(hdop) = fields[8].parse::<f32>() {
+            crate::gnss_state::GGA_HDOP_X10.store((hdop * 10.0) as u32, Ordering::Relaxed);
+        }
+    }
 }
