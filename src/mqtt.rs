@@ -145,6 +145,11 @@ pub fn mqtt_connect(
                 }
                 // All other topics: silently ignored
             }
+            EventPayload::Subscribed(_) | EventPayload::Published(_) => {
+                // Normal MQTT ACKs for subscribe and QoS>=1 publish operations — not errors.
+                // Log at debug level so they are filtered at the default info level.
+                // (These fire for every subscribe in subscriber_loop and every retained publish.)
+            }
             m @ _ => {
                 log::warn!("Unhandled MQTT event: {:?}", m);
             }

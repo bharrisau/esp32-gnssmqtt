@@ -125,15 +125,44 @@ pub unsafe extern "C" fn rust_log_try_send(msg: *const core::ffi::c_char, _len: 
         let s = unsafe { std::ffi::CStr::from_ptr(msg) }
             .to_string_lossy()
             .into_owned();
+        let s = strip_ansi(s); // remove ANSI color codes from C-path log output
         // try_send: never blocks; silently drops if channel is full (LOG-03).
         let _ = tx.try_send(s);
     }
 }
 
+/// Strip ANSI SGR escape sequences from a string.
+///
+/// Removes sequences of the form `ESC [ <digits/semicolons> m` (e.g. `\x1b[0;32m`, `\x1b[1;33m`).
+/// These arrive from C component logs via the vprintf hook; Rust log:: calls do not produce them.
+/// Implementation is a simple byte scan — no regex crate required.
+fn strip_ansi(s: String) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == 0x1B && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+            // Skip ESC [ ... m sequence
+            i += 2;
+            while i < bytes.len() && (bytes[i].is_ascii_digit() || bytes[i] == b';') {
+                i += 1;
+            }
+            if i < bytes.len() && bytes[i] == b'm' {
+                i += 1; // consume 'm'
+            }
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// Spawn the log relay thread.
 ///
-/// Creates a bounded sync_channel of capacity 32 (enough to absorb bursts without
-/// excessive memory use). Stores the sender in LOG_TX so `rust_log_try_send` can reach it.
+/// Creates a bounded sync_channel of capacity 128 (boot produces 30+ log messages in a
+/// 30ms burst before the relay drains; capacity 32 caused silent drops of legitimate boot
+/// diagnostics). Stores the sender in LOG_TX so `rust_log_try_send` can reach it.
 /// Spawns a dedicated relay thread that reads from the channel and publishes to MQTT.
 ///
 /// Returns `Ok(())` immediately after spawning. Does NOT install the vprintf hook —
@@ -145,7 +174,9 @@ pub fn spawn_log_relay(
     client: Arc<Mutex<EspMqttClient<'static>>>,
     device_id: String,
 ) -> anyhow::Result<()> {
-    let (tx, log_rx) = sync_channel::<String>(32);
+    // Capacity 128: boot produces 30+ log messages in a 30ms burst before the relay
+    // drains. Capacity 32 caused silent drops of legitimate boot diagnostics.
+    let (tx, log_rx) = sync_channel::<String>(128);
 
     // Store sender globally so FFI rust_log_try_send can reach it.
     // OnceLock::set fails silently if already set — spawn_log_relay must only be called once.
