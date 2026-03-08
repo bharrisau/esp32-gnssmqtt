@@ -36,6 +36,7 @@ mod config;
 mod device_id;
 mod gnss;
 mod led;
+mod log_relay;
 mod mqtt;
 mod config_relay;
 mod nmea_relay;
