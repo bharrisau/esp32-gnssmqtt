@@ -17,6 +17,7 @@ esp-idf-sys = "=0.36.1"
 
 [build-dependencies]
 embuild = "0.33"
+cc = "1"
 
 [package.metadata.espflash]
 partition_table = "partitions.csv"
