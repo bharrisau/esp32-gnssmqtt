@@ -39,6 +39,7 @@ mod config_relay;
 mod nmea_relay;
 mod rtcm_relay;
 mod ota;
+mod provisioning;
 mod uart_bridge;
 mod resil;
 mod watchdog;
@@ -86,11 +87,44 @@ fn main() {
     // Step 5: NVS partition (required by WiFi)
     let nvs = EspDefaultNvsPartition::take().expect("NVS already taken");
 
-    // Step 6: WiFi — must be before MQTT (TCP requires IP)
-    log::info!("Connecting to WiFi...");
-    let wifi = wifi::wifi_connect(peripherals.modem, sysloop.clone(), nvs)
-        .expect("WiFi connect failed");
+    // Step 5b: Boot-path decision — SoftAP vs STA.
+    // Clone nvs before any function that might consume it. EspNvsPartition<NvsDefault> is Clone.
+    let force_softap = provisioning::check_and_clear_force_softap(&nvs);
+    let has_credentials = provisioning::has_wifi_credentials(&nvs);
+    log::info!("Boot: force_softap={}, has_credentials={}", force_softap, has_credentials);
+
+    // Step 6: WiFi — SoftAP if no credentials or force_softap flag; STA otherwise.
+    let wifi = if force_softap || !has_credentials {
+        log::info!("Entering SoftAP provisioning mode...");
+        let mut softap_wifi = esp_idf_svc::wifi::BlockingWifi::wrap(
+            esp_idf_svc::wifi::EspWifi::new(peripherals.modem, sysloop.clone(), Some(nvs.clone()))
+                .expect("EspWifi new failed in SoftAP path"),
+            sysloop.clone(),
+        ).expect("BlockingWifi wrap failed");
+        // run_softap_portal never returns: calls esp_restart() on form submit or 300s timeout.
+        provisioning::run_softap_portal(&mut softap_wifi, nvs.clone())
+            .expect("SoftAP portal error");
+        unreachable!("run_softap_portal always restarts via esp_restart()")
+    } else {
+        let networks = provisioning::load_wifi_networks(&nvs);
+        log::info!("Connecting to WiFi ({} stored network(s))...", networks.len());
+        wifi::wifi_connect_any(peripherals.modem, sysloop.clone(), nvs.clone(), networks)
+            .expect("WiFi connect failed")
+    };
     log::info!("WiFi connected");
+
+    // Load MQTT config from NVS; fall back to compile-time constants if not provisioned.
+    let (mqtt_host, mqtt_port, mqtt_user_str, mqtt_pass_str) =
+        provisioning::load_mqtt_config(&nvs).unwrap_or_else(|| {
+            log::warn!("No MQTT config in NVS — using compile-time defaults");
+            (
+                crate::config::MQTT_HOST.to_string(),
+                crate::config::MQTT_PORT,
+                crate::config::MQTT_USER.to_string(),
+                crate::config::MQTT_PASS.to_string(),
+            )
+        });
+    log::info!("MQTT config: {}:{}", mqtt_host, mqtt_port);
 
     // Step 6.5: SNTP — start background time sync after WiFi is up.
     // _sntp MUST remain in main() scope for the firmware lifetime.
@@ -141,8 +175,14 @@ fn main() {
     // Step 9: MQTT — after WiFi (IP must be up). Event dispatch runs in the ESP-IDF C MQTT
     // task thread via callback; no blocking pump thread needed.
     log::info!("Connecting to MQTT broker...");
-    let mqtt_client = mqtt::mqtt_connect(&device_id, subscribe_tx, status_tx, config_tx, ota_tx, cmd_relay_tx, led_state_mqtt)
-        .expect("MQTT connect failed");
+    let mqtt_client = mqtt::mqtt_connect(
+        &device_id,
+        &mqtt_host,
+        mqtt_port,
+        &mqtt_user_str,
+        &mqtt_pass_str,
+        subscribe_tx, status_tx, config_tx, ota_tx, cmd_relay_tx, led_state_mqtt,
+    ).expect("MQTT connect failed");
     log::info!("MQTT client created");
 
     // Mark running slot valid — confirms this firmware is functional.

@@ -22,6 +22,10 @@ use crate::led::LedState;
 /// MQTT output buffer is set to 2048 bytes to support RTCM MSM7 frames up to 1029 bytes.
 pub fn mqtt_connect(
     device_id: &str,
+    host: &str,
+    port: u16,
+    user: &str,
+    pass: &str,
     subscribe_tx: SyncSender<()>,
     status_tx: SyncSender<()>,
     config_tx: SyncSender<Vec<u8>>,
@@ -29,11 +33,7 @@ pub fn mqtt_connect(
     cmd_relay_tx: SyncSender<Vec<u8>>,   // NEW — CMD-01
     led_state: Arc<AtomicU8>,
 ) -> anyhow::Result<Arc<Mutex<EspMqttClient<'static>>>> {
-    let broker_url = format!(
-        "mqtt://{}:{}",
-        crate::config::MQTT_HOST,
-        crate::config::MQTT_PORT
-    );
+    let broker_url = format!("mqtt://{}:{}", host, port);
 
     // IMPORTANT: lwt_topic MUST be declared BEFORE conf in the same scope.
     // LwtConfiguration.topic is &'a str — it must outlive the MqttClientConfiguration.
@@ -41,16 +41,8 @@ pub fn mqtt_connect(
 
     let conf = MqttClientConfiguration {
         client_id: Some(device_id),
-        username: if crate::config::MQTT_USER.is_empty() {
-            None
-        } else {
-            Some(crate::config::MQTT_USER)
-        },
-        password: if crate::config::MQTT_PASS.is_empty() {
-            None
-        } else {
-            Some(crate::config::MQTT_PASS)
-        },
+        username: if user.is_empty() { None } else { Some(user) },
+        password: if pass.is_empty() { None } else { Some(pass) },
         lwt: Some(LwtConfiguration {
             topic: &lwt_topic,
             payload: b"offline",
