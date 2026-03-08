@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
-status: completed
-stopped_at: Completed 14-02-PLAN.md
-last_updated: "2026-03-07T23:57:08.533Z"
-last_activity: 2026-03-08 — Phase 14 plan 02 executed; command relay + reboot trigger implemented
+status: in_progress
+stopped_at: Completed 15-01-PLAN.md
+last_updated: "2026-03-08T00:49:00.000Z"
+last_activity: 2026-03-08 — Phase 15 plan 01 executed; provisioning module with SoftAP portal and NVS credential storage implemented
 progress:
   total_phases: 5
   completed_phases: 1
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-08)
 
 ## Current Position
 
-Phase: 14 of 18 (Quick Additions)
-Plan: 2 of 2 in current phase (phase complete)
-Status: Phase 14 complete — ready for phase 15
-Last activity: 2026-03-08 — Phase 14 plan 02 executed; command relay + reboot trigger implemented
+Phase: 15 of 18 (Provisioning)
+Plan: 1 of 3 in current phase (plan 01 complete)
+Status: Phase 15 in progress — plan 01 complete, ready for plan 02
+Last activity: 2026-03-08 — Phase 15 plan 01 executed; provisioning module with SoftAP portal and NVS credential storage implemented
 
-Progress: [█░░░░░░░░░] 10%
+Progress: [█░░░░░░░░░] 15%
 
 ## Performance Metrics
 
@@ -67,6 +67,11 @@ Key carry-forward notes:
 - [Phase 14 P02]: QoS 0 (AtMostOnce) for /command subscription — prevents retain replay; old commands must not re-execute (CMD-02)
 - [Phase 14 P02]: Reboot check uses json.trim() == "reboot" before extract_json_str — graceful short-circuit for MAINT-01 without parse error noise
 - [Phase 14 P02]: command_relay_task uses blocking send() for gnss_cmd_tx to ensure no silent drops to UM980
+- [Phase 15 P01]: SoftAP uses open auth (AuthMethod::None), channel 6, SSID 'GNSS-Setup' — no password required from user
+- [Phase 15 P01]: HTTP server stack_size 10240 (not default 6144) to prevent stack overflow in POST handler
+- [Phase 15 P01]: MQTT port stored as two u8 NVS keys (mqtt_port_hi, mqtt_port_lo) — no set_u16 in EspNvs
+- [Phase 15 P01]: esp_restart() after credential save deferred 1s via spawned thread so browser receives HTTP 200
+- [Phase 15 P01]: 300s no-client timeout restarts WITHOUT force_softap so next boot tries STA with stored credentials
 
 ### Pending Todos
 
@@ -79,7 +84,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-08T00:12:00.000Z
-Stopped at: Completed 14-02-PLAN.md
+Last session: 2026-03-08T00:49:00.000Z
+Stopped at: Completed 15-01-PLAN.md
 Resume file: None
-Next action: `/gsd:plan-phase 15` (SoftAP provisioning — verify esp-idf-svc SoftAP API first)
+Next action: Execute plan 15-02 (wire provisioning module into main.rs and wifi.rs)

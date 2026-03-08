@@ -43,10 +43,10 @@
 
 ### Provisioning (PROV)
 
-- [ ] **PROV-01**: Device enters SoftAP hotspot mode on first boot when no WiFi credentials exist in NVS
-- [ ] **PROV-02**: User can open captive-portal web UI to enter WiFi SSID and password
-- [ ] **PROV-03**: User can configure MQTT broker (host, port, username, password) via provisioning web UI
-- [ ] **PROV-04**: User can store up to 3 WiFi networks via web UI; all persisted to NVS
+- [x] **PROV-01**: Device enters SoftAP hotspot mode on first boot when no WiFi credentials exist in NVS
+- [x] **PROV-02**: User can open captive-portal web UI to enter WiFi SSID and password
+- [x] **PROV-03**: User can configure MQTT broker (host, port, username, password) via provisioning web UI
+- [x] **PROV-04**: User can store up to 3 WiFi networks via web UI; all persisted to NVS
 - [ ] **PROV-05**: On all WiFi failures, device retries stored networks indefinitely with backoff; does not auto-enter SoftAP
 - [ ] **PROV-06**: GPIO9 held low for 3s enters SoftAP mode; device exits back to WiFi mode after 300s with no client connected (timer paused while a client is associated)
 - [ ] **PROV-07**: MQTT payload `"softap"` to `gnss/{device_id}/ota/trigger` enters SoftAP mode; same 300s no-client timeout applies
@@ -127,10 +127,10 @@
 | MAINT-02 | Phase 14 | Complete |
 | CMD-01 | Phase 14 | Complete |
 | CMD-02 | Phase 14 | Complete |
-| PROV-01 | Phase 15 | Pending |
-| PROV-02 | Phase 15 | Pending |
-| PROV-03 | Phase 15 | Pending |
-| PROV-04 | Phase 15 | Pending |
+| PROV-01 | Phase 15 | Complete |
+| PROV-02 | Phase 15 | Complete |
+| PROV-03 | Phase 15 | Complete |
+| PROV-04 | Phase 15 | Complete |
 | PROV-05 | Phase 15 | Pending |
 | PROV-06 | Phase 15 | Pending |
 | PROV-07 | Phase 15 | Pending |
