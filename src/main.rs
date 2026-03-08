@@ -21,6 +21,8 @@
 //!    15b. mark_running_slot_valid() — called after mqtt_connect, before relay threads
 //! 16. OTA task: spawn_ota(mqtt_client clone, device_id clone, ota_rx, nvs clone)
 //! 17. Watchdog supervisor (spawned last of critical threads)
+//! 9.5. log_relay::spawn_log_relay — activates MQTT log forwarding (LOG-01)
+//! 9.6. Log level relay thread — applies /log/level runtime changes (LOG-02)
 //! 18. GPIO9 monitor thread — hold 3s triggers SoftAP re-entry (PROV-06)
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;
@@ -56,6 +58,14 @@ fn main() {
     // Step 2: Initialize the ESP-IDF logging backend.
     // MUST be called before any log::info!/warn!/error! calls.
     EspLogger::initialize_default();
+
+    // Step 2b: Install vprintf hook — captures all ESP-IDF log output for MQTT forwarding.
+    // MUST be after EspLogger::initialize_default() so the original vprintf is already set.
+    // Early log messages before MQTT connects are silently dropped (LOG_TX not yet initialized).
+    extern "C" {
+        fn install_mqtt_log_hook();
+    }
+    unsafe { install_mqtt_log_hook(); }
 
     let device_id = device_id::get();
     log::info!("=== esp32-gnssmqtt booting ===");
@@ -178,6 +188,10 @@ fn main() {
     // CMD-02: command_relay_task performs no deduplication by design.
     let (cmd_relay_tx, cmd_relay_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(4);
 
+    // log level config — callback → log_level_relay_task
+    // Bounded to 4: operator-triggered and rare; retained level message on reconnect + burst.
+    let (log_level_tx, log_level_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(4);
+
     // Step 9: MQTT — after WiFi (IP must be up). Event dispatch runs in the ESP-IDF C MQTT
     // task thread via callback; no blocking pump thread needed.
     log::info!("Connecting to MQTT broker...");
@@ -187,9 +201,23 @@ fn main() {
         mqtt_port,
         &mqtt_user_str,
         &mqtt_pass_str,
-        subscribe_tx, status_tx, config_tx, ota_tx, cmd_relay_tx, led_state_mqtt,
+        subscribe_tx, status_tx, config_tx, ota_tx, cmd_relay_tx, log_level_tx, led_state_mqtt,
     ).expect("MQTT connect failed");
     log::info!("MQTT client created");
+
+    // Step 9.5: Log relay — forwards captured ESP-IDF log lines to MQTT gnss/{id}/log.
+    // Must be after mqtt_connect so the client Arc exists. LOG_TX is initialized inside
+    // spawn_log_relay; early log messages before this point are silently dropped (by design).
+    log_relay::spawn_log_relay(mqtt_client.clone(), device_id.clone())
+        .expect("log relay spawn failed");
+    log::info!("Log relay started");
+
+    // Step 9.6: Log level relay — applies runtime log level changes from MQTT /log/level topic.
+    std::thread::Builder::new()
+        .stack_size(4096)
+        .spawn(move || mqtt::log_level_relay_task(log_level_rx))
+        .expect("log level relay spawn failed");
+    log::info!("Log level relay started");
 
     // Mark running slot valid — confirms this firmware is functional.
     // MUST be called after WiFi+MQTT confirms connectivity, before spawning threads.
