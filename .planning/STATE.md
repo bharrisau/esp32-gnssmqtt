@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: completed
-stopped_at: "17-04 checkpoint: hardware verification pending for captive portal DNS"
-last_updated: "2026-03-08T14:24:33.354Z"
+stopped_at: "Completed 17-04-PLAN.md (Task 3 hardware verify deferred to end of milestone)"
+last_updated: "2026-03-09T00:00:00.000Z"
 last_activity: "2026-03-08 — Phase 15 plan 03 executed; GPIO9 monitor, MQTT "softap" trigger, LedState::SoftAP pattern added"
 progress:
   total_phases: 5
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-08)
 
 ## Current Position
 
-Phase: 15 of 18 (Provisioning)
-Plan: 3 of 3 in current phase (all plans 01-03 complete — Phase 15 complete)
-Status: Phase 15 complete — all 8 PROV requirements implemented
-Last activity: 2026-03-08 — Phase 15 plan 03 executed; GPIO9 monitor, MQTT "softap" trigger, LedState::SoftAP pattern added
+Phase: 17 of 18 (NTRIP Client)
+Plan: 4 of 4 in current phase (all plans 01-04 complete — Phase 17 complete; Task 3 hardware verify deferred to end of milestone)
+Status: Phase 17 complete — NTRIP client, log quality, captive portal DNS all implemented; hardware verify deferred
+Last activity: 2026-03-09 — Phase 17 plan 04 concluded; captive portal DNS/probe URL handlers; hardware verify deferred to end of milestone
 
 Progress: [██████████] 100%
 
@@ -99,6 +99,7 @@ Key carry-forward notes:
 - [Phase 17-03]: um980_reboot channel bounded to 1 to coalesce rapid reboot signals; sentence_type cloned before nmea_tx move for reboot check
 - [Phase 17-ntrip-client]: DNS thread intentionally not stopped before 300s timeout: esp_restart() terminates all threads
 - [Phase 17-ntrip-client]: Captive portal probe URLs use meta-refresh HTML (200 OK) not HTTP 302 — matches existing into_ok_response() handler style
+- [Phase 17-04]: Hardware verification of captive portal detection deferred to end of milestone — will be validated alongside Phase 18 hardware sign-off
 
 ### Pending Todos
 
@@ -111,7 +112,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-08T14:24:33.351Z
-Stopped at: 17-04 checkpoint: hardware verification pending for captive portal DNS
+Last session: 2026-03-09T00:00:00.000Z
+Stopped at: Completed 17-04-PLAN.md (Task 3 hardware verify deferred to end of milestone)
 Resume file: None
-Next action: Phase 15 complete — all 8 PROV requirements done. Proceed to next phase.
+Next action: Phase 17 complete — proceed to Phase 18 (Telemetry and OTA Validation).

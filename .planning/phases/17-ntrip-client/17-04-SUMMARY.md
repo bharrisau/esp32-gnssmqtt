@@ -71,7 +71,7 @@ Each task was committed atomically:
 
 1. **Task 1: Add probe URL redirect handlers to EspHttpServer** - `3e3d30f` (feat)
 2. **Task 2: DNS hijack UDP server thread inside run_softap_portal** - `8b1775e` (feat)
-3. **Task 3: Hardware verification** - pending (checkpoint)
+3. **Task 3: Hardware verification** - DEFERRED to end of milestone (not failed)
 
 ## Files Created/Modified
 
@@ -96,11 +96,25 @@ None — both tasks compiled cleanly on first attempt.
 
 None - no external service configuration required.
 
+## Deferred Verification
+
+**Task 3: Hardware verification — captive portal detection on mobile device**
+
+- **Status:** DEFERRED (not failed) — hardware SoftAP test deferred to end of milestone
+- **What to verify:** Flash firmware, connect Android or iOS device to "GNSS-Setup" AP, confirm OS shows automatic "Sign in to network" prompt without manual navigation
+- **Verification steps:**
+  1. `cargo espflash flash --release --monitor`
+  2. Connect mobile device to "GNSS-Setup" SSID
+  3. Expected (Android): "Sign in to GNSS-Setup" notification appears automatically
+  4. Expected (iOS): captive portal sheet displays automatically
+  5. Check serial logs for: "DNS hijack: listening on UDP port 53" and "DNS hijack started"
+  6. Optional: `nslookup example.com 192.168.71.1` should return 192.168.71.1
+
 ## Next Phase Readiness
 
-- Firmware is built and ready to flash
-- Task 3 (hardware verification) requires flashing to device and connecting a mobile phone to GNSS-Setup AP to confirm automatic captive portal prompt appears
-- After hardware verification is approved, STATE.md and ROADMAP.md can be finalized
+- Captive portal DNS hijack and probe URL handler code is implemented and compiles clean
+- Hardware verification (Task 3) deferred to end of milestone — will be validated alongside Phase 18 hardware sign-off
+- provisioning.rs is complete for Phase 17 scope; no further changes needed before Phase 18
 
 ## Self-Check: PASSED
 
