@@ -41,6 +41,7 @@ use std::sync::atomic::AtomicU8;
 mod config;
 mod device_id;
 mod gnss;
+mod gnss_state;
 mod led;
 mod log_relay;
 mod mqtt;
