@@ -244,6 +244,38 @@ pub fn run_softap_portal(
         Ok(())
     })?;
 
+    // Captive portal probe URL handlers — cause Android/iOS to show the sign-in prompt.
+    // All redirect to the portal form at 192.168.71.1/.
+    // Android probes: /generate_204, /connectivitycheck
+    // iOS probes: /hotspot-detect.html, /success.html, /library/test/success.html
+    // Windows probe: /ncsi.txt
+    // Mikrotik/generic: /redirect
+    let redirect_html: &'static [u8] = b"<html><head><meta http-equiv='refresh' content='0;url=http://192.168.71.1/'></head></html>";
+
+    server.fn_handler("/generate_204", Method::Get, move |req| {
+        req.into_ok_response()?.write_all(redirect_html)
+    })?;
+    server.fn_handler("/connectivitycheck", Method::Get, move |req| {
+        req.into_ok_response()?.write_all(redirect_html)
+    })?;
+    server.fn_handler("/hotspot-detect.html", Method::Get, move |req| {
+        req.into_ok_response()?.write_all(redirect_html)
+    })?;
+    server.fn_handler("/success.html", Method::Get, move |req| {
+        req.into_ok_response()?.write_all(redirect_html)
+    })?;
+    if let Err(e) = server.fn_handler("/library/test/success.html", Method::Get, move |req| {
+        req.into_ok_response()?.write_all(redirect_html)
+    }) {
+        log::warn!("captive portal: failed to register /library/test/success.html: {:?}", e);
+    }
+    server.fn_handler("/ncsi.txt", Method::Get, move |req| {
+        req.into_ok_response()?.write_all(redirect_html)
+    })?;
+    server.fn_handler("/redirect", Method::Get, move |req| {
+        req.into_ok_response()?.write_all(redirect_html)
+    })?;
+
     // Step 5: 300-second no-client timeout loop. Keeps server alive in scope.
     let mut no_client_since = std::time::Instant::now();
     loop {
