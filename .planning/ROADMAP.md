@@ -63,7 +63,7 @@ Archive: `.planning/milestones/v1.3-ROADMAP.md`
 - [x] **Phase 15: Provisioning** — SoftAP web UI lets users configure WiFi and MQTT credentials without recompiling firmware; stored in NVS with multi-AP failover (completed 2026-03-08)
 - [x] **Phase 16: Remote Logging** — ESP-IDF log output forwarded to MQTT with re-entrancy guard preventing feedback loops; level configurable at runtime (completed 2026-03-08)
 - [x] **Phase 17: NTRIP Client** — TCP connection to NTRIP caster streams RTCM3 corrections directly to UM980 UART, enabling RTK fix; captive portal DNS hijack for SoftAP (completed 2026-03-09; hw verify deferred)
-- [ ] **Phase 18: Telemetry and OTA Validation** — GNSS fix quality added to heartbeat; OTA pipeline validated on hardware before v2.0 milestone sign-off
+- [x] **Phase 18: Telemetry and OTA Validation** — GNSS fix quality added to heartbeat; OTA pipeline validated on hardware before v2.0 milestone sign-off (completed 2026-03-08)
 
 ## Phase Details
 
@@ -168,4 +168,4 @@ Plans:
 | 15. Provisioning | v2.0 | 3/3 | Complete | 2026-03-08 |
 | 16. Remote Logging | v2.0 | 2/2 | Complete | 2026-03-08 |
 | 17. NTRIP Client | v2.0 | Complete    | 2026-03-08 | 2026-03-09 |
-| 18. Telemetry and OTA Validation | 2/3 | In Progress|  | - |
+| 18. Telemetry and OTA Validation | 3/3 | Complete   | 2026-03-08 | - |

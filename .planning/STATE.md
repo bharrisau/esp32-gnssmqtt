@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: verifying
-stopped_at: Completed 18-03-PLAN.md
-last_updated: "2026-03-08T21:54:07.700Z"
+stopped_at: Completed 18-02-PLAN.md
+last_updated: "2026-03-08T22:08:23.219Z"
 last_activity: 2026-03-09 — Phase 17 plan 04 concluded; captive portal DNS/probe URL handlers; hardware verify deferred to end of milestone
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 14
-  completed_plans: 13
+  completed_plans: 14
   percent: 100
 ---
 
@@ -59,6 +59,7 @@ Progress: [██████████] 100%
 | Phase 17-ntrip-client P03 | 3 | 2 tasks | 4 files |
 | Phase 18-telemetry-and-ota-validation P01 | 3 | 3 tasks | 4 files |
 | Phase 18 P03 | 2 | 1 tasks | 1 files |
+| Phase 18-telemetry-and-ota-validation P02 | 5 | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,7 @@ Key carry-forward notes:
 - [Phase 18]: HDOP stored as x10 integer in AtomicU32 (e.g. 1.2 -> 12); no AtomicF32 in std Rust; formatted back to 1-decimal in heartbeat JSON
 - [Phase 18]: ends_with('GGA') match in nmea_relay.rs handles GNGGA, GPGGA, GLGGA uniformly without exhaustive list
 - [Phase 18]: README authored from source inspection (led.rs timing, heartbeat null sentinel semantics) to ensure accuracy over plan approximations
+- [Phase 18-telemetry-and-ota-validation]: Hardware validation (OTA + captive portal) deferred to end-of-milestone sign-off session; testing.md checklist written with SHA-256 of canary binary
 
 ### Pending Todos
 
@@ -118,7 +120,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-08T21:54:07.696Z
-Stopped at: Completed 18-03-PLAN.md
+Last session: 2026-03-08T22:08:23.216Z
+Stopped at: Completed 18-02-PLAN.md
 Resume file: None
 Next action: Phase 17 complete — proceed to Phase 18 (Telemetry and OTA Validation).
