@@ -74,7 +74,7 @@
 
 - [x] **MAINT-01**: Device reboots when `gnss/{device_id}/ota/trigger` payload is `"reboot"`
 - [x] **MAINT-02**: Device syncs wall-clock time via SNTP on WiFi connect; timestamps appear in log output
-- [ ] **MAINT-03**: OTA firmware update validated on hardware (device FFFEB5) as explicit sign-off gate before v2.0 milestone is marked complete
+- [x] **MAINT-03**: OTA firmware update validated on hardware (device FFFEB5) as explicit sign-off gate before v2.0 milestone is marked complete
 
 ### Telemetry (TELEM)
 
@@ -143,7 +143,7 @@
 | NTRIP-03 | Phase 17 | Complete |
 | NTRIP-04 | Phase 17 | Complete |
 | TELEM-01 | Phase 18 | Complete |
-| MAINT-03 | Phase 18 | Pending |
+| MAINT-03 | Phase 18 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 21 total

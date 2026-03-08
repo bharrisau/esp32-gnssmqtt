@@ -168,4 +168,4 @@ Plans:
 | 15. Provisioning | v2.0 | 3/3 | Complete | 2026-03-08 |
 | 16. Remote Logging | v2.0 | 2/2 | Complete | 2026-03-08 |
 | 17. NTRIP Client | v2.0 | Complete    | 2026-03-08 | 2026-03-09 |
-| 18. Telemetry and OTA Validation | 1/3 | In Progress|  | - |
+| 18. Telemetry and OTA Validation | 2/3 | In Progress|  | - |
