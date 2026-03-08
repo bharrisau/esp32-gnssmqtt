@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: completed
-stopped_at: Completed 17-03-PLAN.md
-last_updated: "2026-03-08T14:21:10.093Z"
+stopped_at: "17-04 checkpoint: hardware verification pending for captive portal DNS"
+last_updated: "2026-03-08T14:24:33.354Z"
 last_activity: "2026-03-08 — Phase 15 plan 03 executed; GPIO9 monitor, MQTT "softap" trigger, LedState::SoftAP pattern added"
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
   percent: 100
 ---
 
@@ -97,6 +97,8 @@ Key carry-forward notes:
 - [Phase 17-03]: strip_ansi uses byte scan (no regex crate) matching ESC-bracket pattern for ANSI SGR sequences from C vprintf path
 - [Phase 17-03]: UM980 reboot monitor uses warning fallback — NVS-backed gnss config re-apply deferred (config_relay reads MQTT channel not NVS)
 - [Phase 17-03]: um980_reboot channel bounded to 1 to coalesce rapid reboot signals; sentence_type cloned before nmea_tx move for reboot check
+- [Phase 17-ntrip-client]: DNS thread intentionally not stopped before 300s timeout: esp_restart() terminates all threads
+- [Phase 17-ntrip-client]: Captive portal probe URLs use meta-refresh HTML (200 OK) not HTTP 302 — matches existing into_ok_response() handler style
 
 ### Pending Todos
 
@@ -109,7 +111,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-08T14:21:10.089Z
-Stopped at: Completed 17-03-PLAN.md
+Last session: 2026-03-08T14:24:33.351Z
+Stopped at: 17-04 checkpoint: hardware verification pending for captive portal DNS
 Resume file: None
 Next action: Phase 15 complete — all 8 PROV requirements done. Proceed to next phase.
