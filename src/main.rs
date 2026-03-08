@@ -19,7 +19,9 @@
 //! 14. Config relay: spawn_config_relay(gnss_cmd_tx clone, config_rx)
 //! 15. RTCM relay: rtcm_relay::spawn_relay(mqtt_client clone, device_id clone, rtcm_rx)
 //!    15b. mark_running_slot_valid() — called after mqtt_connect, before relay threads
-//! 16. OTA task: spawn_ota(mqtt_client clone, device_id clone, ota_rx)
+//! 16. OTA task: spawn_ota(mqtt_client clone, device_id clone, ota_rx, nvs clone)
+//! 17. Watchdog supervisor (spawned last of critical threads)
+//! 18. GPIO9 monitor thread — hold 3s triggers SoftAP re-entry (PROV-06)
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::gpio::PinDriver;
@@ -264,6 +266,57 @@ fn main() {
     watchdog::spawn_supervisor()
         .expect("watchdog supervisor spawn failed");
     log::info!("Watchdog supervisor started");
+
+    // Step 19: GPIO9 monitor — spawned after all other subsystems so the device is fully operational.
+    // GPIO9 is the BOOT button on XIAO ESP32-C6; safe to use as GPIO input after firmware starts.
+    // WARNING: do not hold GPIO9 during hardware reset — that enters serial download mode.
+    // Holding GPIO9 low for 3 continuous seconds triggers SoftAP re-entry (PROV-06).
+    let gpio9_pin = peripherals.pins.gpio9;
+    let nvs_for_gpio = nvs.clone();
+    std::thread::Builder::new()
+        .stack_size(4096)
+        .spawn(move || {
+            use esp_idf_svc::hal::gpio::{PinDriver, Pull};
+
+            // HWM at thread entry: confirms stack size is adequate.
+            let hwm_words = unsafe {
+                esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+            };
+            log::info!("[HWM] GPIO9 monitor: {} words ({} bytes) stack remaining",
+                hwm_words, hwm_words * 4);
+
+            let mut pin = match PinDriver::input(gpio9_pin) {
+                Ok(p) => p,
+                Err(e) => {
+                    log::error!("GPIO9 PinDriver init failed: {:?}", e);
+                    return;
+                }
+            };
+            if let Err(e) = pin.set_pull(Pull::Up) {
+                log::error!("GPIO9 pull-up failed: {:?}", e);
+                return;
+            }
+
+            let mut low_since: Option<std::time::Instant> = None;
+
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+
+                if pin.is_low() {
+                    let since = low_since.get_or_insert_with(std::time::Instant::now);
+                    if since.elapsed() >= std::time::Duration::from_secs(3) {
+                        log::info!("GPIO9: held low 3s — entering SoftAP mode (PROV-06)");
+                        crate::provisioning::set_force_softap(&nvs_for_gpio);
+                        std::thread::sleep(std::time::Duration::from_millis(200));
+                        unsafe { esp_idf_svc::sys::esp_restart(); }
+                    }
+                } else {
+                    low_since = None; // reset timer on release
+                }
+            }
+        })
+        .expect("GPIO9 monitor thread spawn failed");
+    log::info!("GPIO9 monitor started");
 
     log::info!("All subsystems started — device operational");
     let _gnss_cmd_tx = gnss_cmd_tx; // keep Sender alive — TX thread exits if all Senders drop
