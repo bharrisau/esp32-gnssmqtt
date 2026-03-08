@@ -79,6 +79,7 @@ fn main() {
 
     let device_id = device_id::get();
     log::info!("=== esp32-gnssmqtt booting ===");
+    log::info!("esp32-gnssmqtt v2.0-ota-canary — OTA validation build");
     log::info!("Device ID: {}", device_id);
     log::info!("Build: {} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
 
