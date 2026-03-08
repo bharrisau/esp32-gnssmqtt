@@ -125,6 +125,7 @@ pub fn spawn_gnss(
     uart: impl Peripheral<P = impl Uart> + 'static,
     tx_pin: impl Peripheral<P = impl esp_idf_svc::hal::gpio::OutputPin> + 'static,
     rx_pin: impl Peripheral<P = impl esp_idf_svc::hal::gpio::InputPin> + 'static,
+    reboot_tx: std::sync::mpsc::SyncSender<()>,
 ) -> anyhow::Result<(SyncSender<String>, Receiver<(String, String)>, Receiver<RtcmFrame>, SyncSender<Box<[u8; 1029]>>, Arc<UartDriver<'static>>)> {
     // Initialise UART0 at 115 200 baud.  rx_fifo_size must be set at driver
     // creation time — there is no sdkconfig option for this in ESP-IDF v5.
@@ -173,6 +174,7 @@ pub fn spawn_gnss(
     let uart_rx = Arc::clone(&uart);
     // Clone free_pool_tx for use inside the RX closure (TrySendError::Full return path).
     let free_pool_tx_clone = free_pool_tx.clone();
+    // reboot_tx: signals main.rs to re-apply UM980 config if UM980 resets
     std::thread::Builder::new()
         .stack_size(12288) // increased from 8192: RtcmBody buf is heap (Box) but other frame overhead warrants headroom
         .spawn(move || {
@@ -232,7 +234,7 @@ pub fn spawn_gnss(
                                                     .next()
                                                     .unwrap_or("UNKNOWN")
                                                     .to_string();
-                                                match nmea_tx.try_send((sentence_type, s.to_string())) {
+                                                match nmea_tx.try_send((sentence_type.clone(), s.to_string())) {
                                                     Ok(_) => {}
                                                     Err(TrySendError::Full(_)) => {
                                                         NMEA_DROPS.fetch_add(1, Ordering::Relaxed);
@@ -244,6 +246,22 @@ pub fn spawn_gnss(
                                                         log::error!(
                                                             "NMEA: relay channel disconnected"
                                                         );
+                                                    }
+                                                }
+                                                // UM980 reboot detection: '$devicename,COM1*67' is the first line
+                                                // the UM980 emits after a reset (power glitch, internal watchdog, etc.).
+                                                // sentence_type is derived from between '$' and first ',' → "devicename".
+                                                // On detection, signal main.rs to re-apply startup configuration.
+                                                if sentence_type == "devicename" {
+                                                    log::warn!("GNSS: UM980 reboot detected ('$devicename' banner) — signalling config re-apply");
+                                                    match reboot_tx.try_send(()) {
+                                                        Ok(_) => {}
+                                                        Err(std::sync::mpsc::TrySendError::Full(_)) => {
+                                                            log::warn!("GNSS: UM980 reboot signal channel full — re-apply already queued");
+                                                        }
+                                                        Err(std::sync::mpsc::TrySendError::Disconnected(_)) => {
+                                                            log::error!("GNSS: UM980 reboot signal channel closed");
+                                                        }
                                                     }
                                                 }
                                             }

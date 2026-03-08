@@ -154,6 +154,10 @@ fn main() {
     let _sntp = sntp::EspSntp::new_default().expect("SNTP init failed");
     log::info!("SNTP initialized — wall-clock time will sync in background");
 
+    // UM980 reboot detection: GNSS RX thread signals when '$devicename' banner seen.
+    // Bounded to 1: one pending re-apply is enough (extra signals coalesce).
+    let (um980_reboot_tx, um980_reboot_rx) = std::sync::mpsc::sync_channel::<()>(1);
+
     // Step 7: GNSS pipeline — exclusive UART ownership, RX + TX threads
     // spawn_gnss returns (cmd_tx, nmea_rx, rtcm_rx, free_pool_tx, uart_arc);
     // uart_arc passed to spawn_ntrip_client (Step 17b) for direct RTCM byte writes.
@@ -161,6 +165,7 @@ fn main() {
         peripherals.uart0,
         peripherals.pins.gpio16,  // TX line to UM980
         peripherals.pins.gpio17,  // RX line from UM980
+        um980_reboot_tx,
     )
     .expect("GNSS init failed");
     log::info!("GNSS pipeline started");
@@ -280,6 +285,41 @@ fn main() {
     config_relay::spawn_config_relay(gnss_cmd_tx.clone(), config_rx)
         .expect("Config relay thread spawn failed");
     log::info!("Config relay started");
+
+    // UM980 reboot monitor: re-applies startup configuration when UM980 resets.
+    // Listens on um980_reboot_rx; on signal, waits 500ms then logs a prominent warning.
+    // Full automatic re-apply requires NVS-backed UM980 config storage (not yet implemented);
+    // the detection and signal path is the primary value of this feature.
+    {
+        std::thread::Builder::new()
+            .stack_size(4096)
+            .spawn(move || {
+                let hwm_words = unsafe {
+                    esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
+                };
+                log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
+                    "UM980 reboot monitor", hwm_words, hwm_words * 4);
+                loop {
+                    match um980_reboot_rx.recv_timeout(crate::config::SLOW_RECV_TIMEOUT) {
+                        Ok(()) => {
+                            log::warn!("UM980 reboot monitor: reboot detected — waiting 500ms before action");
+                            std::thread::sleep(std::time::Duration::from_millis(500));
+                            // Automatic config re-apply requires NVS-backed UM980 config storage.
+                            // Until that is implemented, direct the operator to re-send config via MQTT.
+                            log::warn!("UM980 rebooted — automatic config re-apply not yet implemented; \
+                                re-send UM980 config via MQTT /config topic to restore configuration");
+                        }
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                            log::error!("UM980 reboot monitor: channel closed — thread parking");
+                            loop { std::thread::sleep(std::time::Duration::from_secs(60)); }
+                        }
+                    }
+                }
+            })
+            .expect("UM980 reboot monitor spawn failed");
+    }
+    log::info!("UM980 reboot monitor started");
 
     // Step 15b: Command relay — forwards MQTT /command payloads to UM980.
     let cmd_gnss_tx = gnss_cmd_tx.clone();
