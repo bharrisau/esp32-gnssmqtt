@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
-status: in_progress
-stopped_at: Completed 15-02-PLAN.md
-last_updated: "2026-03-08T01:01:00.000Z"
+status: executing
+stopped_at: Completed 15-03-PLAN.md
+last_updated: "2026-03-08T00:46:42.030Z"
 last_activity: 2026-03-08 — Phase 15 plan 02 executed; provisioning wired into main.rs boot-path, wifi_connect_any added, mqtt_connect runtime credentials
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 15
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 5
+  percent: 20
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-08)
 ## Current Position
 
 Phase: 15 of 18 (Provisioning)
-Plan: 2 of 3 in current phase (plans 01 and 02 complete)
-Status: Phase 15 in progress — plans 01-02 complete, ready for plan 03
-Last activity: 2026-03-08 — Phase 15 plan 02 executed; provisioning wired into main.rs boot-path, wifi_connect_any added, mqtt_connect runtime credentials
+Plan: 3 of 3 in current phase (all plans 01-03 complete — Phase 15 complete)
+Status: Phase 15 complete — all 8 PROV requirements implemented
+Last activity: 2026-03-08 — Phase 15 plan 03 executed; GPIO9 monitor, MQTT "softap" trigger, LedState::SoftAP pattern added
 
-Progress: [██░░░░░░░░] 20%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [██░░░░░░░░] 20%
 
 | Phase 14 P01 | 5 | 2 tasks | 2 files |
 | Phase 14 P02 | 12 | 2 tasks | 3 files |
+| Phase 15 P03 | 3 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,8 @@ Key carry-forward notes:
 - [Phase 15 P02]: run_softap_portal is unreachable after return; SoftAP if-else branch ends with unreachable!() macro
 - [Phase 15 P02]: mqtt_connect username/password use None for empty strings — matches MqttClientConfiguration Option<&str> pattern
 - [Phase 15 P02]: config.rs is gitignored (credentials); SOFTAP constants added locally but not committed
+- [Phase 15]: GPIO9 polled every 100ms with 3s hold threshold; timer resets on release preventing accidental SoftAP re-entry
+- [Phase 15]: nvs passed by clone to spawn_ota since EspNvsPartition<NvsDefault> implements Clone cheaply
 
 ### Pending Todos
 
@@ -88,7 +91,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-08T01:01:00.000Z
-Stopped at: Completed 15-02-PLAN.md
+Last session: 2026-03-08T00:46:42.026Z
+Stopped at: Completed 15-03-PLAN.md
 Resume file: None
-Next action: Execute plan 15-03 (GPIO9 force_softap trigger and MQTT "softap" command)
+Next action: Phase 15 complete — all 8 PROV requirements done. Proceed to next phase.
