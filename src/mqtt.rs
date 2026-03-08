@@ -20,6 +20,7 @@ use crate::led::LedState;
 ///
 /// LWT: publishes `offline` to `gnss/{device_id}/status` with retain=true on unexpected disconnect.
 /// MQTT output buffer is set to 2048 bytes to support RTCM MSM7 frames up to 1029 bytes.
+#[allow(clippy::too_many_arguments)]
 pub fn mqtt_connect(
     device_id: &str,
     host: &str,
@@ -150,7 +151,7 @@ pub fn mqtt_connect(
                 // Log at debug level so they are filtered at the default info level.
                 // (These fire for every subscribe in subscriber_loop and every retained publish.)
             }
-            m @ _ => {
+            m => {
                 log::warn!("Unhandled MQTT event: {:?}", m);
             }
         }

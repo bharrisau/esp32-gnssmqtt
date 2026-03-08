@@ -17,6 +17,7 @@ use crate::led::LedState;
 ///
 /// The returned `BlockingWifi` handle must be kept alive (e.g. passed to `wifi_supervisor`)
 /// for the WiFi driver to remain active.
+#[allow(dead_code)]
 pub fn wifi_connect(
     modem: impl esp_idf_svc::hal::peripheral::Peripheral<P = esp_idf_svc::hal::modem::Modem> + 'static,
     sysloop: EspSystemEventLoop,

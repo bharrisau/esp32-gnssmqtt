@@ -23,7 +23,7 @@ pub fn get() -> String {
     let ret = unsafe { esp_efuse_mac_get_default(mac.as_mut_ptr()) };
     assert_eq!(
         ret,
-        ESP_OK as i32,
+        ESP_OK,
         "esp_efuse_mac_get_default failed: err={}",
         ret
     );

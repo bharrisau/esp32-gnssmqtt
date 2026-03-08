@@ -68,21 +68,19 @@ pub fn spawn_bridge(cmd_tx: SyncSender<String>) -> anyhow::Result<()> {
                                         line_len = 0;
                                     }
                                 }
-                                0x7F | 0x08 => {
+                                0x7F | 0x08 if line_len > 0 => {
                                     // DEL or backspace — erase last character and redraw.
-                                    if line_len > 0 {
-                                        line_len -= 1;
-                                        redraw(&line, line_len);
-                                    }
+                                    line_len -= 1;
+                                    redraw(&line, line_len);
                                 }
-                                0x20..=0x7E => {
+                                0x7F | 0x08 => {}
+                                0x20..=0x7E if line_len < line.len() => {
                                     // Printable ASCII — buffer and redraw.
-                                    if line_len < line.len() {
-                                        line[line_len] = byte;
-                                        line_len += 1;
-                                        redraw(&line, line_len);
-                                    }
+                                    line[line_len] = byte;
+                                    line_len += 1;
+                                    redraw(&line, line_len);
                                 }
+                                0x20..=0x7E => {}
                                 _ => {} // ignore other control characters
                             }
                         }

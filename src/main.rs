@@ -4,7 +4,7 @@
 //! 1. esp_idf_svc::sys::link_patches() — MUST be first, applies linker patches
 //! 2. log_relay::MqttLogger::initialize() — MUST be before any log:: calls
 //! 3. Peripherals::take() — take hardware ownership
-//! 3b-3e. LED state Arc + GPIO15 PinDriver + LED thread spawn
+//!    3b-3e) LED state Arc + GPIO15 PinDriver + LED thread spawn
 //! 4. EspSystemEventLoop::take() — required by WiFi
 //! 5. EspDefaultNvsPartition::take() — required by WiFi
 //! 6. wifi::wifi_connect — WiFi BEFORE MQTT (IP required for TCP)
@@ -12,18 +12,22 @@
 //!    uart_bridge::spawn_bridge — stdin bridge → GNSS TX channel
 //! 8. Create subscribe_tx/rx, config_tx/rx, ota_tx/rx channels
 //! 9. mqtt::mqtt_connect — MQTT AFTER WiFi (TCP must be up); callback handles events inline
+//!    9.5) log_relay::spawn_log_relay — activates MQTT log forwarding (LOG-01)
+//!    9.6) Log level relay thread — applies /log/level runtime changes (LOG-02)
 //! 10. Spawn subscriber thread (subscribes on Connected signal)
 //! 11. Spawn heartbeat thread
 //! 12. Spawn wifi supervisor thread
 //! 13. NMEA relay: spawn_relay(mqtt_client clone, device_id clone, nmea_rx)
 //! 14. Config relay: spawn_config_relay(gnss_cmd_tx clone, config_rx)
 //! 15. RTCM relay: rtcm_relay::spawn_relay(mqtt_client clone, device_id clone, rtcm_rx)
-//!    15b. mark_running_slot_valid() — called after mqtt_connect, before relay threads
+//!
+//!    15b) mark_running_slot_valid() — called after mqtt_connect, before relay threads
+//!
 //! 16. OTA task: spawn_ota(mqtt_client clone, device_id clone, ota_rx, nvs clone)
-//! 17b. NTRIP client: spawn_ntrip_client(uart_arc clone, ntrip_config_rx, nvs clone)
+//!
+//!    17b) NTRIP client: spawn_ntrip_client(uart_arc clone, ntrip_config_rx, nvs clone)
+//!
 //! 17. Watchdog supervisor (spawned last of critical threads)
-//! 9.5. log_relay::spawn_log_relay — activates MQTT log forwarding (LOG-01)
-//! 9.6. Log level relay thread — applies /log/level runtime changes (LOG-02)
 //! 18. GPIO9 monitor thread — hold 3s triggers SoftAP re-entry (PROV-06)
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;

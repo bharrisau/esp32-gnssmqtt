@@ -17,11 +17,10 @@ fn main() {
             } else {
                 raw.to_owned()
             };
-            if flag.starts_with("-isystem") {
-                // Extract path after -isystem and add as a system include
-                build.include(&flag["-isystem".len()..]);
-            } else if flag.starts_with("-I") {
-                build.include(&flag["-I".len()..]);
+            if let Some(path) = flag.strip_prefix("-isystem") {
+                build.include(path);
+            } else if let Some(path) = flag.strip_prefix("-I") {
+                build.include(path);
             } else if flag.starts_with("-D") {
                 // Pass defines directly as flags
                 build.flag(&flag);

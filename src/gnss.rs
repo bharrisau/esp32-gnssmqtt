@@ -121,6 +121,7 @@ const RTCM_POOL_SIZE: usize = 4;
 /// * `uart_arc: Arc<UartDriver<'static>>` — shared reference to the UART driver;
 ///   passed to `ntrip_client::spawn_ntrip_client` so it can write RTCM correction
 ///   bytes directly to the UM980 without going through the String-typed `cmd_tx`.
+#[allow(clippy::type_complexity)]
 pub fn spawn_gnss(
     uart: impl Peripheral<P = impl Uart> + 'static,
     tx_pin: impl Peripheral<P = impl esp_idf_svc::hal::gpio::OutputPin> + 'static,
@@ -137,7 +138,7 @@ pub fn spawn_gnss(
         Option::<AnyIOPin>::None,
         &Config::new()
             .baudrate(Hertz(115_200))
-            .rx_fifo_size(crate::config::UART_RX_BUF_SIZE as usize),
+            .rx_fifo_size(crate::config::UART_RX_BUF_SIZE),
     )?;
 
     // Arc allows both threads to share the driver without a Mutex.

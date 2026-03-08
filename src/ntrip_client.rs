@@ -229,7 +229,7 @@ fn base64_encode(input: &str) -> String {
     const ALPHABET: &[u8; 64] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let bytes = input.as_bytes();
-    let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
         let b0 = chunk[0] as usize;
         let b1 = if chunk.len() > 1 { chunk[1] as usize } else { 0 };
@@ -343,14 +343,8 @@ fn run_ntrip_session(
     stream.write_all(build_ntrip_request(config).as_bytes())?;
 
     // Validate server response
-    match read_ntrip_headers(&mut stream)? {
-        false => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "NTRIP: server did not respond with ICY 200 OK",
-            ));
-        }
-        true => {}
+    if !read_ntrip_headers(&mut stream)? {
+        return Err(std::io::Error::other("NTRIP: server did not respond with ICY 200 OK"));
     }
 
     NTRIP_STATE.store(1, Ordering::Relaxed);
@@ -401,7 +395,7 @@ fn run_ntrip_session(
 
     NTRIP_STATE.store(0, Ordering::Relaxed);
     // Clean exit — caller will apply backoff before reconnecting.
-    Err(std::io::Error::new(std::io::ErrorKind::Other, "NTRIP: session ended"))
+    Err(std::io::Error::other("NTRIP: session ended"))
 }
 
 // ---------------------------------------------------------------------------

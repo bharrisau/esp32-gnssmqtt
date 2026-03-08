@@ -52,7 +52,7 @@ pub fn has_wifi_credentials(nvs_partition: &EspNvsPartition<NvsDefault>) -> bool
 pub fn check_and_clear_force_softap(nvs_partition: &EspNvsPartition<NvsDefault>) -> bool {
     match EspNvs::new(nvs_partition.clone(), "prov", true) {
         Err(_) => false,
-        Ok(mut nvs) => match nvs.get_u8("force_softap") {
+        Ok(nvs) => match nvs.get_u8("force_softap") {
             Ok(Some(1)) => {
                 let _ = nvs.set_u8("force_softap", 0);
                 true
@@ -131,7 +131,7 @@ pub fn load_mqtt_config(
 /// Used by GPIO9 monitor and MQTT "softap" trigger (Plan 15-03).
 pub fn set_force_softap(nvs_partition: &EspNvsPartition<NvsDefault>) {
     match EspNvs::new(nvs_partition.clone(), "prov", true) {
-        Ok(mut nvs) => {
+        Ok(nvs) => {
             if let Err(e) = nvs.set_u8("force_softap", 1) {
                 log::warn!("set_force_softap: failed to write NVS: {:?}", e);
             }
@@ -334,7 +334,7 @@ pub fn run_softap_portal(
                         // Set QR bit (bit 15 of flags word at bytes 2-3): response
                         // Set AA bit (bit 10 of flags word): authoritative answer
                         // Clear RCODE (bits 3:0): no error
-                        resp[2] = (resp[2] | 0x80) & 0xFF; // QR=1
+                        resp[2] |= 0x80; // QR=1
                         resp[3] = (resp[3] | 0x04) & 0xF4; // AA=1, clear RCODE
                         // Set ANCOUNT to 1 (bytes 6-7)
                         resp[6] = 0x00;
