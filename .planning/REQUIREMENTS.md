@@ -47,7 +47,7 @@
 - [x] **PROV-02**: User can open captive-portal web UI to enter WiFi SSID and password
 - [x] **PROV-03**: User can configure MQTT broker (host, port, username, password) via provisioning web UI
 - [x] **PROV-04**: User can store up to 3 WiFi networks via web UI; all persisted to NVS
-- [ ] **PROV-05**: On all WiFi failures, device retries stored networks indefinitely with backoff; does not auto-enter SoftAP
+- [x] **PROV-05**: On all WiFi failures, device retries stored networks indefinitely with backoff; does not auto-enter SoftAP
 - [ ] **PROV-06**: GPIO9 held low for 3s enters SoftAP mode; device exits back to WiFi mode after 300s with no client connected (timer paused while a client is associated)
 - [ ] **PROV-07**: MQTT payload `"softap"` to `gnss/{device_id}/ota/trigger` enters SoftAP mode; same 300s no-client timeout applies
 - [ ] **PROV-08**: LED shows a distinct flash pattern while in SoftAP mode (different from connecting/connected/error)
@@ -131,7 +131,7 @@
 | PROV-02 | Phase 15 | Complete |
 | PROV-03 | Phase 15 | Complete |
 | PROV-04 | Phase 15 | Complete |
-| PROV-05 | Phase 15 | Pending |
+| PROV-05 | Phase 15 | Complete |
 | PROV-06 | Phase 15 | Pending |
 | PROV-07 | Phase 15 | Pending |
 | PROV-08 | Phase 15 | Pending |

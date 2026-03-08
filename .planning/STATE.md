@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: in_progress
-stopped_at: Completed 15-01-PLAN.md
-last_updated: "2026-03-08T00:49:00.000Z"
-last_activity: 2026-03-08 — Phase 15 plan 01 executed; provisioning module with SoftAP portal and NVS credential storage implemented
+stopped_at: Completed 15-02-PLAN.md
+last_updated: "2026-03-08T01:01:00.000Z"
+last_activity: 2026-03-08 — Phase 15 plan 02 executed; provisioning wired into main.rs boot-path, wifi_connect_any added, mqtt_connect runtime credentials
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 10
+  total_plans: 3
+  completed_plans: 3
+  percent: 15
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-08)
 ## Current Position
 
 Phase: 15 of 18 (Provisioning)
-Plan: 1 of 3 in current phase (plan 01 complete)
-Status: Phase 15 in progress — plan 01 complete, ready for plan 02
-Last activity: 2026-03-08 — Phase 15 plan 01 executed; provisioning module with SoftAP portal and NVS credential storage implemented
+Plan: 2 of 3 in current phase (plans 01 and 02 complete)
+Status: Phase 15 in progress — plans 01-02 complete, ready for plan 03
+Last activity: 2026-03-08 — Phase 15 plan 02 executed; provisioning wired into main.rs boot-path, wifi_connect_any added, mqtt_connect runtime credentials
 
-Progress: [█░░░░░░░░░] 15%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
@@ -72,6 +72,10 @@ Key carry-forward notes:
 - [Phase 15 P01]: MQTT port stored as two u8 NVS keys (mqtt_port_hi, mqtt_port_lo) — no set_u16 in EspNvs
 - [Phase 15 P01]: esp_restart() after credential save deferred 1s via spawned thread so browser receives HTTP 200
 - [Phase 15 P01]: 300s no-client timeout restarts WITHOUT force_softap so next boot tries STA with stored credentials
+- [Phase 15 P02]: wifi_connect_any does NOT enter SoftAP on failure — RESIL-01 reboot timer handles sustained WiFi failure (PROV-05)
+- [Phase 15 P02]: run_softap_portal is unreachable after return; SoftAP if-else branch ends with unreachable!() macro
+- [Phase 15 P02]: mqtt_connect username/password use None for empty strings — matches MqttClientConfiguration Option<&str> pattern
+- [Phase 15 P02]: config.rs is gitignored (credentials); SOFTAP constants added locally but not committed
 
 ### Pending Todos
 
@@ -84,7 +88,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-08T00:49:00.000Z
-Stopped at: Completed 15-01-PLAN.md
+Last session: 2026-03-08T01:01:00.000Z
+Stopped at: Completed 15-02-PLAN.md
 Resume file: None
-Next action: Execute plan 15-02 (wire provisioning module into main.rs and wifi.rs)
+Next action: Execute plan 15-03 (GPIO9 force_softap trigger and MQTT "softap" command)
