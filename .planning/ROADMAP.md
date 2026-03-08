@@ -166,5 +166,5 @@ Plans:
 | 14. Quick Additions | v2.0 | 2/2 | Complete | 2026-03-07 |
 | 15. Provisioning | v2.0 | 3/3 | Complete | 2026-03-08 |
 | 16. Remote Logging | v2.0 | 2/2 | Complete | 2026-03-08 |
-| 17. NTRIP Client | v2.0 | 4/4 | Complete (hw verify deferred) | 2026-03-09 |
+| 17. NTRIP Client | v2.0 | Complete    | 2026-03-08 | 2026-03-09 |
 | 18. Telemetry and OTA Validation | v2.0 | 0/2 | Not started | - |

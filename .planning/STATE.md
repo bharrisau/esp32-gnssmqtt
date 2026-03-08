@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
-status: completed
-stopped_at: "Completed 17-04-PLAN.md (Task 3 hardware verify deferred to end of milestone)"
-last_updated: "2026-03-09T00:00:00.000Z"
-last_activity: "2026-03-08 — Phase 15 plan 03 executed; GPIO9 monitor, MQTT "softap" trigger, LedState::SoftAP pattern added"
+status: verifying
+stopped_at: Completed 17-04-PLAN.md (Task 3 hardware verify deferred to end of milestone)
+last_updated: "2026-03-08T16:42:33.960Z"
+last_activity: 2026-03-09 — Phase 17 plan 04 concluded; captive portal DNS/probe URL handlers; hardware verify deferred to end of milestone
 progress:
   total_phases: 5
   completed_phases: 4
