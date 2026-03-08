@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: completed
-stopped_at: Completed 16-01-PLAN.md
-last_updated: "2026-03-08T03:00:14.140Z"
+stopped_at: Completed 16-02-PLAN.md
+last_updated: "2026-03-08T03:05:36.300Z"
 last_activity: "2026-03-08 — Phase 15 plan 03 executed; GPIO9 monitor, MQTT "softap" trigger, LedState::SoftAP pattern added"
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 7
-  completed_plans: 6
+  completed_plans: 7
   percent: 100
 ---
 
@@ -53,6 +53,7 @@ Progress: [██████████] 100%
 | Phase 14 P02 | 12 | 2 tasks | 3 files |
 | Phase 15 P03 | 3 | 2 tasks | 3 files |
 | Phase 16 P01 | 6 | 2 tasks | 5 files |
+| Phase 16-remote-logging P02 | 3 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,8 @@ Key carry-forward notes:
 - [Phase 16]: cc::Build include paths parsed from embuild cincl_args shell tokens — strip outer quotes, classify by -isystem/-I/-D prefix
 - [Phase 16]: mod log_relay added to main.rs in Plan 01 (not Plan 02) to allow cargo build verification; spawn_log_relay not called yet
 - [Phase 16]: spawn_log_relay returns anyhow::Result<()> — SyncSender stored in LOG_TX OnceLock, main.rs does not hold the sender
+- [Phase 16-remote-logging]: esp_idf_svc::log::set_target_level() free function used instead of EspLogger instance — EspLogger has cache field, not zero-sized; free function delegates to global LOGGER
+- [Phase 16-remote-logging]: Phase 16 LOG-01/02/03 pipeline complete: vprintf hook at Step 2b, spawn_log_relay at 9.5, log_level_relay_task at 9.6
 
 ### Pending Todos
 
@@ -95,7 +98,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-08T02:59:58.620Z
-Stopped at: Completed 16-01-PLAN.md
+Last session: 2026-03-08T03:05:36.296Z
+Stopped at: Completed 16-02-PLAN.md
 Resume file: None
 Next action: Phase 15 complete — all 8 PROV requirements done. Proceed to next phase.

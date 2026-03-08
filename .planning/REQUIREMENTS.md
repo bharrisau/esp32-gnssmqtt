@@ -67,7 +67,7 @@
 ### Remote Logging (LOG)
 
 - [x] **LOG-01**: ESP-IDF log output forwarded to `gnss/{device_id}/log` MQTT topic at QoS 0; log hook uses re-entrancy guard so MQTT enqueue/send paths are excluded from capture, preventing feedback loops
-- [ ] **LOG-02**: Log level threshold configurable via retained MQTT topic
+- [x] **LOG-02**: Log level threshold configurable via retained MQTT topic
 - [x] **LOG-03**: Log publishing is non-blocking; messages dropped silently when MQTT is disconnected or channel is full
 
 ### Maintenance (MAINT)
@@ -136,7 +136,7 @@
 | PROV-07 | Phase 15 | Complete |
 | PROV-08 | Phase 15 | Complete |
 | LOG-01 | Phase 16 | Complete |
-| LOG-02 | Phase 16 | Pending |
+| LOG-02 | Phase 16 | Complete |
 | LOG-03 | Phase 16 | Complete |
 | NTRIP-01 | Phase 17 | Pending |
 | NTRIP-02 | Phase 17 | Pending |
