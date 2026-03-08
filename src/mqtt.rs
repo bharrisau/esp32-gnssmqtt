@@ -32,6 +32,7 @@ pub fn mqtt_connect(
     ota_tx: SyncSender<Vec<u8>>,
     cmd_relay_tx: SyncSender<Vec<u8>>,   // NEW — CMD-01
     log_level_tx: SyncSender<Vec<u8>>,  // NEW — LOG-02
+    ntrip_config_tx: SyncSender<Vec<u8>>,  // NEW — NTRIP-02
     led_state: Arc<AtomicU8>,
 ) -> anyhow::Result<Arc<Mutex<EspMqttClient<'static>>>> {
     let broker_url = format!("mqtt://{}:{}", host, port);
@@ -106,7 +107,15 @@ pub fn mqtt_connect(
                 // topic: Option<&str> — None on chunked subsequent frames; Some(...) for complete messages.
                 // Config and OTA payloads arrive as Details::Complete (single chunk), so topic is always Some here.
                 let t = topic.unwrap_or("");
-                if t.ends_with("/config") {
+                if t.ends_with("/ntrip/config") {
+                    // NTRIP-02: runtime caster config update — checked before /config to prevent
+                    // /ntrip/config from being routed to the device config channel.
+                    match ntrip_config_tx.try_send(data.to_vec()) {
+                        Ok(_) => {}
+                        Err(TrySendError::Full(_)) => log::warn!("mqtt cb: ntrip config channel full — payload dropped"),
+                        Err(TrySendError::Disconnected(_)) => {}
+                    }
+                } else if t.ends_with("/config") {
                     match config_tx.try_send(data.to_vec()) {
                         Ok(_) => {}
                         Err(TrySendError::Full(_)) => log::warn!("mqtt cb: config channel full — payload dropped"),
@@ -194,6 +203,14 @@ pub fn subscriber_loop(
                         match c.subscribe(&log_level_topic, QoS::AtLeastOnce) {
                             Ok(_) => log::info!("Subscribed to {}", log_level_topic),
                             Err(e) => log::warn!("Subscribe /log/level failed: {:?}", e),
+                        }
+                        // NTRIP-02: subscribe to NTRIP caster config topic.
+                        // AtLeastOnce so the retained config is re-delivered on broker reconnect,
+                        // ensuring the NTRIP client reconnects with the latest caster settings.
+                        let ntrip_config_topic = format!("gnss/{}/ntrip/config", device_id);
+                        match c.subscribe(&ntrip_config_topic, QoS::AtLeastOnce) {
+                            Ok(_) => log::info!("Subscribed to {}", ntrip_config_topic),
+                            Err(e) => log::warn!("Subscribe /ntrip/config failed: {:?}", e),
                         }
                     }
                 }
@@ -366,9 +383,14 @@ pub fn heartbeat_loop(
                 // Current free heap in bytes.
                 let heap_free = unsafe { esp_idf_svc::sys::esp_get_free_heap_size() };
 
+                // NTRIP-04: include NTRIP connection state in heartbeat.
+                let ntrip_state = crate::ntrip_client::NTRIP_STATE.load(Ordering::Relaxed);
+                let ntrip_str = if ntrip_state == 1 { "connected" } else { "disconnected" };
+
                 let json = format!(
-                    "{{\"uptime_s\":{},\"heap_free\":{},\"nmea_drops\":{},\"rtcm_drops\":{},\"uart_tx_errors\":{}}}",
-                    uptime_s, heap_free, nmea_drops, rtcm_drops, uart_tx_errors
+                    "{{\"uptime_s\":{},\"heap_free\":{},\"nmea_drops\":{},\"rtcm_drops\":{},\
+                     \"uart_tx_errors\":{},\"ntrip\":\"{}\"}}",
+                    uptime_s, heap_free, nmea_drops, rtcm_drops, uart_tx_errors, ntrip_str
                 );
 
                 log::info!("Heartbeat: {}", json);
