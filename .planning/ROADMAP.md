@@ -124,11 +124,11 @@ Plans:
   2. The UM980 achieves RTK Float or RTK Fix status when a valid mountpoint with coverage is configured
   3. If the NTRIP TCP connection drops, the device reconnects automatically without a reboot
   4. The health heartbeat includes an NTRIP connection state field (`connected` / `disconnected`)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 17-01: NTRIP TCP client, RTCM3 stream forwarding to UART
-- [ ] 17-02: MQTT config topic, reconnect logic, heartbeat field
+- [ ] 17-01-PLAN.md — ntrip_client.rs module: NtripConfig, NVS persistence, TCP session loop, RTCM forwarding to UART, reconnect backoff (NTRIP-01, NTRIP-03)
+- [ ] 17-02-PLAN.md — Wire into main.rs + mqtt.rs: ntrip_config channel, /ntrip/config dispatch + subscription, heartbeat ntrip field (NTRIP-02, NTRIP-04)
 
 ### Phase 18: Telemetry and OTA Validation
 **Goal**: The health heartbeat reports live GNSS fix quality so operators can assess RTK performance remotely; the OTA update pipeline is validated end-to-end on hardware before v2.0 is marked complete
@@ -163,6 +163,6 @@ Plans:
 | 13. Health Telemetry | v1.3 | 1/1 | Complete | 2026-03-08 |
 | 14. Quick Additions | v2.0 | 2/2 | Complete | 2026-03-07 |
 | 15. Provisioning | v2.0 | 3/3 | Complete | 2026-03-08 |
-| 16. Remote Logging | 2/2 | Complete    | 2026-03-08 | - |
+| 16. Remote Logging | v2.0 | 2/2 | Complete | 2026-03-08 |
 | 17. NTRIP Client | v2.0 | 0/2 | Not started | - |
 | 18. Telemetry and OTA Validation | v2.0 | 0/2 | Not started | - |
