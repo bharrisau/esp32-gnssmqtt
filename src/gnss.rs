@@ -102,7 +102,7 @@ const RTCM_POOL_SIZE: usize = 4;
 /// Spawn the GNSS UART hub.
 ///
 /// Initialises `UartDriver` at 115 200 baud with a 4 KiB receive ring buffer,
-/// then spawns an RX thread and a TX thread.  Returns `(cmd_tx, nmea_rx, rtcm_rx, free_pool_tx)`:
+/// then spawns an RX thread and a TX thread.  Returns `(cmd_tx, nmea_rx, rtcm_rx, free_pool_tx, uart_arc)`:
 ///
 /// * `cmd_tx: SyncSender<String>` — send an ASCII command string here and the TX
 ///   thread will write it to the UM980 with a trailing `\r\n`.
@@ -118,11 +118,14 @@ const RTCM_POOL_SIZE: usize = 4;
 ///   payload + CRC bytes); `frame_len` is the number of valid bytes.
 /// * `free_pool_tx: SyncSender<Box<[u8; 1029]>>` — pass to `rtcm_relay::spawn_relay`
 ///   so it can return buffers to the pool after publishing each frame.
+/// * `uart_arc: Arc<UartDriver<'static>>` — shared reference to the UART driver;
+///   passed to `ntrip_client::spawn_ntrip_client` so it can write RTCM correction
+///   bytes directly to the UM980 without going through the String-typed `cmd_tx`.
 pub fn spawn_gnss(
     uart: impl Peripheral<P = impl Uart> + 'static,
     tx_pin: impl Peripheral<P = impl esp_idf_svc::hal::gpio::OutputPin> + 'static,
     rx_pin: impl Peripheral<P = impl esp_idf_svc::hal::gpio::InputPin> + 'static,
-) -> anyhow::Result<(SyncSender<String>, Receiver<(String, String)>, Receiver<RtcmFrame>, SyncSender<Box<[u8; 1029]>>)> {
+) -> anyhow::Result<(SyncSender<String>, Receiver<(String, String)>, Receiver<RtcmFrame>, SyncSender<Box<[u8; 1029]>>, Arc<UartDriver<'static>>)> {
     // Initialise UART0 at 115 200 baud.  rx_fifo_size must be set at driver
     // creation time — there is no sdkconfig option for this in ESP-IDF v5.
     let uart = UartDriver::new(
@@ -410,10 +413,15 @@ pub fn spawn_gnss(
         })
         .expect("gnss rx spawn failed");
 
+    // Clone for ntrip_client before moving uart into the TX thread.
+    // All three callers (uart_rx, uart_tx, uart_for_ntrip) share the same
+    // UartDriver via Arc — no Mutex needed since read/write take &self.
+    let uart_for_ntrip = Arc::clone(&uart);
+
     // -------------------------------------------------------------------------
     // TX thread — blocking mpsc drain → UART write
     // -------------------------------------------------------------------------
-    let uart_tx = uart; // moves the original Arc; RX thread holds the clone
+    let uart_tx = uart; // moves the original Arc; RX thread holds uart_rx clone
     std::thread::Builder::new()
         .stack_size(8192)
         .spawn(move || {
@@ -452,5 +460,5 @@ pub fn spawn_gnss(
         })
         .expect("gnss tx spawn failed");
 
-    Ok((cmd_tx, nmea_rx, rtcm_rx, free_pool_tx))
+    Ok((cmd_tx, nmea_rx, rtcm_rx, free_pool_tx, uart_for_ntrip))
 }
