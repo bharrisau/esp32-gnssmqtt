@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: completed
-stopped_at: Completed 15-03-PLAN.md
-last_updated: "2026-03-08T00:51:09.227Z"
+stopped_at: Completed 16-01-PLAN.md
+last_updated: "2026-03-08T03:00:14.140Z"
 last_activity: "2026-03-08 — Phase 15 plan 03 executed; GPIO9 monitor, MQTT "softap" trigger, LedState::SoftAP pattern added"
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 7
+  completed_plans: 6
   percent: 100
 ---
 
@@ -52,6 +52,7 @@ Progress: [██████████] 100%
 | Phase 14 P01 | 5 | 2 tasks | 2 files |
 | Phase 14 P02 | 12 | 2 tasks | 3 files |
 | Phase 15 P03 | 3 | 2 tasks | 3 files |
+| Phase 16 P01 | 6 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,9 @@ Key carry-forward notes:
 - [Phase 15 P02]: config.rs is gitignored (credentials); SOFTAP constants added locally but not committed
 - [Phase 15]: GPIO9 polled every 100ms with 3s hold threshold; timer resets on release preventing accidental SoftAP re-entry
 - [Phase 15]: nvs passed by clone to spawn_ota since EspNvsPartition<NvsDefault> implements Clone cheaply
+- [Phase 16]: cc::Build include paths parsed from embuild cincl_args shell tokens — strip outer quotes, classify by -isystem/-I/-D prefix
+- [Phase 16]: mod log_relay added to main.rs in Plan 01 (not Plan 02) to allow cargo build verification; spawn_log_relay not called yet
+- [Phase 16]: spawn_log_relay returns anyhow::Result<()> — SyncSender stored in LOG_TX OnceLock, main.rs does not hold the sender
 
 ### Pending Todos
 
@@ -91,7 +95,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-08T00:46:42.026Z
-Stopped at: Completed 15-03-PLAN.md
+Last session: 2026-03-08T02:59:58.620Z
+Stopped at: Completed 16-01-PLAN.md
 Resume file: None
 Next action: Phase 15 complete — all 8 PROV requirements done. Proceed to next phase.
