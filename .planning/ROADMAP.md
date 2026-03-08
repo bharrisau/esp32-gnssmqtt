@@ -140,11 +140,12 @@ Plans:
   1. The heartbeat JSON includes `fix_type`, `satellites`, and `hdop` fields populated from the most recent GGA sentence
   2. When no GGA sentence has been received, heartbeat fields show null or sentinel values rather than stale data
   3. An OTA firmware update is triggered via MQTT on device FFFEB5, the new image downloads, SHA-256 is verified, the device reboots into the new image, and marks valid — completing the v2.0 hardware sign-off
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 18-01: GGA parsing for fix quality in heartbeat
-- [ ] 18-02: OTA hardware validation on device FFFEB5
+- [ ] 18-01-PLAN.md — GGA parsing (gnss_state.rs + nmea_relay.rs) and heartbeat JSON extension (mqtt.rs) — TELEM-01
+- [ ] 18-02-PLAN.md — OTA + captive portal hardware validation on device FFFEB5 — MAINT-03
+- [ ] 18-03-PLAN.md — Project README.md covering all v2.0 features
 
 ## Progress
 
@@ -167,4 +168,4 @@ Plans:
 | 15. Provisioning | v2.0 | 3/3 | Complete | 2026-03-08 |
 | 16. Remote Logging | v2.0 | 2/2 | Complete | 2026-03-08 |
 | 17. NTRIP Client | v2.0 | Complete    | 2026-03-08 | 2026-03-09 |
-| 18. Telemetry and OTA Validation | v2.0 | 0/2 | Not started | - |
+| 18. Telemetry and OTA Validation | v2.0 | 0/3 | Not started | - |
