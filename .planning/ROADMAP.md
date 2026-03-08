@@ -93,12 +93,12 @@ Plans:
   4. Holding GPIO9 low for 3 seconds re-enters SoftAP mode from any state; device returns to WiFi mode after 300 seconds with no client connected
   5. Publishing `"softap"` to the OTA trigger topic enters SoftAP mode with the same 300-second no-client timeout
   6. LED shows a distinct pattern while in SoftAP mode, visually distinct from connecting, connected, and error states
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 15-01: NVS credential storage and multi-AP WiFi supervisor
-- [ ] 15-02: SoftAP mode with captive-portal web UI
-- [ ] 15-03: GPIO9 button, MQTT softap trigger, and LED pattern
+- [ ] 15-01-PLAN.md — provisioning.rs module: NVS credential storage, SoftAP WiFi mode, HTTP portal form (PROV-01, PROV-02, PROV-03, PROV-04)
+- [ ] 15-02-PLAN.md — Boot-path decision, wifi_connect_any, mqtt_connect runtime credentials (PROV-01, PROV-05)
+- [ ] 15-03-PLAN.md — GPIO9 monitor, MQTT "softap" trigger, LedState::SoftAP blink pattern (PROV-06, PROV-07, PROV-08)
 
 ### Phase 16: Remote Logging
 **Goal**: All ESP-IDF log output is forwarded to an MQTT topic in real time, with a re-entrancy guard that prevents the logging path itself from generating log events, and a runtime-configurable level threshold
@@ -161,7 +161,7 @@ Plans:
 | 11. Thread Watchdog | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 12. Resilience | v1.3 | 2/2 | Complete | 2026-03-07 |
 | 13. Health Telemetry | v1.3 | 1/1 | Complete | 2026-03-08 |
-| 14. Quick Additions | 2/2 | Complete    | 2026-03-07 | - |
+| 14. Quick Additions | v2.0 | 2/2 | Complete | 2026-03-07 |
 | 15. Provisioning | v2.0 | 0/3 | Not started | - |
 | 16. Remote Logging | v2.0 | 0/2 | Not started | - |
 | 17. NTRIP Client | v2.0 | 0/2 | Not started | - |
