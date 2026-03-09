@@ -33,8 +33,12 @@
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::gpio::PinDriver;
 use esp_idf_svc::hal::prelude::*;
+use esp_idf_svc::ipv4::{Configuration as IpConfiguration, RouterConfiguration, Subnet, Mask};
+use esp_idf_svc::netif::{EspNetif, NetifConfiguration, NetifStack};
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sntp;
+use esp_idf_svc::wifi::WifiDriver;
+use std::net::Ipv4Addr;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU8;
 
@@ -123,11 +127,31 @@ fn main() {
         // Signal SoftAP LED pattern (PROV-08) before blocking in portal.
         // led_state_wifi is still in scope here (not yet moved into wifi_supervisor thread).
         led_state_wifi.store(crate::led::LedState::SoftAP as u8, std::sync::atomic::Ordering::Relaxed);
-        let mut softap_wifi = esp_idf_svc::wifi::BlockingWifi::wrap(
-            esp_idf_svc::wifi::EspWifi::new(peripherals.modem, sysloop.clone(), Some(nvs.clone()))
-                .expect("EspWifi new failed in SoftAP path"),
-            sysloop.clone(),
-        ).expect("BlockingWifi wrap failed");
+        // Build a pre-configured AP netif with DNS pointing at the portal IP.
+        // EspNetif::new_with_conf with RouterConfiguration { dns: Some(...) } calls
+        // set_dns() AND esp_netif_dhcps_option(OFFER_DNS) during construction — the only
+        // lifecycle point that survives wifi.start().
+        let ap_netif = EspNetif::new_with_conf(&NetifConfiguration {
+            ip_configuration: Some(IpConfiguration::Router(RouterConfiguration {
+                subnet: Subnet {
+                    gateway: Ipv4Addr::new(192, 168, 71, 1),
+                    mask: Mask(24),
+                },
+                dhcp_enabled: true,
+                dns: Some(Ipv4Addr::new(192, 168, 71, 1)),
+                secondary_dns: None,
+            })),
+            ..NetifConfiguration::wifi_default_router()
+        }).expect("EspNetif new_with_conf failed in SoftAP path");
+        let softap_driver = WifiDriver::new(peripherals.modem, sysloop.clone(), Some(nvs.clone()))
+            .expect("WifiDriver new failed in SoftAP path");
+        let softap_esp_wifi = esp_idf_svc::wifi::EspWifi::wrap_all(
+            softap_driver,
+            EspNetif::new(NetifStack::Sta).expect("EspNetif STA new failed in SoftAP path"),
+            ap_netif,
+        ).expect("EspWifi wrap_all failed in SoftAP path");
+        let mut softap_wifi = esp_idf_svc::wifi::BlockingWifi::wrap(softap_esp_wifi, sysloop.clone())
+            .expect("BlockingWifi wrap failed");
         // run_softap_portal never returns: calls esp_restart() on form submit or 300s timeout.
         provisioning::run_softap_portal(&mut softap_wifi, nvs.clone())
             .expect("SoftAP portal error");
