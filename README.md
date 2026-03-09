@@ -105,6 +105,12 @@ cargo espflash flash --release --monitor
 
 This flashes the release binary and opens a serial monitor. The device ID (`gnss/{device_id}`) is printed in the boot log.
 
+> **Note — flashing after OTA:** If the device has previously received an OTA update, `espflash` writes to flash slot 0 but the bootloader may still boot from the OTA slot (slot 1), so the newly flashed code will not run. Erase flash first to reset the boot selection:
+> ```
+> cargo espflash erase-flash
+> cargo espflash flash --release --monitor
+> ```
+
 ## NTRIP Configuration
 
 Publish a **retained** JSON payload to `gnss/{device_id}/ntrip/config`:

@@ -109,3 +109,12 @@ On Android and iOS:
 After OTA validation:
 - **Keep**: leave `esp32-gnssmqtt v2.0-ota-canary` in `src/main.rs`
 - **Revert**: remove canary suffix before milestone tag
+
+---
+
+## Post-v2.0 Backlog
+
+### POST-1: espflash does not boot newly flashed app after OTA
+**Symptom:** After an OTA update, `cargo espflash flash` writes to slot 0 but the bootloader continues to boot slot 1 (the OTA slot). The newly flashed binary does not run until the flash is erased first.
+**Workaround:** `cargo espflash erase-flash` before flashing. Documented in README.
+**Fix required:** Investigate whether `espflash` can reset the OTA boot selection (e.g. by writing a valid `otadata` partition that marks slot 0 as active), or whether the partition table / bootloader needs a flag. Alternatively, expose a firmware command that clears `otadata` and reboots so a subsequent flash takes effect without erasing.
