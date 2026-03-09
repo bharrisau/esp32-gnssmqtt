@@ -4,7 +4,7 @@ milestone: v2.0
 milestone_name: Field Deployment
 status: verifying
 stopped_at: Completed 18-02-PLAN.md
-last_updated: "2026-03-08T22:08:23.219Z"
+last_updated: "2026-03-09T08:25:58.797Z"
 last_activity: 2026-03-09 — Phase 17 plan 04 concluded; captive portal DNS/probe URL handlers; hardware verify deferred to end of milestone
 progress:
   total_phases: 5
