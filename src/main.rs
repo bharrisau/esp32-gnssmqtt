@@ -97,9 +97,10 @@ fn main() {
     let led_pin = PinDriver::output(peripherals.pins.gpio15)
         .expect("GPIO15 PinDriver init failed");
 
-    // Step 3d: Clone led_state for wifi and mqtt threads
+    // Step 3d: Clone led_state for wifi, mqtt, and button threads
     let led_state_wifi = led_state.clone();
     let led_state_mqtt = led_state.clone();
+    let led_state_btn = led_state.clone();  // for GPIO9 button hold patterns (FEAT-1)
     // led_state itself will be moved into led_task below
 
     // Step 3e: Spawn LED thread — must be before wifi/mqtt threads start writing state
@@ -386,16 +387,19 @@ fn main() {
         .expect("watchdog supervisor spawn failed");
     log::info!("Watchdog supervisor started");
 
-    // Step 19: GPIO9 monitor — spawned after all other subsystems so the device is fully operational.
+    // Step 19: GPIO9 monitor — 3-phase button state machine (FEAT-1).
+    // Hold 3s → LED flashes (ButtonHold); release → SoftAP re-entry (PROV-06).
+    // Hold 10s → LED off (danger); release → NVS erase + reboot (factory reset).
+    // Factory reset erases all NVS namespaces; does NOT revert OTA slot.
     // GPIO9 is the BOOT button on XIAO ESP32-C6; safe to use as GPIO input after firmware starts.
     // WARNING: do not hold GPIO9 during hardware reset — that enters serial download mode.
-    // Holding GPIO9 low for 3 continuous seconds triggers SoftAP re-entry (PROV-06).
     let gpio9_pin = peripherals.pins.gpio9;
     let nvs_for_gpio = nvs.clone();
     std::thread::Builder::new()
         .stack_size(4096)
         .spawn(move || {
             use esp_idf_svc::hal::gpio::{PinDriver, Pull};
+            use std::sync::atomic::Ordering::Relaxed;
 
             // HWM at thread entry: confirms stack size is adequate.
             let hwm_words = unsafe {
@@ -416,21 +420,50 @@ fn main() {
                 return;
             }
 
-            let mut low_since: Option<std::time::Instant> = None;
+            enum BtnPhase { Idle, Warning, Danger }
+            let mut btn_phase = BtnPhase::Idle;
+            let mut hold_start: Option<std::time::Instant> = None;
 
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(100));
 
                 if pin.is_low() {
-                    let since = low_since.get_or_insert_with(std::time::Instant::now);
-                    if since.elapsed() >= std::time::Duration::from_secs(3) {
-                        log::info!("GPIO9: held low 3s — entering SoftAP mode (PROV-06)");
-                        crate::provisioning::set_force_softap(&nvs_for_gpio);
-                        std::thread::sleep(std::time::Duration::from_millis(200));
-                        unsafe { esp_idf_svc::sys::esp_restart(); }
+                    let since = hold_start.get_or_insert_with(std::time::Instant::now);
+                    let held = since.elapsed();
+                    match btn_phase {
+                        BtnPhase::Idle if held >= std::time::Duration::from_secs(3) => {
+                            btn_phase = BtnPhase::Warning;
+                            led_state_btn.store(crate::led::LedState::ButtonHold as u8, Relaxed);
+                            log::info!("GPIO9: 3s hold — release for SoftAP, or hold 10s for factory reset");
+                        }
+                        BtnPhase::Warning if held >= std::time::Duration::from_secs(10) => {
+                            btn_phase = BtnPhase::Danger;
+                            led_state_btn.store(crate::led::LedState::Off as u8, Relaxed);
+                            log::warn!("GPIO9: 10s hold — release now for factory reset (NVS erase + reboot)");
+                        }
+                        _ => {}
                     }
                 } else {
-                    low_since = None; // reset timer on release
+                    // Button released
+                    match btn_phase {
+                        BtnPhase::Warning => {
+                            log::info!("GPIO9: released 3–10s — entering SoftAP mode");
+                            crate::provisioning::set_force_softap(&nvs_for_gpio);
+                            std::thread::sleep(std::time::Duration::from_millis(200));
+                            unsafe { esp_idf_svc::sys::esp_restart(); }
+                        }
+                        BtnPhase::Danger => {
+                            log::warn!("GPIO9: released 10s+ — factory reset: erasing NVS partition");
+                            unsafe {
+                                esp_idf_svc::sys::nvs_flash_erase();
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                            unsafe { esp_idf_svc::sys::esp_restart(); }
+                        }
+                        _ => {}
+                    }
+                    hold_start = None;
+                    btn_phase = BtnPhase::Idle;
                 }
             }
         })
