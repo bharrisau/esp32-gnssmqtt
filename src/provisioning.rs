@@ -165,39 +165,8 @@ pub fn run_softap_portal(
     wifi.start()?;
     wifi.wait_netif_up()?;
     // Do NOT call wifi.connect() — AP mode does not use connect()
-
-    // Override DHCP-advertised DNS: point clients at the portal IP (192.168.71.1)
-    // instead of the embedded-svc default of 8.8.8.8. Without this, devices using
-    // the DHCP-supplied DNS server bypass the port-53 hijack and DNS queries time out.
-    unsafe {
-        use esp_idf_svc::handle::RawHandle;
-        use esp_idf_svc::sys::{
-            esp_netif_dns_info_t, esp_netif_dns_type_t_ESP_NETIF_DNS_MAIN,
-            esp_netif_set_dns_info, esp_netif_dhcps_stop, esp_netif_dhcps_start,
-            esp_netif_dhcps_option,
-            esp_netif_dhcp_option_mode_t_ESP_NETIF_OP_SET,
-            esp_netif_dhcp_option_id_t_ESP_NETIF_DOMAIN_NAME_SERVER,
-        };
-        let ap_netif = wifi.wifi().ap_netif().handle();
-
-        // Set DNS IP to 192.168.71.1 on the AP netif.
-        let mut dns_info = esp_netif_dns_info_t::default();
-        dns_info.ip.u_addr.ip4.addr =
-            u32::from_ne_bytes([192, 168, 71, 1]);
-        esp_netif_set_dns_info(ap_netif, esp_netif_dns_type_t_ESP_NETIF_DNS_MAIN, &mut dns_info);
-
-        // Restart DHCP server with DNS-offer option enabled (value 2 = OFFER_DNS).
-        esp_netif_dhcps_stop(ap_netif);
-        let mut offer: u8 = 2;
-        esp_netif_dhcps_option(
-            ap_netif,
-            esp_netif_dhcp_option_mode_t_ESP_NETIF_OP_SET,
-            esp_netif_dhcp_option_id_t_ESP_NETIF_DOMAIN_NAME_SERVER,
-            &mut offer as *mut _ as *mut _,
-            core::mem::size_of_val(&offer) as u32,
-        );
-        esp_netif_dhcps_start(ap_netif);
-    }
+    // DHCP DNS is pre-configured in the ap_netif passed via EspWifi::wrap_all in main.rs —
+    // no post-start DNS override needed here.
 
     log::info!("SoftAP started — connect to 'GNSS-Setup' and navigate to 192.168.71.1");
 
