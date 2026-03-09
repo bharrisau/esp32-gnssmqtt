@@ -169,3 +169,15 @@ Plans:
 | 16. Remote Logging | v2.0 | 2/2 | Complete | 2026-03-08 |
 | 17. NTRIP Client | v2.0 | Complete    | 2026-03-08 | 2026-03-09 |
 | 18. Telemetry and OTA Validation | 3/3 | Complete    | 2026-03-09 | - |
+
+### Phase 19: pre-2.0-bugfix
+
+**Goal:** Fix four known bugs blocking v2.0 milestone close and deliver boot button rework — DHCP DNS override in SoftAP (BUG-1), Android captive portal detection unblocked by BUG-1 (BUG-2), NVS TLS default causing post-OTA MQTT failure (BUG-3/BUG-4), and two-threshold GPIO9 factory reset (FEAT-1)
+**Requirements**: BUG-1, BUG-2, BUG-3, BUG-4, FEAT-1
+**Depends on:** Phase 18
+**Plans:** 3 plans
+
+Plans:
+- [ ] 19-01-PLAN.md — BUG-1/BUG-2: replace post-start DHCP DNS block with EspNetif::new_with_conf in SoftAP WiFi construction
+- [ ] 19-02-PLAN.md — BUG-3/BUG-4: fix load_mqtt_config TLS default (false), write mqtt_tls+config_ver on save, wire tls bool to mqtt_connect
+- [ ] 19-03-PLAN.md — FEAT-1: GPIO9 3-phase state machine (3s SoftAP / 10s factory reset) + ButtonHold and Off LED states
