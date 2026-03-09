@@ -5,12 +5,14 @@
 //! - Connected  (1): steady on
 //! - Error      (2): 3× rapid pulse (100ms on / 100ms off) then 700ms off; 1300ms cycle
 //! - SoftAP     (3): 500ms on / 500ms off repeating; 1000ms cycle (PROV-08)
+//! - ButtonHold (4): 100ms on / 100ms off — fast flash; button held 3–10s warning (FEAT-1)
+//! - Off        (5): steady off — button held 10s+ danger zone signal (FEAT-1)
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 use esp_idf_hal::gpio::{Gpio15, Output, PinDriver};
 
-/// Four LED states reflecting WiFi + MQTT connectivity and provisioning mode.
+/// Six LED states reflecting WiFi + MQTT connectivity, provisioning mode, and button interactions.
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq)]
 pub enum LedState {
@@ -18,6 +20,8 @@ pub enum LedState {
     Connected  = 1,
     Error      = 2,
     SoftAP     = 3,  // 500ms on / 500ms off — 1000ms cycle (PROV-08)
+    ButtonHold = 4,  // 100ms on / 100ms off — fast flash; button held 3–10s warning (FEAT-1)
+    Off        = 5,  // steady off — button held 10s+ danger zone signal (FEAT-1)
 }
 
 impl LedState {
@@ -26,6 +30,8 @@ impl LedState {
             1 => LedState::Connected,
             2 => LedState::Error,
             3 => LedState::SoftAP,
+            4 => LedState::ButtonHold,
+            5 => LedState::Off,
             _ => LedState::Connecting,
         }
     }
@@ -97,6 +103,21 @@ pub fn led_task(mut pin: PinDriver<'static, Gpio15, Output>, state: Arc<AtomicU8
                 } else {
                     pin.set_high().ok();  // LED off
                 }
+            }
+            LedState::ButtonHold => {
+                // 100ms on / 100ms off — 200ms cycle.
+                // Fast, urgent flash: visually distinct from Connecting (400ms), SoftAP (1000ms), Error (1300ms).
+                let pos = elapsed_ms % 200;
+                if pos < 100 {
+                    pin.set_low().ok();   // LED on (active-low)
+                } else {
+                    pin.set_high().ok();  // LED off
+                }
+            }
+            LedState::Off => {
+                // Steady off — danger zone signal (button held past 10s).
+                // Active-low: set_high = LED off.
+                pin.set_high().ok();
             }
         }
 
