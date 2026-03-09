@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
-status: verifying
-stopped_at: Phase 19 context gathered
-last_updated: "2026-03-09T13:39:02.730Z"
-last_activity: 2026-03-09 — Phase 17 plan 04 concluded; captive portal DNS/probe URL handlers; hardware verify deferred to end of milestone
+status: executing
+stopped_at: Phase 19 Plan 02 complete — BUG-3/BUG-4 NVS TLS versioning fixed
+last_updated: "2026-03-09T14:44:37.545Z"
+last_activity: "2026-03-09 — Phase 19 plan 01 complete; SoftAP DHCP DNS fix via EspNetif::new_with_conf"
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 14
-  completed_plans: 14
+  total_plans: 17
+  completed_plans: 16
   percent: 100
 ---
 
@@ -110,6 +110,9 @@ Key carry-forward notes:
 - [Phase 18-telemetry-and-ota-validation]: Hardware validation (OTA + captive portal) deferred to end-of-milestone sign-off session; testing.md checklist written with SHA-256 of canary binary
 - [Phase 19-01]: EspNetif::new_with_conf with RouterConfiguration.dns is the only lifecycle point that survives wifi.start() — post-start DHCP override via unsafe sys calls does not survive ESP-IDF reinit
 - [Phase 19-01]: WifiDriver::new + EspWifi::wrap_all pattern used to inject pre-configured ap_netif for SoftAP; STA netif uses default EspNetif::new(NetifStack::Sta) since STA not used in AP mode
+- [Phase 19]: TLS defaults false on key absence — old firmware never wrote mqtt_tls; absence == plain MQTT
+- [Phase 19]: config_ver=1 written on every credential save — idempotent NVS schema versioning convention
+- [Phase 19]: broker_url scheme switches mqtt:// vs mqtts:// based on tls bool from load_mqtt_config
 
 ### Roadmap Evolution
 
@@ -126,7 +129,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-09T14:36:37Z
-Stopped at: Phase 19 Plan 01 complete
-Resume file: .planning/phases/19-pre-2-0-bugfix/19-01-SUMMARY.md
+Last session: 2026-03-09T14:44:17.787Z
+Stopped at: Phase 19 Plan 02 complete — BUG-3/BUG-4 NVS TLS versioning fixed
+Resume file: None
 Next action: Phase 19 Plan 02 — NVS versioning (BUG-3/BUG-4 fix).
