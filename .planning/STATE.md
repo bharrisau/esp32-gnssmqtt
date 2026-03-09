@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: verifying
-stopped_at: Completed 18-02-PLAN.md
-last_updated: "2026-03-09T08:25:58.797Z"
+stopped_at: Phase 19 context gathered
+last_updated: "2026-03-09T13:39:02.730Z"
 last_activity: 2026-03-09 — Phase 17 plan 04 concluded; captive portal DNS/probe URL handlers; hardware verify deferred to end of milestone
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 5
   total_plans: 14
   completed_plans: 14
@@ -109,6 +109,10 @@ Key carry-forward notes:
 - [Phase 18]: README authored from source inspection (led.rs timing, heartbeat null sentinel semantics) to ensure accuracy over plan approximations
 - [Phase 18-telemetry-and-ota-validation]: Hardware validation (OTA + captive portal) deferred to end-of-milestone sign-off session; testing.md checklist written with SHA-256 of canary binary
 
+### Roadmap Evolution
+
+- Phase 19 added: pre-2.0-bugfix
+
 ### Pending Todos
 
 - Verify `esp-idf-svc` SoftAP/captive-portal API availability before Phase 15
@@ -120,7 +124,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-08T22:08:23.216Z
-Stopped at: Completed 18-02-PLAN.md
-Resume file: None
+Last session: 2026-03-09T13:39:02.726Z
+Stopped at: Phase 19 context gathered
+Resume file: .planning/phases/19-pre-2-0-bugfix/19-CONTEXT.md
 Next action: Phase 17 complete — proceed to Phase 18 (Telemetry and OTA Validation).
