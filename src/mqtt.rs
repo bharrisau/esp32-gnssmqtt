@@ -27,6 +27,7 @@ pub fn mqtt_connect(
     port: u16,
     user: &str,
     pass: &str,
+    tls: bool,              // false = plain mqtt://, true = mqtts:// (TLS deferred to SEC milestone)
     subscribe_tx: SyncSender<()>,
     status_tx: SyncSender<()>,
     config_tx: SyncSender<Vec<u8>>,
@@ -36,7 +37,11 @@ pub fn mqtt_connect(
     ntrip_config_tx: SyncSender<Vec<u8>>,  // NEW — NTRIP-02
     led_state: Arc<AtomicU8>,
 ) -> anyhow::Result<Arc<Mutex<EspMqttClient<'static>>>> {
-    let broker_url = format!("mqtt://{}:{}", host, port);
+    let broker_url = if tls {
+        format!("mqtts://{}:{}", host, port)
+    } else {
+        format!("mqtt://{}:{}", host, port)
+    };
 
     // IMPORTANT: lwt_topic MUST be declared BEFORE conf in the same scope.
     // LwtConfiguration.topic is &'a str — it must outlive the MqttClientConfiguration.

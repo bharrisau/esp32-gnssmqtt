@@ -165,7 +165,8 @@ fn main() {
     log::info!("WiFi connected");
 
     // Load MQTT config from NVS; fall back to compile-time constants if not provisioned.
-    let (mqtt_host, mqtt_port, mqtt_user_str, mqtt_pass_str) =
+    // tls defaults false when key absent (BUG-3/BUG-4 fix: old firmware never wrote mqtt_tls).
+    let (mqtt_host, mqtt_port, mqtt_user_str, mqtt_pass_str, mqtt_tls) =
         provisioning::load_mqtt_config(&nvs).unwrap_or_else(|| {
             log::warn!("No MQTT config in NVS — using compile-time defaults");
             (
@@ -173,9 +174,10 @@ fn main() {
                 crate::config::MQTT_PORT,
                 crate::config::MQTT_USER.to_string(),
                 crate::config::MQTT_PASS.to_string(),
+                false,
             )
         });
-    log::info!("MQTT config: {}:{}", mqtt_host, mqtt_port);
+    log::info!("MQTT config: {}:{} tls={}", mqtt_host, mqtt_port, mqtt_tls);
 
     // Step 6.5: SNTP — start background time sync after WiFi is up.
     // _sntp MUST remain in main() scope for the firmware lifetime.
@@ -246,6 +248,7 @@ fn main() {
         mqtt_port,
         &mqtt_user_str,
         &mqtt_pass_str,
+        mqtt_tls,
         subscribe_tx, status_tx, config_tx, ota_tx, cmd_relay_tx, log_level_tx,
         ntrip_config_tx,   // NTRIP-02
         led_state_mqtt,
