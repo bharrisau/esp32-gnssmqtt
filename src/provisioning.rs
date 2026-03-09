@@ -335,22 +335,40 @@ pub fn run_softap_portal(
                             continue; // nothing to answer
                         }
 
-                        // Build DNS response: copy header, set QR+AA bits, set ANCOUNT=1.
-                        // Append one A record RR pointing to 192.168.71.1.
-                        let mut resp = Vec::with_capacity(len + 16);
+                        // Find the end of the question section so we copy only
+                        // header + question into the response — this strips any
+                        // EDNS OPT record (or other additional records) from the
+                        // query before echoing it back.  Leaving extra bytes in the
+                        // response causes "malformed" errors and, crucially, the
+                        // original code set resp[3] |= 0x04 thinking it was the AA
+                        // bit — but AA lives in byte 2; byte 3 bit-2 is RCODE=4
+                        // (NOTIMP), which is exactly what clients were seeing.
+                        let mut q_end = 12usize;
+                        // Walk QNAME labels (length-prefixed, terminated by 0x00).
+                        while q_end < len {
+                            let label_len = buf[q_end] as usize;
+                            if label_len == 0 { q_end += 1; break; }
+                            // Compression pointer — two bytes, then stop.
+                            if label_len & 0xC0 == 0xC0 { q_end += 2; break; }
+                            q_end += 1 + label_len;
+                        }
+                        q_end += 4; // QTYPE (2) + QCLASS (2)
+                        if q_end > len {
+                            continue; // malformed question, skip
+                        }
 
-                        // Copy the query packet verbatim as the response base
-                        resp.extend_from_slice(&buf[..len]);
+                        // Build DNS response: header + question only (no additional
+                        // section), then append one A record answer.
+                        let mut resp = Vec::with_capacity(q_end + 16);
+                        resp.extend_from_slice(&buf[..q_end]);
 
-                        // Set QR bit (bit 15 of flags word at bytes 2-3): response
-                        // Set AA bit (bit 10 of flags word): authoritative answer
-                        // Clear RCODE (bits 3:0): no error
-                        resp[2] |= 0x80; // QR=1
-                        resp[3] = (resp[3] | 0x04) & 0xF4; // AA=1, clear RCODE
-                        // Set ANCOUNT to 1 (bytes 6-7)
-                        resp[6] = 0x00;
-                        resp[7] = 0x01;
-                        // Clear NSCOUNT and ARCOUNT (bytes 8-11) — no NS or AR records
+                        // DNS header flags (RFC 1035 §4.1.1):
+                        //   Byte 2: QR(7) Opcode(6:3) AA(2) TC(1) RD(0)
+                        //   Byte 3: RA(7) Z(6) AD(5) CD(4) RCODE(3:0)
+                        resp[2] |= 0x84; // QR=1 (response), AA=1 (authoritative)
+                        resp[3]  = 0x00; // RA=0, RCODE=0 (no error)
+                        // ANCOUNT=1, NSCOUNT=0, ARCOUNT=0
+                        resp[6] = 0x00; resp[7] = 0x01;
                         resp[8] = 0x00; resp[9] = 0x00;
                         resp[10] = 0x00; resp[11] = 0x00;
 
