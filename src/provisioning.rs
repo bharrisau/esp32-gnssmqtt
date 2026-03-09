@@ -90,11 +90,13 @@ pub fn load_wifi_networks(nvs_partition: &EspNvsPartition<NvsDefault>) -> Vec<(S
 
 /// Loads MQTT configuration from NVS.
 ///
-/// Returns Some((host, port, user, pass)) if mqtt_host is non-empty, None otherwise.
+/// Returns Some((host, port, user, pass, tls)) if mqtt_host is non-empty, None otherwise.
 /// Reconstructs the 16-bit port from two u8 keys. Uses 1883 as default if port is 0.
+/// tls defaults to false when the key is absent — old firmware never wrote mqtt_tls,
+/// so absence means plain MQTT (BUG-3 fix: avoids TLS handshake against plain broker post-OTA).
 pub fn load_mqtt_config(
     nvs_partition: &EspNvsPartition<NvsDefault>,
-) -> Option<(String, u16, String, String)> {
+) -> Option<(String, u16, String, String, bool)> {
     let nvs = EspNvs::new(nvs_partition.clone(), "prov", false).ok()?;
     let mut host_buf = [0u8; 65];
     let mut user_buf = [0u8; 65];
@@ -123,7 +125,11 @@ pub fn load_mqtt_config(
         .unwrap_or("")
         .to_string();
 
-    Some((host, port, user, pass))
+    // Default 0 (false = plain MQTT). TLS toggle deferred to security milestone (SEC-F01).
+    // Old firmware never wrote this key — unwrap_or(0) ensures TLS is off for pre-existing configs.
+    let tls = nvs.get_u8("mqtt_tls").unwrap_or(None).unwrap_or(0) != 0;
+
+    Some((host, port, user, pass, tls))
 }
 
 /// Sets the force_softap NVS flag so the next boot enters SoftAP mode.
@@ -417,6 +423,8 @@ fn save_credentials(
     nvs.set_u8("mqtt_port_lo", (mqtt_port & 0xFF) as u8)?;
     nvs.set_str("mqtt_user", mqtt_user)?;
     nvs.set_str("mqtt_pass", mqtt_pass)?;
+    nvs.set_u8("mqtt_tls", 0)?;   // plain MQTT; TLS deferred to security milestone (SEC-F01)
+    nvs.set_u8("config_ver", 1)?; // NVS schema v1 — written on every save for future detection
     Ok(())
 }
 
