@@ -253,11 +253,13 @@ pub fn run_softap_portal(
     // Mikrotik/generic: /redirect
     let redirect_html: &'static [u8] = b"<html><head><meta http-equiv='refresh' content='0;url=http://192.168.71.1/'></head></html>";
 
-    server.fn_handler("/generate_204", Method::Get, move |req| {
-        req.into_ok_response()?.write_all(redirect_html)
+    server.fn_handler("/generate_204", Method::Get, |req| {
+        req.into_response(302, Some("Found"), &[("Location", "http://192.168.71.1/")])?
+            .write_all(b"")
     })?;
-    server.fn_handler("/connectivitycheck", Method::Get, move |req| {
-        req.into_ok_response()?.write_all(redirect_html)
+    server.fn_handler("/connectivitycheck", Method::Get, |req| {
+        req.into_response(302, Some("Found"), &[("Location", "http://192.168.71.1/")])?
+            .write_all(b"")
     })?;
     server.fn_handler("/hotspot-detect.html", Method::Get, move |req| {
         req.into_ok_response()?.write_all(redirect_html)
