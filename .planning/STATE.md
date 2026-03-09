@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: executing
-stopped_at: Phase 19 Plan 02 complete — BUG-3/BUG-4 NVS TLS versioning fixed
-last_updated: "2026-03-09T14:44:37.545Z"
+stopped_at: Phase 19 Plan 03 complete — FEAT-1 boot button rework (GPIO9 3-phase state machine)
+last_updated: "2026-03-09T14:49:36.797Z"
 last_activity: "2026-03-09 — Phase 19 plan 01 complete; SoftAP DHCP DNS fix via EspNetif::new_with_conf"
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
   percent: 100
 ---
 
@@ -60,6 +60,7 @@ Progress: [██████████] 100%
 | Phase 18-telemetry-and-ota-validation P01 | 3 | 3 tasks | 4 files |
 | Phase 18 P03 | 2 | 1 tasks | 1 files |
 | Phase 18-telemetry-and-ota-validation P02 | 5 | 1 tasks | 2 files |
+| Phase 19-pre-2-0-bugfix P03 | 7 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,9 @@ Key carry-forward notes:
 - [Phase 19]: TLS defaults false on key absence — old firmware never wrote mqtt_tls; absence == plain MQTT
 - [Phase 19]: config_ver=1 written on every credential save — idempotent NVS schema versioning convention
 - [Phase 19]: broker_url scheme switches mqtt:// vs mqtts:// based on tls bool from load_mqtt_config
+- [Phase 19-pre-2-0-bugfix]: BtnPhase enum defined inside GPIO9 thread closure — no module-level visibility required
+- [Phase 19-pre-2-0-bugfix]: Factory reset uses nvs_flash_erase() (all namespaces) — complete credential wipe for field recovery without touching OTA slot
+- [Phase 19-pre-2-0-bugfix]: FEAT-1 boot button: 3s hold flashes ButtonHold LED (warning); 10s hold sets Off LED (danger); release in each window acts accordingly
 
 ### Roadmap Evolution
 
@@ -129,7 +133,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-09T14:44:17.787Z
-Stopped at: Phase 19 Plan 02 complete — BUG-3/BUG-4 NVS TLS versioning fixed
+Last session: 2026-03-09T14:49:36.792Z
+Stopped at: Phase 19 Plan 03 complete — FEAT-1 boot button rework (GPIO9 3-phase state machine)
 Resume file: None
 Next action: Phase 19 Plan 02 — NVS versioning (BUG-3/BUG-4 fix).
