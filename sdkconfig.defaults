@@ -42,6 +42,10 @@ CONFIG_ESP_TASK_WDT_TIMEOUT_S=30
 # (idle task stops being scheduled). Without this, TWDT only logs (no reboot).
 CONFIG_ESP_TASK_WDT_PANIC=y
 
+# HTTP server: increase header buffer so Android/desktop browsers don't get 431.
+# Default is 512 bytes; Android Chrome sends User-Agent + cookies that exceed this.
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+
 # Log timestamps: use system time (wall clock) instead of RTOS ticks.
 # After SNTP syncs, log lines show HH:MM:SS.mmm instead of uptime ms.
 # Requires EspSntp to be initialised at runtime (see main.rs Step 6.5).
