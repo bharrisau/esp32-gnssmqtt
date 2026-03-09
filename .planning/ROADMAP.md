@@ -175,7 +175,7 @@ Plans:
 **Goal:** Fix four known bugs blocking v2.0 milestone close and deliver boot button rework — DHCP DNS override in SoftAP (BUG-1), Android captive portal detection unblocked by BUG-1 (BUG-2), NVS TLS default causing post-OTA MQTT failure (BUG-3/BUG-4), and two-threshold GPIO9 factory reset (FEAT-1)
 **Requirements**: BUG-1, BUG-2, BUG-3, BUG-4, FEAT-1
 **Depends on:** Phase 18
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 19-01-PLAN.md — BUG-1/BUG-2: replace post-start DHCP DNS block with EspNetif::new_with_conf in SoftAP WiFi construction

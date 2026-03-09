@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-03-08)
 
 ## Current Position
 
-Phase: 17 of 18 (NTRIP Client)
-Plan: 4 of 4 in current phase (all plans 01-04 complete — Phase 17 complete; Task 3 hardware verify deferred to end of milestone)
-Status: Phase 17 complete — NTRIP client, log quality, captive portal DNS all implemented; hardware verify deferred
-Last activity: 2026-03-09 — Phase 17 plan 04 concluded; captive portal DNS/probe URL handlers; hardware verify deferred to end of milestone
+Phase: 19 of 19 (pre-2.0-bugfix)
+Plan: 1 of 3 in current phase (19-01 complete — BUG-1 DHCP DNS fix; BUG-2 unblocked)
+Status: Phase 19 in progress — BUG-1 fixed (WifiDriver+wrap_all DNS pre-config); BUG-3/BUG-4 NVS versioning pending (19-02); FEAT-1 boot button pending (19-03)
+Last activity: 2026-03-09 — Phase 19 plan 01 complete; SoftAP DHCP DNS fix via EspNetif::new_with_conf
 
 Progress: [██████████] 100%
 
@@ -108,6 +108,8 @@ Key carry-forward notes:
 - [Phase 18]: ends_with('GGA') match in nmea_relay.rs handles GNGGA, GPGGA, GLGGA uniformly without exhaustive list
 - [Phase 18]: README authored from source inspection (led.rs timing, heartbeat null sentinel semantics) to ensure accuracy over plan approximations
 - [Phase 18-telemetry-and-ota-validation]: Hardware validation (OTA + captive portal) deferred to end-of-milestone sign-off session; testing.md checklist written with SHA-256 of canary binary
+- [Phase 19-01]: EspNetif::new_with_conf with RouterConfiguration.dns is the only lifecycle point that survives wifi.start() — post-start DHCP override via unsafe sys calls does not survive ESP-IDF reinit
+- [Phase 19-01]: WifiDriver::new + EspWifi::wrap_all pattern used to inject pre-configured ap_netif for SoftAP; STA netif uses default EspNetif::new(NetifStack::Sta) since STA not used in AP mode
 
 ### Roadmap Evolution
 
@@ -124,7 +126,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-09T13:39:02.726Z
-Stopped at: Phase 19 context gathered
-Resume file: .planning/phases/19-pre-2-0-bugfix/19-CONTEXT.md
-Next action: Phase 17 complete — proceed to Phase 18 (Telemetry and OTA Validation).
+Last session: 2026-03-09T14:36:37Z
+Stopped at: Phase 19 Plan 01 complete
+Resume file: .planning/phases/19-pre-2-0-bugfix/19-01-SUMMARY.md
+Next action: Phase 19 Plan 02 — NVS versioning (BUG-3/BUG-4 fix).
