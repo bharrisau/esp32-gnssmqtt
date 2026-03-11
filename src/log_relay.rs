@@ -30,7 +30,8 @@ use esp_idf_svc::mqtt::client::EspMqttClient;
 
 /// Re-entrancy guard: set to true while the relay thread is inside the MQTT publish path.
 /// Checked by log_shim.c via `rust_log_is_reentering()` before forwarding log output to MQTT.
-static LOG_REENTERING: AtomicBool = AtomicBool::new(false);
+/// Made `pub` for access by `mqtt_publish::publish_thread` (Plan 21-01).
+pub static LOG_REENTERING: AtomicBool = AtomicBool::new(false);
 
 /// Global sender end of the log channel. Stored here so `rust_log_try_send` can reach it
 /// without any allocation or locking on the hot path.

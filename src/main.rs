@@ -49,6 +49,7 @@ mod gnss_state;
 mod led;
 mod log_relay;
 mod mqtt;
+mod mqtt_publish;
 mod ntrip_client;
 mod config_relay;
 mod nmea_relay;
