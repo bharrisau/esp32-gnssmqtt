@@ -187,7 +187,7 @@ Plans:
 **Goal:** Fix bugs found during first field deployment of device FFFEB5 — Windows/iOS captive portal detection (BUG-5), MQTT throughput for 5 Hz GNSS output (PERF-1), UM980 config persistence and auto-reapply on reset (FEAT-2), and TLS NTRIP client for AUSCORS port 443 (FEAT-3)
 **Requirements**: BUG-5, PERF-1, FEAT-2, FEAT-3
 **Depends on:** Phase 19
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 
 Plans:
 - [ ] 20-01-PLAN.md — BUG-5: Fix Windows msftconnecttest + iOS captive portal probe handlers (provisioning.rs)
