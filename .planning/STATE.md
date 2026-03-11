@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: executing
-stopped_at: Completed 20-01-PLAN.md — BUG-5 Windows/iOS captive portal probe handlers fixed
-last_updated: "2026-03-11T13:39:47.112Z"
+stopped_at: Completed 20-03-PLAN.md — UM980 config NVS persistence + auto re-apply on reboot
+last_updated: "2026-03-11T13:42:19.980Z"
 last_activity: "2026-03-09 — Phase 19 plan 01 complete; SoftAP DHCP DNS fix via EspNetif::new_with_conf"
 progress:
   total_phases: 7
@@ -62,6 +62,8 @@ Progress: [██████████] 100%
 | Phase 18-telemetry-and-ota-validation P02 | 5 | 1 tasks | 2 files |
 | Phase 19-pre-2-0-bugfix P03 | 7 | 2 tasks | 2 files |
 | Phase 20-field-testing-fixes P01 | 15 | 1 tasks | 1 files |
+| Phase 20-field-testing-fixes P03 | 17 | 2 tasks | 2 files |
+| Phase 20 P03 | 17 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -119,6 +121,9 @@ Key carry-forward notes:
 - [Phase 19-pre-2-0-bugfix]: Factory reset uses nvs_flash_erase() (all namespaces) — complete credential wipe for field recovery without touching OTA slot
 - [Phase 19-pre-2-0-bugfix]: FEAT-1 boot button: 3s hold flashes ButtonHold LED (warning); 10s hold sets Off LED (danger); release in each window acts accordingly
 - [Phase 20-field-testing-fixes]: Windows/iOS captive portal probes require exact response bodies — redirect_html causes silent OS failure; /connecttest.txt returns 'Microsoft Connect Test', /ncsi.txt returns 'Microsoft NCSI', /hotspot-detect.html returns exact Apple success HTML
+- [Phase 20-03]: get_blob() returns Ok(Some(&[u8])) not Ok(Some(usize)) — fixed during Task 2; use data.len() and pass slice directly
+- [Phase 20-03]: NVS save_gnss_config called only after apply_config succeeds (not on hash-dedup skip) — NVS only holds applied configs
+- [Phase 20-03]: UM980 reboot monitor stack increased to 8192 for 512-byte vec allocation headroom; namespace 'gnss'/key 'gnss_config' follows 'prov'/'ntrip' convention
 
 ### Roadmap Evolution
 
@@ -136,7 +141,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-11T13:39:35.353Z
-Stopped at: Completed 20-01-PLAN.md — BUG-5 Windows/iOS captive portal probe handlers fixed
+Last session: 2026-03-11T13:42:16.370Z
+Stopped at: Completed 20-03-PLAN.md — UM980 config NVS persistence + auto re-apply on reboot
 Resume file: None
 Next action: Phase 19 Plan 02 — NVS versioning (BUG-3/BUG-4 fix).

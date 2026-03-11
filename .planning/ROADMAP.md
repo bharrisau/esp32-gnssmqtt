@@ -190,7 +190,7 @@ Plans:
 **Plans:** 2/4 plans executed
 
 Plans:
-- [ ] 20-01-PLAN.md — BUG-5: Fix Windows msftconnecttest + iOS captive portal probe handlers (provisioning.rs)
+- [x] 20-01-PLAN.md — BUG-5: Fix Windows msftconnecttest + iOS captive portal probe handlers (provisioning.rs)
 - [ ] 20-02-PLAN.md — PERF-1: NMEA channel 64→128, throughput diagnostic log, MQTT outbox timeout tuning
-- [ ] 20-03-PLAN.md — FEAT-2: NVS blob save for GNSS config in config_relay.rs; auto-reapply in main.rs UM980 reboot monitor
+- [x] 20-03-PLAN.md — FEAT-2: NVS blob save for GNSS config in config_relay.rs; auto-reapply in main.rs UM980 reboot monitor
 - [ ] 20-04-PLAN.md — FEAT-3: TLS NTRIP session path (EspTls) in ntrip_client.rs; NTRIP TLS config in provisioning portal
