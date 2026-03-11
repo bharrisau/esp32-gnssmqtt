@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: executing
-stopped_at: Phase 19 Plan 03 complete — FEAT-1 boot button rework (GPIO9 3-phase state machine)
-last_updated: "2026-03-09T14:52:51.352Z"
+stopped_at: Completed 20-01-PLAN.md — BUG-5 Windows/iOS captive portal probe handlers fixed
+last_updated: "2026-03-11T13:39:47.112Z"
 last_activity: "2026-03-09 — Phase 19 plan 01 complete; SoftAP DHCP DNS fix via EspNetif::new_with_conf"
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 6
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 21
+  completed_plans: 19
   percent: 100
 ---
 
@@ -61,6 +61,7 @@ Progress: [██████████] 100%
 | Phase 18 P03 | 2 | 1 tasks | 1 files |
 | Phase 18-telemetry-and-ota-validation P02 | 5 | 1 tasks | 2 files |
 | Phase 19-pre-2-0-bugfix P03 | 7 | 2 tasks | 2 files |
+| Phase 20-field-testing-fixes P01 | 15 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -117,10 +118,12 @@ Key carry-forward notes:
 - [Phase 19-pre-2-0-bugfix]: BtnPhase enum defined inside GPIO9 thread closure — no module-level visibility required
 - [Phase 19-pre-2-0-bugfix]: Factory reset uses nvs_flash_erase() (all namespaces) — complete credential wipe for field recovery without touching OTA slot
 - [Phase 19-pre-2-0-bugfix]: FEAT-1 boot button: 3s hold flashes ButtonHold LED (warning); 10s hold sets Off LED (danger); release in each window acts accordingly
+- [Phase 20-field-testing-fixes]: Windows/iOS captive portal probes require exact response bodies — redirect_html causes silent OS failure; /connecttest.txt returns 'Microsoft Connect Test', /ncsi.txt returns 'Microsoft NCSI', /hotspot-detect.html returns exact Apple success HTML
 
 ### Roadmap Evolution
 
 - Phase 19 added: pre-2.0-bugfix
+- Phase 20 added: Field testing fixes
 
 ### Pending Todos
 
@@ -133,7 +136,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-09T14:49:36.792Z
-Stopped at: Phase 19 Plan 03 complete — FEAT-1 boot button rework (GPIO9 3-phase state machine)
+Last session: 2026-03-11T13:39:35.353Z
+Stopped at: Completed 20-01-PLAN.md — BUG-5 Windows/iOS captive portal probe handlers fixed
 Resume file: None
 Next action: Phase 19 Plan 02 — NVS versioning (BUG-3/BUG-4 fix).
