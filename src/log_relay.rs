@@ -12,25 +12,23 @@
 //!      `esp_log_vprintf_func`. C component logs (wifi, tcp/ip, etc.) that go through
 //!      `esp_log_write` reach `rust_log_try_send` via FFI and into LOG_TX.
 //!
-//!   3. The relay thread drains LOG_TX and publishes each message to
-//!      `gnss/{device_id}/log` at QoS 0 (AtMostOnce).
+//!   3. The relay thread drains LOG_TX and sends each message to the publish thread via
+//!      `SyncSender<MqttMessage>` which publishes to `gnss/{device_id}/log` at QoS 0.
 //!
 //! Re-entrancy guard:
-//!   LOG_REENTERING is set to true while the relay thread is inside the MQTT publish path.
+//!   LOG_REENTERING is set to true by the publish thread while publishing a Log variant.
 //!   Both MqttLogger::log() and log_shim.c check this before forwarding — preventing a
-//!   feedback loop if the MQTT stack or relay thread itself emits log output.
-//!   CRITICAL: the relay thread's publish path must NEVER call any log:: macro.
+//!   feedback loop if the MQTT stack or publish thread itself emits log output.
+//!   CRITICAL: the relay thread must NEVER call any log:: macro.
+//!   CRITICAL: the relay thread does NOT set LOG_REENTERING — the publish_thread does.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{sync_channel, SyncSender};
-use embedded_svc::mqtt::client::QoS;
 use esp_idf_svc::log::EspLogger;
-use esp_idf_svc::mqtt::client::EspMqttClient;
 
-/// Re-entrancy guard: set to true while the relay thread is inside the MQTT publish path.
+/// Re-entrancy guard: set to true while the publish thread is publishing a Log variant.
 /// Checked by log_shim.c via `rust_log_is_reentering()` before forwarding log output to MQTT.
-/// Made `pub` for access by `mqtt_publish::publish_thread` (Plan 21-01).
+/// `pub` for access by `mqtt_publish::publish_thread` (Plan 21-01).
 pub static LOG_REENTERING: AtomicBool = AtomicBool::new(false);
 
 /// Global sender end of the log channel. Stored here so `rust_log_try_send` can reach it
@@ -66,7 +64,7 @@ impl log::Log for MqttLogger {
         // UART output via EspLogger (preserves existing behavior, handles level filtering)
         self.inner.log(record);
 
-        // MQTT forwarding: skip if relay thread is publishing (re-entrancy guard)
+        // MQTT forwarding: skip if publish thread is publishing a log message (re-entrancy guard)
         if LOG_REENTERING.load(Ordering::Relaxed) {
             return;
         }
@@ -102,7 +100,7 @@ impl log::Log for MqttLogger {
 /// FFI: Called from log_shim.c to check if we are currently publishing a log message.
 /// Returns 1 if re-entering (skip MQTT path), 0 otherwise.
 /// Ordering::Relaxed is sufficient — a missed early message is acceptable; correctness
-/// (no deadlock, no feedback loop) is preserved by the structural guard in the relay thread.
+/// (no deadlock, no feedback loop) is preserved by the structural guard in the publish thread.
 #[no_mangle]
 pub extern "C" fn rust_log_is_reentering() -> i32 {
     if LOG_REENTERING.load(Ordering::Relaxed) { 1 } else { 0 }
@@ -164,7 +162,11 @@ fn strip_ansi(s: String) -> String {
 /// Creates a bounded sync_channel of capacity 128 (boot produces 30+ log messages in a
 /// 30ms burst before the relay drains; capacity 32 caused silent drops of legitimate boot
 /// diagnostics). Stores the sender in LOG_TX so `rust_log_try_send` can reach it.
-/// Spawns a dedicated relay thread that reads from the channel and publishes to MQTT.
+/// Spawns a dedicated relay thread that reads from the channel and sends to the publish
+/// thread via `SyncSender<MqttMessage>`.
+///
+/// The relay thread does NOT set LOG_REENTERING — that is the publish thread's
+/// responsibility (set only while dispatching a `MqttMessage::Log` variant).
 ///
 /// Returns `Ok(())` immediately after spawning. Does NOT install the vprintf hook —
 /// that is done in main.rs via `install_mqtt_log_hook()` (Plan 02).
@@ -172,8 +174,8 @@ fn strip_ansi(s: String) -> String {
 /// # Errors
 /// Returns `Err` if the relay thread cannot be spawned (out of task slots / stack).
 pub fn spawn_log_relay(
-    client: Arc<Mutex<EspMqttClient<'static>>>,
-    device_id: String,
+    mqtt_tx: SyncSender<crate::mqtt_publish::MqttMessage>,
+    log_topic: std::sync::Arc<str>,   // pre-built "gnss/{id}/log"
 ) -> anyhow::Result<()> {
     // Capacity 128: boot produces 30+ log messages in a 30ms burst before the relay
     // drains. Capacity 32 caused silent drops of legitimate boot diagnostics.
@@ -198,32 +200,22 @@ pub fn spawn_log_relay(
                 hwm_words * 4
             );
 
-            let topic = format!("gnss/{}/log", device_id);
-
             loop {
                 match log_rx.recv_timeout(crate::config::SLOW_RECV_TIMEOUT) {
                     Ok(msg) => {
-                        // Set re-entrancy guard BEFORE any MQTT work.
                         // CRITICAL: do NOT call log::, log::info!, etc. inside this block.
-                        // Any log call here would re-enter mqtt_log_vprintf, check the guard,
-                        // and skip forwarding — but the log:: call is still made, wasting cycles.
-                        // More importantly: never log here even accidentally — the guard prevents
-                        // a feedback loop but does not make it safe or efficient to log.
-                        LOG_REENTERING.store(true, Ordering::Relaxed);
-
-                        // Acquire mutex per message; do NOT hold across loop iterations.
-                        if let Ok(mut c) = client.lock() {
-                            // QoS::AtMostOnce (0): fire-and-forget; no re-delivery on disconnect.
-                            // retain = false: log messages are transient.
-                            let _ = c.enqueue(&topic, QoS::AtMostOnce, false, msg.as_bytes());
-                        }
-
-                        // Clear re-entrancy guard AFTER all MQTT work is done.
-                        LOG_REENTERING.store(false, Ordering::Relaxed);
+                        // CRITICAL: do NOT set LOG_REENTERING here — the publish_thread does it
+                        //   when dispatching MqttMessage::Log variants.
+                        // On TrySendError::Full: silently drop (LOG-03 — non-blocking, drop when full).
+                        // On TrySendError::Disconnected: silently continue.
+                        let _ = mqtt_tx.try_send(crate::mqtt_publish::MqttMessage::Log {
+                            topic: log_topic.clone(),
+                            payload: msg.into_bytes(),
+                        });
                     }
                     Err(_) => {
                         // Timeout or channel closed — continue silently.
-                        // Do not log here (guard is clear, but we want no log noise from relay).
+                        // Do not log here (we want no log noise from relay).
                     }
                 }
             }
