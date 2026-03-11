@@ -50,3 +50,9 @@ CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 # After SNTP syncs, log lines show HH:MM:SS.mmm instead of uptime ms.
 # Requires EspSntp to be initialised at runtime (see main.rs Step 6.5).
 CONFIG_LOG_TIMESTAMP_SOURCE_SYSTEM=y
+
+# MQTT throughput tuning (PERF-1: 5 Hz GNSS support)
+# Reduce outbox message expiry from 30s default to 5s.
+# At QoS 0, messages not ACKed within 5s (MQTT disconnected) are discarded.
+# Prevents outbox memory growth during short MQTT disconnects at high publish rates.
+CONFIG_MQTT_OUTBOX_EXPIRED_TIMEOUT_MS=5000
