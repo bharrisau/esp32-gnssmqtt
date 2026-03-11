@@ -2,9 +2,9 @@
 
 ## What This Is
 
-Rust firmware for the ESP32-C6 (XIAO Seeed) that bridges a UM980 GNSS module to an MQTT broker over WiFi. The device reads NMEA sentences and RTCM3 correction frames from the UM980 over UART, publishes each to dedicated MQTT topics in real time, accepts remote UM980 reconfiguration via retained MQTT config, supports MQTT-triggered OTA firmware updates with rollback safety, and publishes periodic health telemetry. Designed for unattended long-running operation with automatic recovery from connectivity loss.
+Rust firmware for the ESP32-C6 (XIAO Seeed) that bridges a UM980 GNSS module to an MQTT broker over WiFi. The device reads NMEA sentences and RTCM3 correction frames from the UM980 over UART, publishes each to dedicated MQTT topics in real time, accepts remote UM980 reconfiguration via retained MQTT config, supports MQTT-triggered OTA firmware updates with rollback safety, and publishes periodic health telemetry including GNSS fix quality.
 
-v1.3 shipped: reliability hardening — bounded channels, zero-alloc RTCM hot path, FreeRTOS stack HWM diagnostics, thread watchdog with auto-reboot, resilience timeouts (WiFi + MQTT), and MQTT health heartbeat.
+v2.0 shipped: field deployment — SoftAP web provisioning (no recompile), NTRIP corrections client with TLS, remote log streaming, captive portal with DNS hijack, GNSS fix telemetry, post-field bug fixes (captive portal probes, MQTT throughput, UM980 config persistence), and MQTT publish thread refactor eliminating Arc<Mutex> contention.
 
 ## Core Value
 
@@ -39,17 +39,23 @@ GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker
 - ✓ Retained `"online"` published to `/status` on every MQTT reconnect (clears LWT) — v1.3
 - ✓ UM980 `#`-prefixed query responses routed to `gnss/{device_id}/nmea/response` — post-v1.3
 - ✓ Free-text UM980 output mirrored to stdout for espflash monitor visibility — post-v1.3
+- ✓ SNTP wall-clock time sync on WiFi connect — v2.0
+- ✓ UM980 command relay via `gnss/{id}/command` MQTT topic — v2.0
+- ✓ Remote reboot trigger via OTA topic — v2.0
+- ✓ SoftAP web provisioning portal — WiFi (3 SSIDs) + MQTT + NTRIP credentials without recompile — v2.0
+- ✓ Multi-AP failover — device retries stored networks indefinitely with backoff — v2.0
+- ✓ GPIO9 button: 3s SoftAP re-entry / 10s factory reset; same 300s idle timeout — v2.0
+- ✓ ESP-IDF remote log streaming to `gnss/{id}/log` with re-entrancy guard; runtime level config — v2.0
+- ✓ NTRIP v1 client: TCP + TLS (EspTls/mbedTLS) streams RTCM3 to UM980 UART for RTK fix; auto-reconnect — v2.0
+- ✓ Captive portal DNS hijack (port 53 UDP) — Android/iOS/Windows probe handlers for seamless SoftAP onboarding — v2.0
+- ✓ GNSS fix telemetry: heartbeat includes fix_type, satellites, HDOP from GGA atomics — v2.0
+- ✓ UM980 GNSS config persisted to NVS and auto-reapplied after UM980 hardware reboot — v2.0
+- ✓ MQTT publish thread refactor: single publish thread owns EspMqttClient exclusively; SyncSender<MqttMessage> across all relay threads; bytes crate for zero-copy RTCM — v2.0
+- ✓ MQTT outbox observability: MQTT_ENQUEUE_ERRORS + MQTT_OUTBOX_DROPS atomics; bench:N trigger for field diagnostics — v2.0
 
 ### Active
 
-- [ ] BLE/SoftAP WiFi provisioning — credentials without recompile
-- [ ] NTRIP client — fetch RTCM3 corrections from caster over WiFi, forward to UM980 UART
-- [ ] MQTT `/command` topic — forward arbitrary UM980 commands remotely (replaces stdin bridge)
-- [ ] Remote log streaming — ESP-IDF log output published to MQTT topic
-- [ ] Remote reboot trigger — added to existing OTA endpoint
-- [ ] SNTP time sync — accurate wall-clock timestamps in logs
-- [ ] Fix quality in heartbeat — GGA fix type, satellite count, HDOP added to 30s heartbeat
-- [ ] Multi-AP failover — device tries list of configured SSIDs on connection failure
+(None — v2.0 complete. Define next milestone requirements with `/gsd:new-milestone`)
 
 ### Out of Scope
 
@@ -65,7 +71,7 @@ GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker
 - **GNSS**: UM980 multi-band RTK receiver, UART0 at 115200 baud (GPIO16 TX, GPIO17 RX)
 - **Language**: Rust with std via esp-idf-svc/hal/sys (ESP-IDF v5.3.3)
 - **MQTT broker**: External (Mosquitto/HiveMQ); username/password auth, no TLS in v1
-- **Shipped v1.3**: 2,249 lines of Rust, 13 phases, 24 plans total; device FFFEB5
+- **Shipped v2.0**: 4,726 lines of Rust, 21 phases, 48 plans total; device FFFEB5
 - **UM980 UART protocol**: NMEA sentences (`$`-prefix), RTCM3 frames (`0xD3`-prefix), `#`-prefix query responses (checksum-terminated); free-text banners otherwise
 - **UM980 config**: Configured via retained MQTT config topic at boot; RESET causes reboot (wait required), UNLOG cleans NMEA outputs without reboot; avoid CONFIGSAVE (NVM wear)
 
@@ -99,20 +105,12 @@ GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker
 | `recv_timeout` on all blocking receives | Prevents threads from hanging indefinitely if producer dies | ✓ Good — all threads now have finite liveness guarantees |
 | Separate `status_tx` channel for heartbeat "online" publish | MQTT callback signals both subscriber and heartbeat on Connected; heartbeat re-publishes retained online on every reconnect | ✓ Good — LWT cleared correctly on all reconnects |
 | `RxState` four-state machine with `FreeLine`/`HashLine` | UM980 sends `#`-prefixed query responses and free-text; state machine cleanly routes each to appropriate sink | ✓ Good — no bytes silently discarded |
-
-## Current Milestone: v2.0 Field Deployment
-
-**Goal:** Enable unattended outdoor RTK operation with remote provisioning, NTRIP corrections, remote logging, and command relay.
-
-**Target features:**
-- BLE/SoftAP WiFi provisioning (no recompile needed)
-- NTRIP client (fetch RTCM3 corrections, forward to UM980)
-- MQTT `/command` topic (remote UM980 command relay)
-- Remote log streaming over MQTT
-- Remote reboot trigger (added to OTA endpoint)
-- SNTP time sync (accurate log timestamps)
-- Fix quality in heartbeat (GGA fix type, sat count, HDOP)
-- Multi-AP failover (try list of SSIDs on connection failure)
+| SoftAP provisioning over BLE | BLE requires custom app to configure both WiFi and MQTT; SoftAP web UI covers both with zero client install | ✓ Good — simpler UX, no app dependency |
+| EspNetif::new_with_conf for DNS in SoftAP | Post-start DHCP DNS injection failed; configuring at netif creation is the correct approach | ✓ Good — Android captive detection unblocked |
+| NVS TLS default `false` + config_ver field | OTA resets NVS schema; version check ensures new schema fields have correct defaults after flash | ✓ Good — post-OTA MQTT regression eliminated |
+| Single publish thread owning EspMqttClient exclusively | Arc<Mutex<EspMqttClient>> caused contention; SyncSender<MqttMessage> decouples callers cleanly | ✓ Good — simpler ownership, measurably lower latency |
+| bytes crate for zero-copy RTCM on publish path | RTCM frames were cloned into Vec<u8> per message; Bytes avoids allocation after initial receive | ✓ Good — no per-frame heap allocation on publish path |
+| NTRIP TLS via EspTls (mbedTLS crt_bundle_attach) | AUSCORS requires port 443/TLS; ESP-IDF's bundled CA certs cover the certificate chain | ✓ Good — no manual cert management required |
 
 ---
-*Last updated: 2026-03-08 after v2.0 milestone start*
+*Last updated: 2026-03-12 after v2.0 milestone*

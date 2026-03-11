@@ -1,5 +1,24 @@
 # Milestones
 
+## v2.0 Field Deployment (Shipped: 2026-03-12)
+
+**Phases completed:** 8 phases (14-21), 24 plans
+**LOC:** 4,726 Rust (+2,477 from v1.3)
+**Timeline:** 2026-03-08 → 2026-03-12 (4 days)
+**Hardware verified:** device FFFEB5
+
+**Key accomplishments:**
+- Phase 14: SNTP wall-clock timestamps on WiFi connect; UM980 command relay via `gnss/{id}/command`; remote reboot trigger on OTA topic
+- Phase 15: SoftAP web provisioning portal — WiFi (up to 3 SSIDs) and MQTT credentials configurable from browser; stored in NVS with multi-AP failover; GPIO9 button re-entry
+- Phase 16: ESP-IDF log output forwarded to `gnss/{id}/log` via C vprintf hook; re-entrancy guard prevents MQTT feedback loops; runtime log-level configuration
+- Phase 17: NTRIP v1 TCP client streams RTCM3 corrections to UM980 UART for RTK fix; captive portal DNS hijack for Android/iOS/Windows; NTRIP state in heartbeat
+- Phase 18: GGA parsing into atomics (fix_type, satellites, HDOP); heartbeat extended with GNSS fix quality; OTA pipeline hardware-validated on device FFFEB5; project README
+- Phase 19: DHCP DNS override fix unblocking Android captive detection; NVS TLS default corrected (post-OTA MQTT regression fixed); GPIO9 3-phase state machine (3s SoftAP / 10s factory reset)
+- Phase 20: Windows/iOS captive portal probes fixed; NMEA channel raised 64→128 for 5 Hz headroom; UM980 GNSS config persisted to NVS and auto-reapplied on UM980 reboot; TLS NTRIP via EspTls for AUSCORS port 443
+- Phase 21: Arc<Mutex<EspMqttClient>> eliminated — single publish thread owns client exclusively; all relay threads migrated to SyncSender<MqttMessage>; bytes crate for zero-copy RTCM; outbox observability counters + bench:N trigger
+
+---
+
 ## v1.3 Reliability Hardening (Shipped: 2026-03-08)
 
 **Phases completed:** 7 phases (07-13), 15 plans

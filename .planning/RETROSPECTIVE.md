@@ -145,6 +145,56 @@
 - Sessions: 2 (one for execution, one for milestone completion)
 - Notable: All 15 plans executed without escalation; two post-phase fixes (MQTT reconnect, UM980 RX) landed cleanly in the same session
 
+## Milestone: v2.0 — Field Deployment
+
+**Shipped:** 2026-03-12
+**Phases:** 8 (14-21) | **Plans:** 24 | **Duration:** 4 days
+
+### What Was Built
+
+- Phase 14: SNTP wall-clock timestamps; UM980 command relay topic; remote reboot trigger
+- Phase 15: SoftAP web provisioning portal — WiFi (3 SSIDs), MQTT, stored in NVS; multi-AP failover; GPIO9 button entry
+- Phase 16: ESP-IDF vprintf hook → Rust relay → MQTT log topic; re-entrancy guard prevents feedback loops; runtime level config
+- Phase 17: NTRIP v1 TCP client streams RTCM3 to UM980 UART; captive portal DNS hijack for all OS probes; NTRIP state in heartbeat
+- Phase 18: GGA parsing into atomics (fix_type, satellites, HDOP); heartbeat extended; OTA hardware-validated on FFFEB5; project README
+- Phase 19: DHCP DNS fix unblocking Android captive detection; NVS config_ver + TLS default fix; GPIO9 3-phase state machine
+- Phase 20: Windows/iOS captive portal probes; NMEA channel 64→128; UM980 config NVS persistence + auto-reapply; TLS NTRIP (EspTls)
+- Phase 21: Arc<Mutex<EspMqttClient>> eliminated; single publish thread; SyncSender<MqttMessage> across all relay threads; bytes crate; outbox observability
+
+### What Worked
+
+- **Field testing feedback loop** — deploying on real hardware (FFFEB5) and immediately creating phases for discovered bugs (phases 19, 20) kept the firmware improving rapidly
+- **Captive portal DNS hijack** — implementing a full DNS server on port 53 UDP was more involved than expected but solved all OS captive detection in one pass
+- **EspTls for NTRIP TLS** — ESP-IDF's bundled CA certificates handled AUSCORS certificate chain without any manual cert management
+- **SyncSender publish thread** — replacing Arc<Mutex<EspMqttClient>> with a dedicated publish thread simplified ownership across 6+ relay threads simultaneously
+- **bytes crate** — zero-copy Bytes type fit naturally into the MqttMessage enum for RTCM frames; no per-publish allocation on the hot path
+
+### What Was Inefficient
+
+- **Phases 19-21 were not in the original v2.0 roadmap** — field testing exposed captive portal, MQTT throughput, and contention issues that required 3 additional phases; roadmap should have anticipated at least one "field fixes" phase
+- **`gsd-tools summary-extract --fields one_liner` returns null** for all summaries — third milestone with this issue; accomplishments still require manual entry
+- **v2.0 ROADMAP.md archived copy captured state at phase 18**, not the full 14-21 scope; milestone archive was created before phases 19-21 were added
+
+### Patterns Established
+
+- Field deployment phase at milestone end — explicitly budget one phase for real-hardware bugs after major feature work
+- NVS schema versioning (`config_ver` u8) — any NVS schema change needs a version field + migration path for OTA-upgraded devices
+- `EspNetif::new_with_conf` for DNS in SoftAP — configure DNS at netif creation, not post-start
+- `SyncSender<MqttMessage>` publish bus — single-publisher thread owning MQTT client is the right pattern for embedded; avoids all mutex contention on the publish path
+
+### Key Lessons
+
+- Plan a "field fixes" phase in any milestone that involves hardware deployment — real-world conditions always reveal issues that bench testing misses
+- NVS TLS/bool defaults must be explicitly written on save — reading an unwritten key returns an error, not `false`; always write on first save with a version field
+- Captive portal requires DNS + multiple OS-specific probe URLs — Android, iOS, and Windows all use different probes; test all three before closing
+- The publish thread pattern is strictly better than Arc<Mutex<Client>> for MQTT in embedded Rust — apply this from the start in future projects
+
+### Cost Observations
+
+- Profile: sonnet throughout
+- Sessions: ~6 (context resets between phases; field testing loop added 2 extra sessions)
+- Notable: Phase 20 field fixes and Phase 21 refactor were both planned and executed in single sessions without escalation
+
 ## Cross-Milestone Trends
 
 | Milestone | Phases | Plans | Duration | Notes |
@@ -152,3 +202,4 @@
 | v1.0 Foundation | 3 | 9 | 2 days | First milestone; patterns established |
 | v1.1 GNSS Relay | 3 | 6 | 3 days | Full relay pipeline; hardware-verified throughout |
 | v1.3 Reliability Hardening | 7 | 15 | 2 days | Fast execution; post-phase hardware testing caught real bugs |
+| v2.0 Field Deployment | 8 | 24 | 4 days | Largest milestone; 3 unplanned field-fix phases; MQTT refactor eliminating Arc<Mutex> |

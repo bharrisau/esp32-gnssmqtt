@@ -6,7 +6,7 @@
 - ✅ **v1.1 GNSS Relay** — Phases 4-6 (shipped 2026-03-07)
 - ✅ **v1.2 Observations + OTA** — Phases 7-8 (shipped 2026-03-07)
 - ✅ **v1.3 Reliability Hardening** — Phases 9-13 (shipped 2026-03-08)
-- 🚧 **v2.0 Field Deployment** — Phases 14-18 (in progress)
+- ✅ **v2.0 Field Deployment** — Phases 14-21 (shipped 2026-03-12)
 
 ## Phases
 
@@ -55,97 +55,21 @@ Archive: `.planning/milestones/v1.3-ROADMAP.md`
 
 </details>
 
-### 🚧 v2.0 Field Deployment (In Progress)
+<details>
+<summary>✅ v2.0 Field Deployment (Phases 14-21) — SHIPPED 2026-03-12</summary>
 
-**Milestone Goal:** Enable unattended outdoor RTK operation with runtime WiFi/MQTT provisioning, NTRIP corrections pipeline, remote log streaming, and command relay — no firmware recompile needed for field configuration.
+- [x] Phase 14: Quick Additions (2/2 plans) — completed 2026-03-07
+- [x] Phase 15: Provisioning (3/3 plans) — completed 2026-03-08
+- [x] Phase 16: Remote Logging (2/2 plans) — completed 2026-03-08
+- [x] Phase 17: NTRIP Client (4/4 plans) — completed 2026-03-09
+- [x] Phase 18: Telemetry and OTA Validation (3/3 plans) — completed 2026-03-09
+- [x] Phase 19: Pre-2.0 Bugfix (3/3 plans) — completed 2026-03-10
+- [x] Phase 20: Field Testing Fixes (4/4 plans) — completed 2026-03-11
+- [x] Phase 21: MQTT Performance (3/3 plans) — completed 2026-03-12
 
-- [x] **Phase 14: Quick Additions** — SNTP time sync, command relay topic, and reboot trigger extend existing subsystems with minimal new code (completed 2026-03-07)
-- [x] **Phase 15: Provisioning** — SoftAP web UI lets users configure WiFi and MQTT credentials without recompiling firmware; stored in NVS with multi-AP failover (completed 2026-03-08)
-- [x] **Phase 16: Remote Logging** — ESP-IDF log output forwarded to MQTT with re-entrancy guard preventing feedback loops; level configurable at runtime (completed 2026-03-08)
-- [x] **Phase 17: NTRIP Client** — TCP connection to NTRIP caster streams RTCM3 corrections directly to UM980 UART, enabling RTK fix; captive portal DNS hijack for SoftAP (completed 2026-03-09; hw verify deferred)
-- [x] **Phase 18: Telemetry and OTA Validation** — GNSS fix quality added to heartbeat; OTA pipeline validated on hardware before v2.0 milestone sign-off (completed 2026-03-08)
+Archive: `.planning/milestones/v2.0-ROADMAP.md`
 
-## Phase Details
-
-### Phase 14: Quick Additions
-**Goal**: Users can sync wall-clock time automatically, send arbitrary UM980 commands remotely, and trigger remote reboot — all using existing MQTT infrastructure with no new connection types
-**Depends on**: Phase 13
-**Requirements**: MAINT-01, MAINT-02, CMD-01, CMD-02
-**Success Criteria** (what must be TRUE):
-  1. Log output shows ISO timestamps (not relative ms ticks) after WiFi connects
-  2. Publishing any string to `gnss/{device_id}/command` causes the UM980 to execute that command exactly once, with no deduplication
-  3. Publishing `"reboot"` to `gnss/{device_id}/ota/trigger` causes the device to restart within 5 seconds
-  4. The command topic is non-retained; replaying the MQTT session does not re-send old commands
-**Plans**: 2 plans
-
-Plans:
-- [ ] 14-01-PLAN.md — SNTP time sync on WiFi connect (sdkconfig + EspSntp init)
-- [ ] 14-02-PLAN.md — Command relay topic + reboot trigger (mqtt.rs + ota.rs + main.rs)
-
-### Phase 15: Provisioning
-**Goal**: Users can configure WiFi and MQTT credentials from any browser via the device's SoftAP hotspot, with up to 3 networks stored in NVS and tried automatically on connection failure
-**Depends on**: Phase 14
-**Requirements**: PROV-01, PROV-02, PROV-03, PROV-04, PROV-05, PROV-06, PROV-07, PROV-08
-**Success Criteria** (what must be TRUE):
-  1. A freshly flashed device with no NVS credentials broadcasts a SoftAP hotspot and shows a web UI at its IP address
-  2. User can enter WiFi SSID/password and MQTT host/port/credentials in the web UI; device saves them to NVS and reboots into station mode
-  3. User can store up to 3 WiFi networks; device tries each in order on connection failure without entering SoftAP
-  4. Holding GPIO9 low for 3 seconds re-enters SoftAP mode from any state; device returns to WiFi mode after 300 seconds with no client connected
-  5. Publishing `"softap"` to the OTA trigger topic enters SoftAP mode with the same 300-second no-client timeout
-  6. LED shows a distinct pattern while in SoftAP mode, visually distinct from connecting, connected, and error states
-**Plans**: 3 plans
-
-Plans:
-- [ ] 15-01-PLAN.md — provisioning.rs module: NVS credential storage, SoftAP WiFi mode, HTTP portal form (PROV-01, PROV-02, PROV-03, PROV-04)
-- [ ] 15-02-PLAN.md — Boot-path decision, wifi_connect_any, mqtt_connect runtime credentials (PROV-01, PROV-05)
-- [ ] 15-03-PLAN.md — GPIO9 monitor, MQTT "softap" trigger, LedState::SoftAP blink pattern (PROV-06, PROV-07, PROV-08)
-
-### Phase 16: Remote Logging
-**Goal**: All ESP-IDF log output is forwarded to an MQTT topic in real time, with a re-entrancy guard that prevents the logging path itself from generating log events, and a runtime-configurable level threshold
-**Depends on**: Phase 15
-**Requirements**: LOG-01, LOG-02, LOG-03
-**Success Criteria** (what must be TRUE):
-  1. Log messages appear on `gnss/{device_id}/log` within one second of being emitted by any firmware component
-  2. Publishing MQTT or processing subscriptions does not generate additional log entries that appear on the log topic (no feedback loop)
-  3. Publishing a log level string to the log config topic changes which messages are forwarded immediately, without reboot
-  4. Log publishing does not stall the calling thread when MQTT is disconnected or the channel is full; messages are silently dropped
-**Plans**: 2 plans
-
-Plans:
-- [ ] 16-01-PLAN.md — C vprintf hook (log_shim.c), Rust relay module (log_relay.rs), build system integration (LOG-01, LOG-03)
-- [ ] 16-02-PLAN.md — Wire log relay into main.rs, /log/level subscription and runtime level apply in mqtt.rs (LOG-01, LOG-02, LOG-03)
-
-### Phase 17: NTRIP Client
-**Goal**: The device connects to a configured NTRIP caster over TCP and streams RTCM3 correction data to the UM980 UART, enabling RTK fix; connection settings are configurable at runtime via MQTT without reboot
-**Depends on**: Phase 16
-**Requirements**: NTRIP-01, NTRIP-02, NTRIP-03, NTRIP-04
-**Success Criteria** (what must be TRUE):
-  1. After publishing NTRIP settings (host, port, mountpoint, credentials) to the retained config topic, the device establishes a TCP connection to the caster and the UM980 receives RTCM3 correction bytes
-  2. The UM980 achieves RTK Float or RTK Fix status when a valid mountpoint with coverage is configured
-  3. If the NTRIP TCP connection drops, the device reconnects automatically without a reboot
-  4. The health heartbeat includes an NTRIP connection state field (`connected` / `disconnected`)
-**Plans**: 4 plans
-
-Plans:
-- [ ] 17-01-PLAN.md — ntrip_client.rs module: NtripConfig, NVS persistence, TCP session loop, RTCM forwarding to UART, reconnect backoff (NTRIP-01, NTRIP-03)
-- [ ] 17-02-PLAN.md — Wire into main.rs + mqtt.rs: ntrip_config channel, /ntrip/config dispatch + subscription, heartbeat ntrip field (NTRIP-02, NTRIP-04)
-- [ ] 17-03-PLAN.md — Log quality fixes + UM980 reboot detection (channel 32→128, ANSI strip, MQTT event log levels, config re-apply on UM980 restart)
-- [x] 17-04-PLAN.md — Captive portal DNS hijack for SoftAP (DNS server on port 53, probe URL handling) — hw verify deferred to end of milestone
-
-### Phase 18: Telemetry and OTA Validation
-**Goal**: The health heartbeat reports live GNSS fix quality so operators can assess RTK performance remotely; the OTA update pipeline is validated end-to-end on hardware before v2.0 is marked complete
-**Depends on**: Phase 17
-**Requirements**: TELEM-01, MAINT-03
-**Success Criteria** (what must be TRUE):
-  1. The heartbeat JSON includes `fix_type`, `satellites`, and `hdop` fields populated from the most recent GGA sentence
-  2. When no GGA sentence has been received, heartbeat fields show null or sentinel values rather than stale data
-  3. An OTA firmware update is triggered via MQTT on device FFFEB5, the new image downloads, SHA-256 is verified, the device reboots into the new image, and marks valid — completing the v2.0 hardware sign-off
-**Plans**: 3 plans
-
-Plans:
-- [ ] 18-01-PLAN.md — GGA parsing (gnss_state.rs + nmea_relay.rs) and heartbeat JSON extension (mqtt.rs) — TELEM-01
-- [ ] 18-02-PLAN.md — OTA + captive portal hardware validation on device FFFEB5 — MAINT-03
-- [ ] 18-03-PLAN.md — Project README.md covering all v2.0 features
+</details>
 
 ## Progress
 
@@ -167,42 +91,8 @@ Plans:
 | 14. Quick Additions | v2.0 | 2/2 | Complete | 2026-03-07 |
 | 15. Provisioning | v2.0 | 3/3 | Complete | 2026-03-08 |
 | 16. Remote Logging | v2.0 | 2/2 | Complete | 2026-03-08 |
-| 17. NTRIP Client | v2.0 | Complete    | 2026-03-08 | 2026-03-09 |
-| 18. Telemetry and OTA Validation | 3/3 | Complete    | 2026-03-09 | - |
-
-### Phase 19: pre-2.0-bugfix
-
-**Goal:** Fix four known bugs blocking v2.0 milestone close and deliver boot button rework — DHCP DNS override in SoftAP (BUG-1), Android captive portal detection unblocked by BUG-1 (BUG-2), NVS TLS default causing post-OTA MQTT failure (BUG-3/BUG-4), and two-threshold GPIO9 factory reset (FEAT-1)
-**Requirements**: BUG-1, BUG-2, BUG-3, BUG-4, FEAT-1
-**Depends on:** Phase 18
-**Plans:** 3/3 plans complete
-
-Plans:
-- [ ] 19-01-PLAN.md — BUG-1/BUG-2: replace post-start DHCP DNS block with EspNetif::new_with_conf in SoftAP WiFi construction
-- [ ] 19-02-PLAN.md — BUG-3/BUG-4: fix load_mqtt_config TLS default (false), write mqtt_tls+config_ver on save, wire tls bool to mqtt_connect
-- [ ] 19-03-PLAN.md — FEAT-1: GPIO9 3-phase state machine (3s SoftAP / 10s factory reset) + ButtonHold and Off LED states
-
-### Phase 20: Field testing fixes
-
-**Goal:** Fix bugs found during first field deployment of device FFFEB5 — Windows/iOS captive portal detection (BUG-5), MQTT throughput for 5 Hz GNSS output (PERF-1), UM980 config persistence and auto-reapply on reset (FEAT-2), and TLS NTRIP client for AUSCORS port 443 (FEAT-3)
-**Requirements**: BUG-5, PERF-1, FEAT-2, FEAT-3
-**Depends on:** Phase 19
-**Plans:** 3/4 plans executed
-
-Plans:
-- [x] 20-01-PLAN.md — BUG-5: Fix Windows msftconnecttest + iOS captive portal probe handlers (provisioning.rs)
-- [x] 20-02-PLAN.md — PERF-1: NMEA channel 64→128, throughput diagnostic log, MQTT outbox timeout tuning
-- [x] 20-03-PLAN.md — FEAT-2: NVS blob save for GNSS config in config_relay.rs; auto-reapply in main.rs UM980 reboot monitor
-- [ ] 20-04-PLAN.md — FEAT-3: TLS NTRIP session path (EspTls) in ntrip_client.rs; NTRIP TLS config in provisioning portal
-
-### Phase 21: MQTT performance
-
-**Goal:** Eliminate mutex contention and per-message heap allocation on the MQTT publish path by routing all relay threads through a single dedicated publish thread that owns EspMqttClient exclusively; add outbox observability counters and a bench trigger for field diagnostics
-**Requirements**: PERF-21-1, PERF-21-2, PERF-21-3, PERF-21-4, OBS-21-1, OBS-21-2, DIAG-21-1
-**Depends on:** Phase 20
-**Plans:** 3/3 plans complete
-
-Plans:
-- [ ] 21-01-PLAN.md — MqttMessage enum, publish_thread, MQTT_ENQUEUE_ERRORS + MQTT_OUTBOX_DROPS atomics, bytes crate
-- [ ] 21-02-PLAN.md — Migrate nmea_relay, log_relay, heartbeat_loop to SyncSender<MqttMessage>; consolidated topics; heartbeat JSON extended
-- [ ] 21-03-PLAN.md — Migrate rtcm_relay (bytes crate), ota.rs (bench:N trigger), subscriber_loop; full main.rs wiring; sdkconfig outbox observability
+| 17. NTRIP Client | v2.0 | 4/4 | Complete | 2026-03-09 |
+| 18. Telemetry and OTA Validation | v2.0 | 3/3 | Complete | 2026-03-09 |
+| 19. Pre-2.0 Bugfix | v2.0 | 3/3 | Complete | 2026-03-10 |
+| 20. Field Testing Fixes | v2.0 | 4/4 | Complete | 2026-03-11 |
+| 21. MQTT Performance | v2.0 | 3/3 | Complete | 2026-03-12 |

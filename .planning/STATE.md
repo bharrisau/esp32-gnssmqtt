@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
-status: executing
-stopped_at: Completed 21-mqtt-performance 21-03-PLAN.md
-last_updated: "2026-03-11T19:54:09.475Z"
-last_activity: "2026-03-09 — Phase 19 plan 01 complete; SoftAP DHCP DNS fix via EspNetif::new_with_conf"
+status: milestone_complete
+stopped_at: v2.0 milestone archived 2026-03-12
+last_updated: "2026-03-12"
+last_activity: "2026-03-12 — v2.0 Field Deployment milestone archived; tagged v2.0"
 progress:
   total_phases: 8
   completed_phases: 8
@@ -18,10 +18,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-08)
+See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker in real time, with remote reconfiguration, OTA updates, and automatic recovery — safe for unattended operation.
-**Current focus:** v2.0 Field Deployment — Phase 14: Quick Additions
+**Current focus:** Planning next milestone (`/gsd:new-milestone`)
 
 ## Current Position
 
