@@ -200,7 +200,7 @@ Plans:
 **Goal:** Eliminate mutex contention and per-message heap allocation on the MQTT publish path by routing all relay threads through a single dedicated publish thread that owns EspMqttClient exclusively; add outbox observability counters and a bench trigger for field diagnostics
 **Requirements**: PERF-21-1, PERF-21-2, PERF-21-3, PERF-21-4, OBS-21-1, OBS-21-2, DIAG-21-1
 **Depends on:** Phase 20
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 21-01-PLAN.md — MqttMessage enum, publish_thread, MQTT_ENQUEUE_ERRORS + MQTT_OUTBOX_DROPS atomics, bytes crate

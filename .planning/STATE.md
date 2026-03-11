@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: executing
-stopped_at: Phase 21 context gathered
-last_updated: "2026-03-11T15:06:09.568Z"
+stopped_at: Completed 21-mqtt-performance 21-01-PLAN.md
+last_updated: "2026-03-11T19:14:58.948Z"
 last_activity: "2026-03-09 — Phase 19 plan 01 complete; SoftAP DHCP DNS fix via EspNetif::new_with_conf"
 progress:
   total_phases: 8
   completed_phases: 7
-  total_plans: 21
-  completed_plans: 21
+  total_plans: 24
+  completed_plans: 22
   percent: 100
 ---
 
@@ -65,6 +65,7 @@ Progress: [██████████] 100%
 | Phase 20-field-testing-fixes P02 | 15 | 2 tasks | 3 files |
 | Phase 20-field-testing-fixes P03 | 17 | 2 tasks | 2 files |
 | Phase 20-field-testing-fixes P04 | 25 | 2 tasks | 2 files |
+| Phase 21-mqtt-performance P01 | 3 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -130,6 +131,8 @@ Key carry-forward notes:
 - [Phase 20-field-testing-fixes]: run_ntrip_session dispatches to TCP or TLS path based on config.tls — no generics; EspTls set_read_timeout unavailability handled by clean split
 - [Phase 20-field-testing-fixes]: read_ntrip_headers accepts ICY 200 OK, HTTP/1.1 200, HTTP/1.0 200 — AUSCORS uses standard HTTP response not NTRIP v1 ICY
 - [Phase 20-field-testing-fixes]: Portal NTRIP section save non-fatal: WiFi/MQTT credentials committed first; ntrip_tls NVS key u8 0/1 consistent with mqtt_tls convention
+- [Phase 21-mqtt-performance]: LOG_REENTERING made pub in Plan 21-01 (not Plan 02) — required for mqtt_publish.rs to compile and pass clippy
+- [Phase 21-mqtt-performance]: MqttMessage::Rtcm uses bytes::Bytes for zero-copy RTCM3 payload; MQTT_OUTBOX_DROPS incremented conservatively on all enqueue errors
 
 ### Roadmap Evolution
 
@@ -148,7 +151,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-11T15:06:09.563Z
-Stopped at: Phase 21 context gathered
-Resume file: .planning/phases/21-mqtt-performance/21-CONTEXT.md
+Last session: 2026-03-11T19:14:58.943Z
+Stopped at: Completed 21-mqtt-performance 21-01-PLAN.md
+Resume file: None
 Next action: Phase 19 Plan 02 — NVS versioning (BUG-3/BUG-4 fix).
