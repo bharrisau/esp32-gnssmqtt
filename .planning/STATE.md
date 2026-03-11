@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: executing
-stopped_at: Completed 21-mqtt-performance 21-01-PLAN.md
-last_updated: "2026-03-11T19:14:58.948Z"
+stopped_at: Completed 21-mqtt-performance 21-02-PLAN.md
+last_updated: "2026-03-11T19:21:57.330Z"
 last_activity: "2026-03-09 — Phase 19 plan 01 complete; SoftAP DHCP DNS fix via EspNetif::new_with_conf"
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 24
-  completed_plans: 22
+  completed_plans: 23
   percent: 100
 ---
 
@@ -66,6 +66,7 @@ Progress: [██████████] 100%
 | Phase 20-field-testing-fixes P03 | 17 | 2 tasks | 2 files |
 | Phase 20-field-testing-fixes P04 | 25 | 2 tasks | 2 files |
 | Phase 21-mqtt-performance P01 | 3 | 2 tasks | 4 files |
+| Phase 21-mqtt-performance P02 | 10 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -133,6 +134,9 @@ Key carry-forward notes:
 - [Phase 20-field-testing-fixes]: Portal NTRIP section save non-fatal: WiFi/MQTT credentials committed first; ntrip_tls NVS key u8 0/1 consistent with mqtt_tls convention
 - [Phase 21-mqtt-performance]: LOG_REENTERING made pub in Plan 21-01 (not Plan 02) — required for mqtt_publish.rs to compile and pass clippy
 - [Phase 21-mqtt-performance]: MqttMessage::Rtcm uses bytes::Bytes for zero-copy RTCM3 payload; MQTT_OUTBOX_DROPS incremented conservatively on all enqueue errors
+- [Phase 21-mqtt-performance]: NMEA topic consolidated: all sentence types to single gnss/{id}/nmea topic — sentence type visible from payload prefix, zero information loss
+- [Phase 21-mqtt-performance]: LOG_REENTERING removed from log relay loop — publish_thread is sole owner of guard (prevents double-toggle edge case)
+- [Phase 21-mqtt-performance]: EventPayload::Deleted arm added before catch-all warn — increments MQTT_OUTBOX_DROPS for CONFIG_MQTT_REPORT_DELETED_MESSAGES telemetry
 
 ### Roadmap Evolution
 
@@ -151,7 +155,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-11T19:14:58.943Z
-Stopped at: Completed 21-mqtt-performance 21-01-PLAN.md
+Last session: 2026-03-11T19:21:57.326Z
+Stopped at: Completed 21-mqtt-performance 21-02-PLAN.md
 Resume file: None
 Next action: Phase 19 Plan 02 — NVS versioning (BUG-3/BUG-4 fix).
