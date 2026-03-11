@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: executing
-stopped_at: Completed 21-mqtt-performance 21-02-PLAN.md
-last_updated: "2026-03-11T19:21:57.330Z"
+stopped_at: Completed 21-mqtt-performance 21-03-PLAN.md
+last_updated: "2026-03-11T19:49:55.100Z"
 last_activity: "2026-03-09 — Phase 19 plan 01 complete; SoftAP DHCP DNS fix via EspNetif::new_with_conf"
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 24
-  completed_plans: 23
+  completed_plans: 24
   percent: 100
 ---
 
@@ -67,6 +67,7 @@ Progress: [██████████] 100%
 | Phase 20-field-testing-fixes P04 | 25 | 2 tasks | 2 files |
 | Phase 21-mqtt-performance P01 | 3 | 2 tasks | 4 files |
 | Phase 21-mqtt-performance P02 | 10 | 3 tasks | 3 files |
+| Phase 21-mqtt-performance P03 | 525224 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -137,6 +138,9 @@ Key carry-forward notes:
 - [Phase 21-mqtt-performance]: NMEA topic consolidated: all sentence types to single gnss/{id}/nmea topic — sentence type visible from payload prefix, zero information loss
 - [Phase 21-mqtt-performance]: LOG_REENTERING removed from log relay loop — publish_thread is sole owner of guard (prevents double-toggle edge case)
 - [Phase 21-mqtt-performance]: EventPayload::Deleted arm added before catch-all warn — increments MQTT_OUTBOX_DROPS for CONFIG_MQTT_REPORT_DELETED_MESSAGES telemetry
+- [Phase 21-mqtt-performance]: RTCM topic consolidated: all message types to single gnss/{id}/rtcm — message type in binary frame header, downstream consumers parse it
+- [Phase 21-mqtt-performance]: Subscribe variant added to MqttMessage: subscriber_loop routes subscribe calls via publish_thread which exclusively owns EspMqttClient — no Arc/Mutex needed for infrequent subscribe operation
+- [Phase 21-mqtt-performance]: OTA publish_status uses Heartbeat variant not Status: Status uses &'static [u8] (compile-time constants only); Heartbeat takes Vec<u8> for dynamic OTA JSON strings
 
 ### Roadmap Evolution
 
@@ -155,7 +159,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-11T19:21:57.326Z
-Stopped at: Completed 21-mqtt-performance 21-02-PLAN.md
+Last session: 2026-03-11T19:49:55.095Z
+Stopped at: Completed 21-mqtt-performance 21-03-PLAN.md
 Resume file: None
 Next action: Phase 19 Plan 02 — NVS versioning (BUG-3/BUG-4 fix).
