@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: executing
-stopped_at: Completed 20-04-PLAN.md — NTRIP TLS support + SoftAP portal NTRIP form
-last_updated: "2026-03-11T13:55:42.356Z"
+stopped_at: Phase 21 context gathered
+last_updated: "2026-03-11T15:06:09.568Z"
 last_activity: "2026-03-09 — Phase 19 plan 01 complete; SoftAP DHCP DNS fix via EspNetif::new_with_conf"
 progress:
-  total_phases: 7
-  completed_phases: 6
+  total_phases: 8
+  completed_phases: 7
   total_plans: 21
-  completed_plans: 20
+  completed_plans: 21
   percent: 100
 ---
 
@@ -135,6 +135,7 @@ Key carry-forward notes:
 
 - Phase 19 added: pre-2.0-bugfix
 - Phase 20 added: Field testing fixes
+- Phase 21 added: MQTT performance
 
 ### Pending Todos
 
@@ -147,7 +148,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-11T13:55:42.352Z
-Stopped at: Completed 20-04-PLAN.md — NTRIP TLS support + SoftAP portal NTRIP form
-Resume file: None
+Last session: 2026-03-11T15:06:09.563Z
+Stopped at: Phase 21 context gathered
+Resume file: .planning/phases/21-mqtt-performance/21-CONTEXT.md
 Next action: Phase 19 Plan 02 — NVS versioning (BUG-3/BUG-4 fix).
