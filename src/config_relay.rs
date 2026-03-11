@@ -15,6 +15,7 @@
 //! command strings are not supported — UM980 commands contain no special
 //! characters so this is not a practical constraint.
 
+use esp_idf_svc::nvs::{EspNvs, EspNvsPartition, NvsDefault};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender};
 
 /// Spawn the config relay thread.
@@ -22,11 +23,15 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender};
 /// Moves `config_rx` and `gnss_cmd_tx` into the thread — caller must NOT
 /// retain references to them (other than independent clones for other uses).
 ///
+/// `nvs_partition` is cloned cheaply into the thread closure for NVS persistence.
+///
 /// Returns `Ok(())` immediately after spawning (non-blocking).
 pub fn spawn_config_relay(
     gnss_cmd_tx: SyncSender<String>,
     config_rx: Receiver<Vec<u8>>,
+    nvs_partition: EspNvsPartition<NvsDefault>,
 ) -> anyhow::Result<()> {
+    let nvs_for_relay = nvs_partition.clone();
     std::thread::Builder::new()
         .stack_size(8192)
         .spawn(move || {
@@ -61,6 +66,8 @@ pub fn spawn_config_relay(
                         last_hash = hash;
                         log::info!("Config relay: new config payload, hash {:#010x}", hash);
                         apply_config(&payload, &gnss_cmd_tx);
+                        // Persist raw payload for automatic re-apply on UM980 reboot (FEAT-2).
+                        save_gnss_config(&payload, &nvs_for_relay);
                     }
                     Err(RecvTimeoutError::Timeout) => {
                         // No config payload within 30s — config is operator-triggered and rare. Continue.
@@ -81,6 +88,24 @@ pub fn spawn_config_relay(
     Ok(())
 }
 
+/// Save raw GNSS config payload to NVS "gnss" namespace, key "gnss_config".
+///
+/// Called after each successful `apply_config` so the last-known-good config
+/// survives UM980 power cycles. Errors are logged but not propagated — a save
+/// failure is non-fatal; the operator can re-send config via MQTT.
+fn save_gnss_config(payload: &[u8], nvs_partition: &EspNvsPartition<NvsDefault>) {
+    match EspNvs::new(nvs_partition.clone(), "gnss", true) {
+        Ok(mut nvs) => {
+            if let Err(e) = nvs.set_blob("gnss_config", payload) {
+                log::warn!("Config relay: NVS save failed: {:?}", e);
+            } else {
+                log::info!("Config relay: saved {} bytes to NVS (gnss/gnss_config)", payload.len());
+            }
+        }
+        Err(e) => log::warn!("Config relay: NVS open failed: {:?}", e),
+    }
+}
+
 /// DJB2 hash — fast, non-cryptographic, adequate for deduplication.
 fn djb2_hash(data: &[u8]) -> u32 {
     let mut hash: u32 = 5381;
@@ -98,7 +123,10 @@ fn djb2_hash(data: &[u8]) -> u32 {
 ///
 /// On `gnss_cmd_tx.send()` failure, logs an error and returns immediately —
 /// remaining commands in the batch are abandoned (no panic).
-fn apply_config(payload: &[u8], gnss_cmd_tx: &SyncSender<String>) {
+///
+/// Public so main.rs UM980 reboot monitor can call this directly after reading
+/// the saved config from NVS.
+pub fn apply_config(payload: &[u8], gnss_cmd_tx: &SyncSender<String>) {
     let text = match std::str::from_utf8(payload) {
         Ok(s) => s,
         Err(e) => {
