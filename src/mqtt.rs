@@ -156,6 +156,10 @@ pub fn mqtt_connect(
                 // Log at debug level so they are filtered at the default info level.
                 // (These fire for every subscribe in subscriber_loop and every retained publish.)
             }
+            EventPayload::Deleted(_msg_id) => {
+                // Outbox message expired before delivery (requires CONFIG_MQTT_REPORT_DELETED_MESSAGES=y).
+                crate::mqtt_publish::MQTT_OUTBOX_DROPS.fetch_add(1, Ordering::Relaxed);
+            }
             m => {
                 log::warn!("Unhandled MQTT event: {:?}", m);
             }
@@ -348,11 +352,11 @@ pub fn log_level_relay_task(log_level_rx: Receiver<Vec<u8>>) -> ! {
 /// Then on every tick, collects system metrics (uptime, heap, drop counters) and publishes
 /// a JSON health snapshot to /heartbeat with retain=false.
 ///
-/// Uses `enqueue()` (non-blocking enqueue to MQTT outbox) — acceptable here because this
-/// runs in its own dedicated thread and the pump thread keeps the outbox moving.
+/// Uses `SyncSender<MqttMessage>` (non-blocking try_send) to the publish thread.
 pub fn heartbeat_loop(
-    client: Arc<Mutex<EspMqttClient<'static>>>,
-    device_id: String,
+    mqtt_tx: std::sync::mpsc::SyncSender<crate::mqtt_publish::MqttMessage>,
+    heartbeat_topic: std::sync::Arc<str>,   // pre-built "gnss/{id}/heartbeat"
+    status_topic: std::sync::Arc<str>,       // pre-built "gnss/{id}/status"
     status_rx: Receiver<()>,
 ) -> ! {
     // HWM at thread entry: confirms configured stack size is adequate. Value × 4 = bytes free.
@@ -361,9 +365,6 @@ pub fn heartbeat_loop(
     };
     log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
         "MQTT hb", hwm_words, hwm_words * 4);
-
-    let heartbeat_topic = format!("gnss/{}/heartbeat", device_id);
-    let status_topic = format!("gnss/{}/status", device_id);
     log::info!("Heartbeat thread started, heartbeat topic: {}, status topic: {}",
         heartbeat_topic, status_topic);
 
@@ -374,12 +375,18 @@ pub fn heartbeat_loop(
         match status_rx.recv_timeout(std::time::Duration::from_secs(crate::config::HEARTBEAT_INTERVAL_SECS)) {
             Ok(()) => {
                 // MQTT (re)connected — publish retained "online" to clear the LWT "offline" message.
-                match client.lock() {
-                    Err(e) => log::warn!("Heartbeat: status mutex poisoned: {:?}", e),
-                    Ok(mut c) => match c.enqueue(&status_topic, QoS::AtLeastOnce, true, b"online") {
-                        Ok(_) => log::info!("Heartbeat: published retained online to {}", status_topic),
-                        Err(e) => log::warn!("Heartbeat: status online publish failed: {:?}", e),
-                    },
+                match mqtt_tx.try_send(crate::mqtt_publish::MqttMessage::Status {
+                    topic: status_topic.clone(),
+                    payload: b"online",
+                    qos: QoS::AtLeastOnce,
+                    retain: true,
+                }) {
+                    Ok(()) => log::info!("Heartbeat: published retained online to {}", status_topic),
+                    Err(TrySendError::Full(_)) => log::warn!("Heartbeat: status channel full — online dropped"),
+                    Err(TrySendError::Disconnected(_)) => {
+                        log::error!("Heartbeat: publish channel closed — thread parking");
+                        loop { std::thread::sleep(std::time::Duration::from_secs(60)); }
+                    }
                 }
             }
             Err(RecvTimeoutError::Timeout) => {
@@ -398,6 +405,10 @@ pub fn heartbeat_loop(
                 let ntrip_state = crate::ntrip_client::NTRIP_STATE.load(Ordering::Relaxed);
                 let ntrip_str = if ntrip_state == 1 { "connected" } else { "disconnected" };
 
+                // OBS-21: MQTT observability counters.
+                let enqueue_errors = crate::mqtt_publish::MQTT_ENQUEUE_ERRORS.load(Ordering::Relaxed);
+                let outbox_drops = crate::mqtt_publish::MQTT_OUTBOX_DROPS.load(Ordering::Relaxed);
+
                 // TELEM-01: include GNSS fix quality fields in heartbeat.
                 let fix_type_raw = crate::gnss_state::GGA_FIX_TYPE.load(Ordering::Relaxed);
                 let sats_raw = crate::gnss_state::GGA_SATELLITES.load(Ordering::Relaxed);
@@ -411,19 +422,22 @@ pub fn heartbeat_loop(
                 let json = format!(
                     "{{\"uptime_s\":{},\"heap_free\":{},\"nmea_drops\":{},\"rtcm_drops\":{},\
                      \"uart_tx_errors\":{},\"ntrip\":\"{}\",\
+                     \"mqtt_enqueue_errors\":{},\"mqtt_outbox_drops\":{},\
                      \"fix_type\":{},\"satellites\":{},\"hdop\":{}}}",
                     uptime_s, heap_free, nmea_drops, rtcm_drops, uart_tx_errors, ntrip_str,
+                    enqueue_errors, outbox_drops,
                     fix_type_json, sats_json, hdop_json
                 );
 
                 log::info!("Heartbeat: {}", json);
 
-                match client.lock() {
-                    Err(e) => log::warn!("Heartbeat mutex poisoned: {:?}", e),
-                    Ok(mut c) => match c.enqueue(&heartbeat_topic, QoS::AtMostOnce, false, json.as_bytes()) {
-                        Ok(_) => log::info!("Heartbeat published to {}", heartbeat_topic),
-                        Err(e) => log::warn!("Heartbeat publish failed: {:?}", e),
-                    },
+                match mqtt_tx.try_send(crate::mqtt_publish::MqttMessage::Heartbeat {
+                    topic: heartbeat_topic.clone(),
+                    payload: json.into_bytes(),
+                    retain: false,
+                }) {
+                    Ok(()) => log::info!("Heartbeat published to {}", heartbeat_topic),
+                    Err(e) => log::warn!("Heartbeat: publish send failed: {:?}", e),
                 }
             }
             Err(RecvTimeoutError::Disconnected) => {
