@@ -316,17 +316,19 @@ fn main() {
 
     // Step 15: Config relay — receives MQTT config payloads from pump, forwards to UM980 via gnss_cmd_tx.
     // gnss_cmd_tx.clone() is passed here; the original is kept alive in the idle loop below.
-    config_relay::spawn_config_relay(gnss_cmd_tx.clone(), config_rx)
+    // nvs.clone() passed so relay can persist each new config to NVS for UM980 reboot re-apply (FEAT-2).
+    config_relay::spawn_config_relay(gnss_cmd_tx.clone(), config_rx, nvs.clone())
         .expect("Config relay thread spawn failed");
     log::info!("Config relay started");
 
-    // UM980 reboot monitor: re-applies startup configuration when UM980 resets.
-    // Listens on um980_reboot_rx; on signal, waits 500ms then logs a prominent warning.
-    // Full automatic re-apply requires NVS-backed UM980 config storage (not yet implemented);
-    // the detection and signal path is the primary value of this feature.
+    // UM980 reboot monitor: re-applies saved GNSS configuration when UM980 resets.
+    // Listens on um980_reboot_rx; on signal, waits 500ms then reads NVS gnss/gnss_config
+    // blob and calls config_relay::apply_config(). If no config saved yet, logs info and skips.
     {
+        let nvs_for_reboot = nvs.clone();
+        let gnss_cmd_for_reboot = gnss_cmd_tx.clone();
         std::thread::Builder::new()
-            .stack_size(4096)
+            .stack_size(8192)
             .spawn(move || {
                 let hwm_words = unsafe {
                     esp_idf_svc::sys::uxTaskGetStackHighWaterMark(core::ptr::null_mut())
@@ -336,12 +338,31 @@ fn main() {
                 loop {
                     match um980_reboot_rx.recv_timeout(crate::config::SLOW_RECV_TIMEOUT) {
                         Ok(()) => {
-                            log::warn!("UM980 reboot monitor: reboot detected — waiting 500ms before action");
+                            log::warn!("UM980 reboot monitor: reboot detected — waiting 500ms before config re-apply");
                             std::thread::sleep(std::time::Duration::from_millis(500));
-                            // Automatic config re-apply requires NVS-backed UM980 config storage.
-                            // Until that is implemented, direct the operator to re-send config via MQTT.
-                            log::warn!("UM980 rebooted — automatic config re-apply not yet implemented; \
-                                re-send UM980 config via MQTT /config topic to restore configuration");
+
+                            // Load saved GNSS config from NVS and re-apply to UM980 (FEAT-2).
+                            match esp_idf_svc::nvs::EspNvs::new(nvs_for_reboot.clone(), "gnss", false) {
+                                Ok(nvs) => {
+                                    let mut buf = vec![0u8; 512];
+                                    match nvs.get_blob("gnss_config", &mut buf) {
+                                        Ok(Some(data)) => {
+                                            log::info!("UM980 reboot monitor: re-applying {} bytes of saved config", data.len());
+                                            config_relay::apply_config(data, &gnss_cmd_for_reboot);
+                                            log::info!("UM980 reboot monitor: config re-apply complete");
+                                        }
+                                        Ok(None) => {
+                                            log::info!("UM980 reboot monitor: no saved config in NVS — skipping re-apply");
+                                        }
+                                        Err(e) => {
+                                            log::warn!("UM980 reboot monitor: NVS read error: {:?}", e);
+                                        }
+                                    }
+                                }
+                                Err(_) => {
+                                    log::info!("UM980 reboot monitor: 'gnss' NVS namespace not found — no config to re-apply");
+                                }
+                            }
                         }
                         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                         Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
