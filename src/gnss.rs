@@ -8,7 +8,7 @@
 //!   through a four-state `RxState` machine, mirrors every NMEA sentence to
 //!   `stdout` for `espflash monitor` visibility, forwards a
 //!   `(sentence_type, raw_sentence)` tuple to the caller via an
-//!   `mpsc::SyncSender<(String, String)>` (bounded, 64 slots), and forwards
+//!   `mpsc::SyncSender<(String, String)>` (bounded, 128 slots), and forwards
 //!   verified RTCM frames as `RtcmFrame` tuples to an
 //!   `mpsc::SyncSender<RtcmFrame>` (bounded, 32 slots).
 //!
@@ -146,8 +146,9 @@ pub fn spawn_gnss(
     let uart = Arc::new(uart);
 
     // Channel: NMEA sentences from RX thread to caller (Phase 5 consumer).
-    // Bounded to 64 so the RX thread can drop sentences without blocking UART reads.
-    let (nmea_tx, nmea_rx) = mpsc::sync_channel::<(String, String)>(64);
+    // Bounded to 128: at 5 Hz × 8 sentence types = 40 sentences/sec.
+    // 64 was insufficient at high rates — 128 provides ~3s buffering headroom before drops.
+    let (nmea_tx, nmea_rx) = mpsc::sync_channel::<(String, String)>(128);
 
     // Channel: RTCM frames from RX thread to rtcm_relay (Phase 7, pool-backed since Phase 10).
     // Bounded to 32; at 1-4 frames/sec, full channel means relay is stalled.
