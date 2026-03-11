@@ -31,6 +31,13 @@ const PROV_HTML: &str = "<!DOCTYPE html>\
   Port: <input name=\"mqtt_port\" value=\"1883\"><br>\
   Username: <input name=\"mqtt_user\"><br>\
   Password: <input name=\"mqtt_pass\" type=\"password\"><br>\
+  <h3>NTRIP Caster (optional)</h3>\
+  Host: <input name=\"ntrip_host\"><br>\
+  Port: <input name=\"ntrip_port\" value=\"2101\"><br>\
+  Mountpoint: <input name=\"ntrip_mount\"><br>\
+  Username: <input name=\"ntrip_user\"><br>\
+  Password: <input name=\"ntrip_pass\" type=\"password\"><br>\
+  TLS (port 443): <input name=\"ntrip_tls\" type=\"checkbox\" value=\"1\"><br>\
   <br>\
   <input type=\"submit\" value=\"Save and Reboot\">\
 </form></body></html>";
@@ -212,8 +219,15 @@ pub fn run_softap_portal(
         let mqtt_port_str = parse_form_field(body, "mqtt_port").unwrap_or("1883");
         let mqtt_user = parse_form_field(body, "mqtt_user").unwrap_or("");
         let mqtt_pass = parse_form_field(body, "mqtt_pass").unwrap_or("");
+        let ntrip_host = parse_form_field(body, "ntrip_host").unwrap_or("");
+        let ntrip_port_str = parse_form_field(body, "ntrip_port").unwrap_or("2101");
+        let ntrip_mount = parse_form_field(body, "ntrip_mount").unwrap_or("");
+        let ntrip_user = parse_form_field(body, "ntrip_user").unwrap_or("");
+        let ntrip_pass = parse_form_field(body, "ntrip_pass").unwrap_or("");
+        let ntrip_tls = parse_form_field(body, "ntrip_tls").unwrap_or("") == "1";
 
         let mqtt_port: u16 = mqtt_port_str.parse().unwrap_or(1883);
+        let ntrip_port: u16 = ntrip_port_str.parse().unwrap_or(2101);
 
         // Build network list (only non-empty SSIDs).
         let mut networks: Vec<(&str, &str)> = Vec::new();
@@ -239,6 +253,21 @@ pub fn run_softap_portal(
             req.into_status_response(500)?
                 .write_all(b"Failed to save credentials")?;
             return Ok(());
+        }
+
+        if !ntrip_host.is_empty() {
+            if let Err(e) = save_ntrip_credentials(
+                nvs_for_handler.clone(),
+                ntrip_host,
+                ntrip_port,
+                ntrip_mount,
+                ntrip_user,
+                ntrip_pass,
+                ntrip_tls,
+            ) {
+                log::warn!("save_ntrip_credentials failed: {:?}", e);
+                // Non-fatal: WiFi/MQTT credentials are already saved
+            }
         }
 
         req.into_ok_response()?
@@ -451,6 +480,31 @@ fn save_credentials(
     nvs.set_str("mqtt_pass", mqtt_pass)?;
     nvs.set_u8("mqtt_tls", 0)?;   // plain MQTT; TLS deferred to security milestone (SEC-F01)
     nvs.set_u8("config_ver", 1)?; // NVS schema v1 — written on every save for future detection
+    Ok(())
+}
+
+/// Saves NTRIP credentials to NVS namespace "ntrip".
+///
+/// Key names match the convention in ntrip_client.rs so load_ntrip_config() reads them correctly.
+fn save_ntrip_credentials(
+    nvs_partition: EspNvsPartition<NvsDefault>,
+    host: &str,
+    port: u16,
+    mountpoint: &str,
+    user: &str,
+    pass: &str,
+    tls: bool,
+) -> anyhow::Result<()> {
+    let mut nvs = EspNvs::new(nvs_partition, "ntrip", true)?;
+    nvs.set_str("ntrip_host", host)?;
+    nvs.set_str("ntrip_mount", mountpoint)?;
+    nvs.set_str("ntrip_user", user)?;
+    nvs.set_str("ntrip_pass", pass)?;
+    let port_bytes = port.to_be_bytes();
+    nvs.set_u8("ntrip_port_hi", port_bytes[0])?;
+    nvs.set_u8("ntrip_port_lo", port_bytes[1])?;
+    nvs.set_u8("ntrip_tls", if tls { 1 } else { 0 })?;
+    log::info!("NTRIP credentials saved to NVS (host={}, port={}, tls={})", host, port, tls);
     Ok(())
 }
 
