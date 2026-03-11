@@ -241,10 +241,22 @@ fn main() {
     // Bounded to 4: operator-triggered; retained message on reconnect + burst.
     let (ntrip_config_tx, ntrip_config_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(4);
 
+    // Pre-build all MQTT topic strings as Arc<str> at startup.
+    // Cloning Arc<str> is a refcount increment (zero allocation on hot path).
+    let nmea_topic:     Arc<str> = Arc::from(format!("gnss/{}/nmea",        device_id).as_str());
+    let rtcm_topic:     Arc<str> = Arc::from(format!("gnss/{}/rtcm",        device_id).as_str());
+    let log_topic:      Arc<str> = Arc::from(format!("gnss/{}/log",         device_id).as_str());
+    let hb_topic:       Arc<str> = Arc::from(format!("gnss/{}/heartbeat",   device_id).as_str());
+    let status_topic:   Arc<str> = Arc::from(format!("gnss/{}/status",      device_id).as_str());
+    let bench_topic:    Arc<str> = Arc::from(format!("gnss/{}/bench",       device_id).as_str());
+    let ota_status:     Arc<str> = Arc::from(format!("gnss/{}/ota/status",  device_id).as_str());
+    let ota_trigger:    Arc<str> = Arc::from(format!("gnss/{}/ota/trigger", device_id).as_str());
+
     // Step 9: MQTT — after WiFi (IP must be up). Event dispatch runs in the ESP-IDF C MQTT
     // task thread via callback; no blocking pump thread needed.
+    // mqtt_connect now returns (EspMqttClient, SyncSender<MqttMessage>, Receiver<MqttMessage>).
     log::info!("Connecting to MQTT broker...");
-    let mqtt_client = mqtt::mqtt_connect(
+    let (mqtt_client, mqtt_tx, mqtt_rx) = mqtt::mqtt_connect(
         &device_id,
         &mqtt_host,
         mqtt_port,
@@ -257,10 +269,18 @@ fn main() {
     ).expect("MQTT connect failed");
     log::info!("MQTT client created");
 
+    // Spawn the dedicated MQTT publish thread. This thread exclusively owns EspMqttClient —
+    // no Arc<Mutex<>> shared with any relay thread. All relay threads use mqtt_tx.clone().
+    std::thread::Builder::new()
+        .stack_size(8192)
+        .spawn(move || mqtt_publish::publish_thread(mqtt_client, mqtt_rx))
+        .expect("MQTT publish thread spawn failed");
+    log::info!("MQTT publish thread started");
+
     // Step 9.5: Log relay — forwards captured ESP-IDF log lines to MQTT gnss/{id}/log.
-    // Must be after mqtt_connect so the client Arc exists. LOG_TX is initialized inside
-    // spawn_log_relay; early log messages before this point are silently dropped (by design).
-    log_relay::spawn_log_relay(mqtt_client.clone(), device_id.clone())
+    // LOG_TX is initialized inside spawn_log_relay; early log messages before this point
+    // are silently dropped (by design).
+    log_relay::spawn_log_relay(mqtt_tx.clone(), log_topic.clone())
         .expect("log relay spawn failed");
     log::info!("Log relay started");
 
@@ -286,20 +306,20 @@ fn main() {
         }
     }
 
-    // Step 10: Subscriber thread — subscribes on Connected (initial + broker restart)
-    let sub_client = mqtt_client.clone();
+    // Step 10: Subscriber thread — subscribes on Connected (initial + broker restart).
+    // Uses SyncSender<MqttMessage> to send Subscribe requests to the publish thread.
     let sub_device_id = device_id.clone();
+    let sub_mqtt_tx = mqtt_tx.clone();
     std::thread::Builder::new()
         .stack_size(8192)
-        .spawn(move || mqtt::subscriber_loop(sub_client, sub_device_id, subscribe_rx))
+        .spawn(move || mqtt::subscriber_loop(sub_mqtt_tx, sub_device_id, subscribe_rx))
         .expect("subscriber thread spawn failed");
 
-    // Step 12: Heartbeat thread
-    let hb_client = mqtt_client.clone();
-    let hb_device_id = device_id.clone();
+    // Step 12: Heartbeat thread — uses SyncSender<MqttMessage> + pre-built Arc<str> topics.
+    let hb_mqtt_tx = mqtt_tx.clone();
     std::thread::Builder::new()
         .stack_size(8192)
-        .spawn(move || mqtt::heartbeat_loop(hb_client, hb_device_id, status_rx))
+        .spawn(move || mqtt::heartbeat_loop(hb_mqtt_tx, hb_topic.clone(), status_topic.clone(), status_rx))
         .expect("heartbeat thread spawn failed");
 
     // Step 13: WiFi supervisor thread (reconnect on drop)
@@ -310,8 +330,7 @@ fn main() {
 
     // Step 14: NMEA relay — consumes nmea_rx, publishes each sentence to MQTT.
     // nmea_rx is moved into spawn_relay — do NOT retain a reference here.
-    // gnss_cmd_tx is kept alive here; Phase 6 will clone it for MQTT config forwarding.
-    nmea_relay::spawn_relay(mqtt_client.clone(), device_id.clone(), nmea_rx)
+    nmea_relay::spawn_relay(mqtt_tx.clone(), nmea_topic.clone(), nmea_rx)
         .expect("NMEA relay thread spawn failed");
     log::info!("NMEA relay started");
 
@@ -387,15 +406,22 @@ fn main() {
 
     // Step 16: RTCM relay — receives verified RTCM3 frames from gnss RX thread, publishes to MQTT.
     // rtcm_rx and free_pool_tx are moved into spawn_relay — do NOT retain references here.
-    rtcm_relay::spawn_relay(mqtt_client.clone(), device_id.clone(), rtcm_rx, free_pool_tx)
+    rtcm_relay::spawn_relay(mqtt_tx.clone(), rtcm_topic.clone(), rtcm_rx, free_pool_tx)
         .expect("RTCM relay thread spawn failed");
     log::info!("RTCM relay started");
 
     // Step 17: OTA task — receives /ota/trigger payloads, performs HTTP download + flash + reboot.
     // ota_rx is moved into spawn_ota — do NOT retain a reference here.
     // nvs clone passed for PROV-07: "softap" payload triggers set_force_softap + restart.
-    ota::spawn_ota(mqtt_client.clone(), device_id.clone(), ota_rx, nvs.clone())
-        .expect("OTA task spawn failed");
+    ota::spawn_ota(
+        mqtt_tx.clone(),
+        ota_status.clone(),
+        ota_trigger.clone(),
+        bench_topic.clone(),
+        device_id.clone(),
+        ota_rx,
+        nvs.clone(),
+    ).expect("OTA task spawn failed");
     log::info!("OTA task started");
 
     // Step 17b: NTRIP client — streams RTCM3 corrections from configured caster to UM980 UART (NTRIP-01..04)

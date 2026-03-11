@@ -4,7 +4,7 @@ use esp_idf_svc::mqtt::client::{
     EspMqttClient, LwtConfiguration, MqttClientConfiguration,
 };
 use embedded_svc::mqtt::client::{EventPayload, QoS};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError};
 use crate::led::LedState;
@@ -36,7 +36,7 @@ pub fn mqtt_connect(
     log_level_tx: SyncSender<Vec<u8>>,  // NEW — LOG-02
     ntrip_config_tx: SyncSender<Vec<u8>>,  // NEW — NTRIP-02
     led_state: Arc<AtomicU8>,
-) -> anyhow::Result<Arc<Mutex<EspMqttClient<'static>>>> {
+) -> anyhow::Result<(EspMqttClient<'static>, SyncSender<crate::mqtt_publish::MqttMessage>, std::sync::mpsc::Receiver<crate::mqtt_publish::MqttMessage>)> {
     let broker_url = if tls {
         format!("mqtts://{}:{}", host, port)
     } else {
@@ -63,6 +63,10 @@ pub fn mqtt_connect(
         out_buffer_size: 2048,  // covers 1029-byte RTCM MSM7 frame + MQTT fixed header + topic overhead
         ..Default::default()
     };
+
+    // Create the publish channel before constructing EspMqttClient.
+    // Capacity 256: ~4s headroom at 64 msg/sec (40 NMEA + up to 24 other msgs/sec steady state).
+    let (mqtt_tx, mqtt_rx) = std::sync::mpsc::sync_channel::<crate::mqtt_publish::MqttMessage>(256);
 
     let client = EspMqttClient::new_cb(&broker_url, &conf, move |event| {
         match event.payload() {
@@ -166,7 +170,7 @@ pub fn mqtt_connect(
         }
     })?;
 
-    Ok(Arc::new(Mutex::new(client)))
+    Ok((client, mqtt_tx, mqtt_rx))
 }
 
 /// Subscribe to the device config and OTA trigger topics on every Connected signal from the pump.
@@ -181,7 +185,7 @@ pub fn mqtt_connect(
 ///
 /// Handles both initial connection and broker restarts (CONN-04).
 pub fn subscriber_loop(
-    client: Arc<Mutex<EspMqttClient<'static>>>,
+    mqtt_tx: SyncSender<crate::mqtt_publish::MqttMessage>,
     device_id: String,
     subscribe_rx: Receiver<()>,
 ) -> ! {
@@ -191,41 +195,53 @@ pub fn subscriber_loop(
     };
     log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
         "MQTT sub", hwm_words, hwm_words * 4);
+
+    // Build subscription topic strings at thread entry (once only).
     let config_topic = format!("gnss/{}/config", device_id);
     let ota_topic = format!("gnss/{}/ota/trigger", device_id);
+    let command_topic = format!("gnss/{}/command", device_id);
+    let log_level_topic = format!("gnss/{}/log/level", device_id);
+    let ntrip_config_topic = format!("gnss/{}/ntrip/config", device_id);
+
+    // Topics and QoS pairs to subscribe to on each Connected signal.
+    // CMD-02: /command uses QoS 0 — no retain replay (old commands must not re-execute).
+    // All others use AtLeastOnce so retained messages are re-delivered on broker reconnect.
+    let subscriptions: &[(&str, QoS)] = &[
+        (&config_topic,       QoS::AtLeastOnce),
+        (&ota_topic,          QoS::AtLeastOnce),
+        (&command_topic,      QoS::AtMostOnce),
+        (&log_level_topic,    QoS::AtLeastOnce),
+        (&ntrip_config_topic, QoS::AtLeastOnce),
+    ];
+
     loop {
         match subscribe_rx.recv_timeout(crate::config::SLOW_RECV_TIMEOUT) {
             Ok(()) => {
-                match client.lock() {
-                    Err(e) => log::warn!("Subscriber mutex poisoned: {:?}", e),
-                    Ok(mut c) => {
-                        match c.subscribe(&config_topic, QoS::AtLeastOnce) {
-                            Ok(_) => log::info!("Subscribed to {}", config_topic),
-                            Err(e) => log::warn!("Subscribe /config failed: {:?}", e),
+                // For each topic, send a Subscribe request to the publish thread and wait
+                // for confirmation. The publish thread calls client.subscribe() since it
+                // exclusively owns EspMqttClient — no Arc/Mutex needed here.
+                for (topic, qos) in subscriptions {
+                    let (sig_tx, sig_rx) = std::sync::mpsc::sync_channel::<Result<(), String>>(1);
+                    match mqtt_tx.try_send(crate::mqtt_publish::MqttMessage::Subscribe {
+                        topic: topic.to_string(),
+                        qos: *qos,
+                        signal: sig_tx,
+                    }) {
+                        Ok(()) => {
+                            // Wait for the publish thread to confirm subscription.
+                            // 5s timeout: conservative, subscribe should complete in <1s.
+                            match sig_rx.recv_timeout(std::time::Duration::from_secs(5)) {
+                                Ok(Ok(())) => log::info!("Subscribed to {}", topic),
+                                Ok(Err(e)) => log::warn!("Subscribe {} failed: {}", topic, e),
+                                Err(_) => log::warn!("Subscribe {} timed out", topic),
+                            }
                         }
-                        match c.subscribe(&ota_topic, QoS::AtLeastOnce) {
-                            Ok(_) => log::info!("Subscribed to {}", ota_topic),
-                            Err(e) => log::warn!("Subscribe /ota/trigger failed: {:?}", e),
+                        Err(TrySendError::Full(_)) => {
+                            log::warn!("Subscriber: publish channel full — subscribe request dropped for {}", topic);
                         }
-                        let command_topic = format!("gnss/{}/command", device_id);
-                        match c.subscribe(&command_topic, QoS::AtMostOnce) {  // QoS 0 — no retain replay (CMD-02)
-                            Ok(_) => log::info!("Subscribed to {}", command_topic),
-                            Err(e) => log::warn!("Subscribe /command failed: {:?}", e),
-                        }
-                        // LOG-02: subscribe to runtime log level topic.
-                        // AtLeastOnce so a retained level setting persists across broker reconnects.
-                        let log_level_topic = format!("gnss/{}/log/level", device_id);
-                        match c.subscribe(&log_level_topic, QoS::AtLeastOnce) {
-                            Ok(_) => log::info!("Subscribed to {}", log_level_topic),
-                            Err(e) => log::warn!("Subscribe /log/level failed: {:?}", e),
-                        }
-                        // NTRIP-02: subscribe to NTRIP caster config topic.
-                        // AtLeastOnce so the retained config is re-delivered on broker reconnect,
-                        // ensuring the NTRIP client reconnects with the latest caster settings.
-                        let ntrip_config_topic = format!("gnss/{}/ntrip/config", device_id);
-                        match c.subscribe(&ntrip_config_topic, QoS::AtLeastOnce) {
-                            Ok(_) => log::info!("Subscribed to {}", ntrip_config_topic),
-                            Err(e) => log::warn!("Subscribe /ntrip/config failed: {:?}", e),
+                        Err(TrySendError::Disconnected(_)) => {
+                            log::error!("Subscriber: publish channel closed — thread exiting");
+                            loop { std::thread::sleep(std::time::Duration::from_secs(60)); }
                         }
                     }
                 }

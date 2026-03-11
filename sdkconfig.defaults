@@ -56,3 +56,9 @@ CONFIG_LOG_TIMESTAMP_SOURCE_SYSTEM=y
 # At QoS 0, messages not ACKed within 5s (MQTT disconnected) are discarded.
 # Prevents outbox memory growth during short MQTT disconnects at high publish rates.
 CONFIG_MQTT_OUTBOX_EXPIRED_TIMEOUT_MS=5000
+
+# MQTT outbox deletion events (Phase 21 observability)
+# Enables EventPayload::Deleted(MessageId) in the MQTT callback when outbox messages expire.
+# Required for MQTT_OUTBOX_DROPS atomic counter in heartbeat.
+# Default is n; without this, no event fires when outbox messages expire.
+CONFIG_MQTT_REPORT_DELETED_MESSAGES=y

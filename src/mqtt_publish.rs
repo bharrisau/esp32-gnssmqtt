@@ -81,6 +81,16 @@ pub enum MqttMessage {
         topic: Arc<str>,
         payload: Vec<u8>,
     },
+    /// Subscribe request — sent by subscriber_loop to the publish thread so that
+    /// `EspMqttClient::subscribe()` is called on the thread that exclusively owns the client.
+    ///
+    /// The publish thread calls `client.subscribe(&topic, qos)` and sends the result back
+    /// via `signal`. The caller blocks on `signal.recv()` with a short timeout.
+    Subscribe {
+        topic: String,
+        qos: QoS,
+        signal: std::sync::mpsc::SyncSender<Result<(), String>>,
+    },
 }
 
 /// Dedicated MQTT publish thread entry point.
@@ -172,6 +182,10 @@ fn dispatch(client: &mut EspMqttClient<'static>, msg: MqttMessage) {
                 MQTT_ENQUEUE_ERRORS.fetch_add(1, Ordering::Relaxed);
                 MQTT_OUTBOX_DROPS.fetch_add(1, Ordering::Relaxed);
             }
+        }
+        MqttMessage::Subscribe { topic, qos, signal } => {
+            let result = client.subscribe(&topic, qos).map(|_| ()).map_err(|e| format!("{:?}", e));
+            let _ = signal.try_send(result);
         }
     }
 }
