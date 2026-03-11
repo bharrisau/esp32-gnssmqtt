@@ -6,31 +6,37 @@
 //!
 //! The OTA thread runs independently of the MQTT pump thread. Running EspOta inside
 //! the pump thread would block connection.next() calls, causing keep-alive timeouts.
+//!
+//! Uses `SyncSender<MqttMessage>` (non-blocking try_send) to the publish thread —
+//! no `Arc<Mutex<EspMqttClient>>` held by this task.
 
 use embedded_svc::http::client::Client as HttpClient;
 use embedded_svc::mqtt::client::QoS;
 use esp_idf_svc::hal::reset::restart;
 use esp_idf_svc::http::client::{Configuration as HttpConfig, EspHttpConnection};
-use esp_idf_svc::mqtt::client::EspMqttClient;
 use esp_idf_svc::nvs::{EspNvsPartition, NvsDefault};
 use esp_idf_svc::ota::EspOta;
 use sha2::{Digest, Sha256};
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::Arc;
+use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender};
 use std::time::Duration;
 
 /// Publish a JSON status string to the OTA status topic.
 ///
-/// Uses enqueue (non-blocking) to avoid stalling the OTA thread.
-/// Mirrors the heartbeat_loop pattern from mqtt.rs.
-fn publish_status(client: &Arc<Mutex<EspMqttClient<'static>>>, topic: &str, json: &str) {
-    match client.lock() {
-        Err(e) => log::warn!("OTA: status mutex poisoned: {:?}", e),
-        Ok(mut c) => match c.enqueue(topic, QoS::AtMostOnce, false, json.as_bytes()) {
-            Ok(_) => {}
-            Err(e) => log::warn!("OTA: status enqueue failed: {:?}", e),
-        },
-    }
+/// Uses Heartbeat variant (Vec<u8> payload) for dynamic OTA status strings — the
+/// Status variant requires a &'static [u8] payload and is not suitable for
+/// dynamically formatted JSON. Heartbeat and OTA status share QoS 0 / retain=false
+/// semantics so the variant reuse is appropriate.
+fn publish_status(
+    mqtt_tx: &SyncSender<crate::mqtt_publish::MqttMessage>,
+    topic: &Arc<str>,
+    json: &str,
+) {
+    let _ = mqtt_tx.try_send(crate::mqtt_publish::MqttMessage::Heartbeat {
+        topic: topic.clone(),
+        payload: json.as_bytes().to_vec(),
+        retain: false,
+    });
 }
 
 /// Extract a JSON string field value without a serde dependency.
@@ -55,11 +61,19 @@ fn extract_json_str<'a>(json: &'a str, key: &str) -> Option<&'a str> {
 /// 6. Verify SHA-256 before completing
 /// 7. Finalize update, publish complete, clear retained trigger, restart
 ///
+/// Special payloads handled before OTA JSON parse:
+/// - "reboot" — restarts device immediately
+/// - "softap" — sets force_softap NVS flag and restarts
+/// - "bench:N" — sends N messages to bench_topic and logs sent/dropped/elapsed
+///
 /// All errors publish failed status and continue to the next trigger —
 /// the OTA thread does NOT restart on error.
 pub fn ota_task(
-    mqtt_client: Arc<Mutex<EspMqttClient<'static>>>,
-    device_id: String,
+    mqtt_tx: SyncSender<crate::mqtt_publish::MqttMessage>,
+    status_topic: Arc<str>,    // pre-built "gnss/{id}/ota/status"
+    trigger_topic: Arc<str>,   // pre-built "gnss/{id}/ota/trigger"
+    bench_topic: Arc<str>,     // pre-built "gnss/{id}/bench"
+    device_id: String,         // kept for log messages only
     ota_rx: Receiver<Vec<u8>>,
     nvs: EspNvsPartition<NvsDefault>,
 ) -> ! {
@@ -69,8 +83,7 @@ pub fn ota_task(
     };
     log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
         "OTA task", hwm_words, hwm_words * 4);
-    let status_topic = format!("gnss/{}/ota/status", device_id);
-    let trigger_topic = format!("gnss/{}/ota/trigger", device_id);
+    log::info!("OTA task started, device_id={}", device_id);
 
     loop {
     let payload = match ota_rx.recv_timeout(crate::config::SLOW_RECV_TIMEOUT) {
@@ -91,7 +104,7 @@ pub fn ota_task(
             Err(e) => {
                 log::warn!("OTA: payload not valid UTF-8: {:?}", e);
                 publish_status(
-                    &mqtt_client,
+                    &mqtt_tx,
                     &status_topic,
                     "{\"state\":\"failed\",\"reason\":\"payload not valid UTF-8\"}",
                 );
@@ -117,12 +130,34 @@ pub fn ota_task(
             restart();
         }
 
+        // bench:N — send N messages to bench_topic and log sent/dropped/elapsed summary.
+        if let Some(rest) = json.trim().strip_prefix("bench:") {
+            let count: u64 = rest.trim().parse().unwrap_or(0);
+            log::info!("Bench: starting {} message burst", count);
+            let start = std::time::Instant::now();
+            let mut sent = 0u64;
+            let mut dropped = 0u64;
+            for i in 0..count {
+                let payload_bytes = format!("{}", i).into_bytes();
+                match mqtt_tx.try_send(crate::mqtt_publish::MqttMessage::Bench {
+                    topic: bench_topic.clone(),
+                    payload: payload_bytes,
+                }) {
+                    Ok(()) => sent += 1,
+                    Err(_) => dropped += 1,
+                }
+            }
+            log::info!("Bench: {} sent, {} dropped in {:.3}s",
+                sent, dropped, start.elapsed().as_secs_f32());
+            continue;
+        }
+
         let url = match extract_json_str(&json, "url") {
             Some(u) => u.to_owned(),
             None => {
                 log::warn!("OTA: trigger missing url field");
                 publish_status(
-                    &mqtt_client,
+                    &mqtt_tx,
                     &status_topic,
                     "{\"state\":\"failed\",\"reason\":\"missing url or sha256\"}",
                 );
@@ -135,7 +170,7 @@ pub fn ota_task(
             None => {
                 log::warn!("OTA: trigger missing sha256 field");
                 publish_status(
-                    &mqtt_client,
+                    &mqtt_tx,
                     &status_topic,
                     "{\"state\":\"failed\",\"reason\":\"missing url or sha256\"}",
                 );
@@ -147,7 +182,7 @@ pub fn ota_task(
 
         // --- Step 4: Publish downloading ---
         publish_status(
-            &mqtt_client,
+            &mqtt_tx,
             &status_topic,
             "{\"state\":\"downloading\",\"progress\":0}",
         );
@@ -164,7 +199,7 @@ pub fn ota_task(
             Err(e) => {
                 log::warn!("OTA: HTTP connection init failed: {:?}", e);
                 publish_status(
-                    &mqtt_client,
+                    &mqtt_tx,
                     &status_topic,
                     &format!("{{\"state\":\"failed\",\"reason\":\"HTTP init: {:?}\"}}", e),
                 );
@@ -177,7 +212,7 @@ pub fn ota_task(
             Err(e) => {
                 log::warn!("OTA: HTTP GET failed: {:?}", e);
                 publish_status(
-                    &mqtt_client,
+                    &mqtt_tx,
                     &status_topic,
                     &format!("{{\"state\":\"failed\",\"reason\":\"HTTP GET: {:?}\"}}", e),
                 );
@@ -190,7 +225,7 @@ pub fn ota_task(
             Err(e) => {
                 log::warn!("OTA: HTTP submit failed: {:?}", e);
                 publish_status(
-                    &mqtt_client,
+                    &mqtt_tx,
                     &status_topic,
                     &format!("{{\"state\":\"failed\",\"reason\":\"HTTP submit: {:?}\"}}", e),
                 );
@@ -202,7 +237,7 @@ pub fn ota_task(
         if status_code != 200 {
             log::warn!("OTA: HTTP {} response", status_code);
             publish_status(
-                &mqtt_client,
+                &mqtt_tx,
                 &status_topic,
                 &format!("{{\"state\":\"failed\",\"reason\":\"HTTP {}\"}}", status_code),
             );
@@ -215,7 +250,7 @@ pub fn ota_task(
             Err(e) => {
                 log::warn!("OTA: EspOta::new() failed: {:?}", e);
                 publish_status(
-                    &mqtt_client,
+                    &mqtt_tx,
                     &status_topic,
                     &format!("{{\"state\":\"failed\",\"reason\":\"OTA init: {:?}\"}}", e),
                 );
@@ -228,7 +263,7 @@ pub fn ota_task(
             Err(e) => {
                 log::warn!("OTA: initiate_update() failed: {:?}", e);
                 publish_status(
-                    &mqtt_client,
+                    &mqtt_tx,
                     &status_topic,
                     &format!(
                         "{{\"state\":\"failed\",\"reason\":\"initiate_update: {:?}\"}}",
@@ -274,7 +309,7 @@ pub fn ota_task(
             if bytes_written - last_progress >= 65536 {
                 last_progress = bytes_written;
                 publish_status(
-                    &mqtt_client,
+                    &mqtt_tx,
                     &status_topic,
                     &format!(
                         "{{\"state\":\"downloading\",\"progress\":{}}}",
@@ -287,7 +322,7 @@ pub fn ota_task(
         if let Some(err) = loop_error {
             // update drops here — EspOtaUpdate::drop() calls esp_ota_abort automatically
             publish_status(
-                &mqtt_client,
+                &mqtt_tx,
                 &status_topic,
                 &format!("{{\"state\":\"failed\",\"reason\":\"{}\"}}", err),
             );
@@ -308,7 +343,7 @@ pub fn ota_task(
             );
             // update drops here — esp_ota_abort called automatically
             publish_status(
-                &mqtt_client,
+                &mqtt_tx,
                 &status_topic,
                 &format!(
                     "{{\"state\":\"failed\",\"reason\":\"sha256 mismatch: expected {} got {}\"}}",
@@ -324,7 +359,7 @@ pub fn ota_task(
         if let Err(e) = update.complete() {
             log::warn!("OTA: complete() failed: {:?}", e);
             publish_status(
-                &mqtt_client,
+                &mqtt_tx,
                 &status_topic,
                 &format!("{{\"state\":\"failed\",\"reason\":\"complete: {:?}\"}}", e),
             );
@@ -332,17 +367,18 @@ pub fn ota_task(
         }
 
         // --- Step 10: Publish complete ---
-        publish_status(&mqtt_client, &status_topic, "{\"state\":\"complete\"}");
+        publish_status(&mqtt_tx, &status_topic, "{\"state\":\"complete\"}");
 
-        // --- Step 11: Clear retained trigger (empty payload + retain=true) ---
-        match mqtt_client.lock() {
-            Err(e) => log::warn!("OTA: trigger clear mutex poisoned: {:?}", e),
-            Ok(mut c) => {
-                match c.enqueue(&trigger_topic, QoS::AtLeastOnce, true, b"") {
-                    Ok(_) => log::info!("OTA: retained trigger cleared"),
-                    Err(e) => log::warn!("OTA: trigger clear failed: {:?}", e),
-                }
-            }
+        // --- Step 11: Clear retained trigger (empty payload + retain=true, QoS AtLeastOnce) ---
+        // Use Status variant: b"" static payload, retain=true, QoS::AtLeastOnce.
+        match mqtt_tx.try_send(crate::mqtt_publish::MqttMessage::Status {
+            topic: trigger_topic.clone(),
+            payload: b"",
+            qos: QoS::AtLeastOnce,
+            retain: true,
+        }) {
+            Ok(()) => log::info!("OTA: retained trigger clear enqueued"),
+            Err(e) => log::warn!("OTA: trigger clear enqueue failed: {:?}", e),
         }
 
         // --- Step 12: Sleep to allow MQTT enqueue to complete before restart ---
@@ -370,14 +406,17 @@ pub fn ota_task(
 ///
 /// Returns Ok(()) immediately; the thread runs independently.
 pub fn spawn_ota(
-    mqtt_client: Arc<Mutex<EspMqttClient<'static>>>,
+    mqtt_tx: SyncSender<crate::mqtt_publish::MqttMessage>,
+    status_topic: Arc<str>,
+    trigger_topic: Arc<str>,
+    bench_topic: Arc<str>,
     device_id: String,
     ota_rx: Receiver<Vec<u8>>,
     nvs: EspNvsPartition<NvsDefault>,
 ) -> anyhow::Result<()> {
     std::thread::Builder::new()
         .stack_size(16384)
-        .spawn(move || ota_task(mqtt_client, device_id, ota_rx, nvs))
+        .spawn(move || ota_task(mqtt_tx, status_topic, trigger_topic, bench_topic, device_id, ota_rx, nvs))
         .map(|_| ())
         .map_err(Into::into)
 }
