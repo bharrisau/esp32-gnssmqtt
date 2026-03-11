@@ -2,35 +2,39 @@
 //!
 //! Consumes the `Receiver<RtcmFrame>` returned by `gnss::spawn_gnss` (third element).
 //! For each `(message_type, pool_buffer, frame_len)` tuple, publishes the complete raw RTCM3
-//! frame (including preamble, header, payload, and CRC bytes) to
-//! `gnss/{device_id}/rtcm/{message_type}` at QoS 0 (AtMostOnce), retain = false.
+//! frame (including preamble, header, payload, and CRC bytes) to `gnss/{device_id}/rtcm`
+//! at QoS 0 (AtMostOnce), retain = false.
+//!
+//! All RTCM message types are published to the single consolidated topic — the message type
+//! is encoded in the binary frame header and downstream consumers can parse it.
 //!
 //! The complete frame is published (not just the payload) so downstream consumers can
 //! independently verify the CRC and parse the frame structure.
 //!
-//! After publishing, the pool buffer is returned to the GNSS RX thread via `free_pool_tx`
-//! so it can be reused — eliminating per-frame heap allocation in steady state.
+//! After copying into a `BytesMut` buffer, the pool buffer is returned to the GNSS RX
+//! thread via `free_pool_tx` so it can be reused — eliminating per-frame heap allocation
+//! in steady state. The `bytes::Bytes` frozen slice is then sent to the publish thread
+//! via `SyncSender<MqttMessage>` for zero-copy handoff.
 //!
-//! Uses `enqueue()` (non-blocking) — the MQTT pump thread drains the outbox.
-//! At 1-4 frames/sec (MSM7 at 1Hz for up to 4 constellations), enqueue latency is negligible.
+//! Uses `SyncSender<MqttMessage>` (non-blocking try_send) to the publish thread.
+//! At 1-4 frames/sec (MSM7 at 1Hz for up to 4 constellations), the channel is unlikely
+//! to be full in practice.
 
 use crate::gnss::RtcmFrame;
-use embedded_svc::mqtt::client::QoS;
-use esp_idf_svc::mqtt::client::EspMqttClient;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 /// Spawn the RTCM relay thread.
 ///
 /// Moves `rtcm_rx` and `free_pool_tx` into the thread — caller must NOT retain references.
-/// `device_id` is cloned into the thread for topic construction.
-/// `client` is an `Arc<Mutex<>>` shared with nmea_relay, heartbeat, and subscriber threads.
-/// `free_pool_tx` is used to return pool buffers after each publish (both success and failure).
+/// `rtcm_topic` is a pre-built `Arc<str>` for "gnss/{id}/rtcm" — cloned per frame.
+/// `mqtt_tx` is a bounded `SyncSender<MqttMessage>` shared with the publish thread.
+/// `free_pool_tx` returns pool buffers to the GNSS RX thread after each frame is processed.
 ///
 /// Returns `Ok(())` immediately after spawning (non-blocking).
 pub fn spawn_relay(
-    client: Arc<Mutex<EspMqttClient<'static>>>,
-    device_id: String,
+    mqtt_tx: SyncSender<crate::mqtt_publish::MqttMessage>,
+    rtcm_topic: Arc<str>,
     rtcm_rx: Receiver<RtcmFrame>,
     free_pool_tx: SyncSender<Box<[u8; 1029]>>,
 ) -> anyhow::Result<()> {
@@ -44,31 +48,46 @@ pub fn spawn_relay(
             log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
                 "RTCM relay", hwm_words, hwm_words * 4);
             log::info!("RTCM relay thread started");
+
+            // Reusable BytesMut buffer — split().freeze() for zero-copy handoff to publish thread.
+            // reserve(1029) after each frame attempts to reclaim the backing if the Bytes refcount
+            // has dropped to 1 (publish thread consumed it); otherwise allocates fresh (acceptable).
+            let mut buf = bytes::BytesMut::with_capacity(1029);
+
             loop {
                 match rtcm_rx.recv_timeout(crate::config::RELAY_RECV_TIMEOUT) {
-                    Ok((message_type, frame_buf, frame_len)) => {
-                        let topic = format!("gnss/{}/rtcm/{}", device_id, message_type);
-                        // Acquire Mutex per frame — do NOT hold across loop iterations.
-                        // Holding across iterations would starve heartbeat/subscriber threads.
-                        match client.lock() {
-                            Err(e) => {
-                                log::warn!("RTCM relay: mutex poisoned: {:?}", e);
-                                // Return buffer to pool even on mutex failure — must not leak.
-                                if free_pool_tx.send(frame_buf).is_err() {
-                                    log::error!("RTCM relay: free pool channel closed — buffer leaked");
-                                }
+                    Ok((_message_type, frame_buf, frame_len)) => {
+                        // Write frame bytes into BytesMut, then freeze for zero-copy handoff.
+                        buf.extend_from_slice(&frame_buf[..frame_len]);
+                        let filled = buf.split().freeze();
+
+                        // Return pool buffer to GNSS RX thread — MUST happen regardless of
+                        // publish success/failure. Done before try_send so the pool buffer is
+                        // never leaked even if the channel is full or closed.
+                        if free_pool_tx.send(frame_buf).is_err() {
+                            log::error!("RTCM relay: free pool channel closed — buffer leaked");
+                        }
+
+                        // Publish via channel (non-blocking).
+                        match mqtt_tx.try_send(crate::mqtt_publish::MqttMessage::Rtcm {
+                            topic: rtcm_topic.clone(),
+                            payload: filled,
+                        }) {
+                            Ok(()) => {}
+                            Err(std::sync::mpsc::TrySendError::Full(_)) => {
+                                log::warn!("RTCM relay: publish channel full — frame dropped");
+                                crate::gnss::RTCM_DROPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             }
-                            Ok(mut c) => {
-                                match c.enqueue(&topic, QoS::AtMostOnce, false, &frame_buf[..frame_len]) {
-                                    Ok(_) => {}
-                                    Err(e) => log::warn!("RTCM relay: enqueue failed: {:?}", e),
-                                }
-                                // Return buffer to pool — MUST happen regardless of enqueue success/failure.
-                                if free_pool_tx.send(frame_buf).is_err() {
-                                    log::error!("RTCM relay: free pool channel closed — buffer leaked");
-                                }
+                            Err(std::sync::mpsc::TrySendError::Disconnected(_)) => {
+                                log::error!("RTCM relay: publish channel closed — thread exiting");
+                                break;
                             }
                         }
+
+                        // Best-effort reclaim: works if Bytes refcount has dropped to 1 (publish
+                        // thread consumed it). If not yet consumed, reserve() allocates fresh —
+                        // acceptable, not a correctness issue.
+                        buf.reserve(1029);
                     }
                     Err(RecvTimeoutError::Timeout) => {
                         // No RTCM frame within 5s — expected at low update rates. Continue.
