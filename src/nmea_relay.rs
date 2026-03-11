@@ -2,32 +2,29 @@
 //!
 //! Consumes the `Receiver<(String, String)>` returned by `gnss::spawn_gnss`.
 //! For each `(sentence_type, raw_sentence)` tuple, publishes `raw_sentence` as
-//! bytes to `gnss/{device_id}/nmea/{sentence_type}` at QoS 0 (AtMostOnce),
-//! retain = false.
+//! bytes to `gnss/{device_id}/nmea` at QoS 0 (AtMostOnce), retain = false.
 //!
-//! Uses `enqueue()` (non-blocking) not `publish()` (blocking) — the MQTT pump
-//! thread drains the outbox. This prevents backpressure stalling the relay
-//! thread at 10+ sentences/sec. (Mirrors the heartbeat_loop pattern in mqtt.rs.)
+//! All sentence types are published to the single consolidated topic — the sentence
+//! type is visible from the `$GNGGA...` / `$GNRMC...` payload prefix.
 //!
-//! If `enqueue()` fails (e.g. MQTT disconnected), logs WARN and continues —
-//! the pump thread will reconnect and publishes will resume.
+//! Uses `SyncSender<MqttMessage>` (non-blocking try_send) to the publish thread.
+//! If the channel is full, the sentence is dropped and NMEA_DROPS is incremented.
+//! This prevents backpressure stalling the relay thread at 40+ sentences/sec.
 
-use embedded_svc::mqtt::client::QoS;
-use esp_idf_svc::mqtt::client::EspMqttClient;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError};
 
 /// Spawn the NMEA relay thread.
 ///
 /// Moves `nmea_rx` into the thread — caller must NOT retain a reference to it.
-/// `device_id` is cloned into the thread for topic construction.
-/// `client` is an `Arc<Mutex<>>` shared with heartbeat and subscriber threads.
+/// `nmea_topic` is a pre-built `Arc<str>` for "gnss/{id}/nmea" — cloned per sentence
+/// with zero allocation (Arc clone is a refcount increment).
+/// `mqtt_tx` is a bounded `SyncSender<MqttMessage>` shared with the publish thread.
 ///
 /// Returns `Ok(())` immediately after spawning (non-blocking).
 pub fn spawn_relay(
-    client: Arc<Mutex<EspMqttClient<'static>>>,
-    device_id: String,
+    mqtt_tx: SyncSender<crate::mqtt_publish::MqttMessage>,
+    nmea_topic: std::sync::Arc<str>,
     nmea_rx: Receiver<(String, String)>,
 ) -> anyhow::Result<()> {
     std::thread::Builder::new()
@@ -49,16 +46,21 @@ pub fn spawn_relay(
                         if sentence_type.ends_with("GGA") {
                             parse_gga_into_atomics(&raw);
                         }
-                        let topic = format!("gnss/{}/nmea/{}", device_id, sentence_type);
-                        // Acquire Mutex per sentence — do NOT hold across loop iterations.
-                        // Holding across iterations would starve heartbeat/subscriber threads.
-                        match client.lock() {
-                            Err(e) => log::warn!("NMEA relay: mutex poisoned: {:?}", e),
-                            Ok(mut c) => {
-                                match c.enqueue(&topic, QoS::AtMostOnce, false, raw.as_bytes()) {
-                                    Ok(_) => {}
-                                    Err(e) => log::warn!("NMEA relay: enqueue failed: {:?}", e),
-                                }
+                        // Topic consolidation: all NMEA types → single "gnss/{id}/nmea" topic.
+                        // Sentence type visible from payload prefix ($GNGGA, $GNRMC, etc.).
+                        let payload = raw.into_bytes();
+                        match mqtt_tx.try_send(crate::mqtt_publish::MqttMessage::Nmea {
+                            topic: nmea_topic.clone(),
+                            payload,
+                        }) {
+                            Ok(()) => {}
+                            Err(TrySendError::Full(_)) => {
+                                log::warn!("NMEA relay: publish channel full — sentence dropped");
+                                crate::gnss::NMEA_DROPS.fetch_add(1, Ordering::Relaxed);
+                            }
+                            Err(TrySendError::Disconnected(_)) => {
+                                log::error!("NMEA relay: publish channel closed — thread exiting");
+                                break;
                             }
                         }
                         sentence_count += 1;
