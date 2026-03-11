@@ -194,3 +194,15 @@ Plans:
 - [x] 20-02-PLAN.md — PERF-1: NMEA channel 64→128, throughput diagnostic log, MQTT outbox timeout tuning
 - [x] 20-03-PLAN.md — FEAT-2: NVS blob save for GNSS config in config_relay.rs; auto-reapply in main.rs UM980 reboot monitor
 - [ ] 20-04-PLAN.md — FEAT-3: TLS NTRIP session path (EspTls) in ntrip_client.rs; NTRIP TLS config in provisioning portal
+
+### Phase 21: MQTT performance
+
+**Goal:** Eliminate mutex contention and per-message heap allocation on the MQTT publish path by routing all relay threads through a single dedicated publish thread that owns EspMqttClient exclusively; add outbox observability counters and a bench trigger for field diagnostics
+**Requirements**: PERF-21-1, PERF-21-2, PERF-21-3, PERF-21-4, OBS-21-1, OBS-21-2, DIAG-21-1
+**Depends on:** Phase 20
+**Plans:** 3 plans
+
+Plans:
+- [ ] 21-01-PLAN.md — MqttMessage enum, publish_thread, MQTT_ENQUEUE_ERRORS + MQTT_OUTBOX_DROPS atomics, bytes crate
+- [ ] 21-02-PLAN.md — Migrate nmea_relay, log_relay, heartbeat_loop to SyncSender<MqttMessage>; consolidated topics; heartbeat JSON extended
+- [ ] 21-03-PLAN.md — Migrate rtcm_relay (bytes crate), ota.rs (bench:N trigger), subscriber_loop; full main.rs wiring; sdkconfig outbox observability
