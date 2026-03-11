@@ -181,3 +181,16 @@ Plans:
 - [ ] 19-01-PLAN.md — BUG-1/BUG-2: replace post-start DHCP DNS block with EspNetif::new_with_conf in SoftAP WiFi construction
 - [ ] 19-02-PLAN.md — BUG-3/BUG-4: fix load_mqtt_config TLS default (false), write mqtt_tls+config_ver on save, wire tls bool to mqtt_connect
 - [ ] 19-03-PLAN.md — FEAT-1: GPIO9 3-phase state machine (3s SoftAP / 10s factory reset) + ButtonHold and Off LED states
+
+### Phase 20: Field testing fixes
+
+**Goal:** Fix bugs found during first field deployment of device FFFEB5 — Windows/iOS captive portal detection (BUG-5), MQTT throughput for 5 Hz GNSS output (PERF-1), UM980 config persistence and auto-reapply on reset (FEAT-2), and TLS NTRIP client for AUSCORS port 443 (FEAT-3)
+**Requirements**: BUG-5, PERF-1, FEAT-2, FEAT-3
+**Depends on:** Phase 19
+**Plans:** 4 plans
+
+Plans:
+- [ ] 20-01-PLAN.md — BUG-5: Fix Windows msftconnecttest + iOS captive portal probe handlers (provisioning.rs)
+- [ ] 20-02-PLAN.md — PERF-1: NMEA channel 64→128, throughput diagnostic log, MQTT outbox timeout tuning
+- [ ] 20-03-PLAN.md — FEAT-2: NVS blob save for GNSS config in config_relay.rs; auto-reapply in main.rs UM980 reboot monitor
+- [ ] 20-04-PLAN.md — FEAT-3: TLS NTRIP session path (EspTls) in ntrip_client.rs; NTRIP TLS config in provisioning portal
