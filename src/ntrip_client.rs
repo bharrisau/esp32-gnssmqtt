@@ -23,6 +23,7 @@
 
 use esp_idf_svc::hal::uart::UartDriver;
 use esp_idf_svc::nvs::{EspNvs, EspNvsPartition, NvsDefault};
+use esp_idf_svc::tls::{Config as TlsConfig, EspTls, InternalSocket};
 use std::io::{Read, Write as IoWrite};
 use std::net::TcpStream;
 use std::sync::Arc;
@@ -54,6 +55,7 @@ pub struct NtripConfig {
     pub mountpoint: String,
     pub user:       String,
     pub pass:       String,
+    pub tls:        bool,      // true = use EspTls (port 443); false = plain TCP (default)
 }
 
 impl Default for NtripConfig {
@@ -64,6 +66,7 @@ impl Default for NtripConfig {
             mountpoint: String::new(),
             user:       String::new(),
             pass:       String::new(),
+            tls:        false,  // default: plain TCP
         }
     }
 }
@@ -116,6 +119,8 @@ pub fn load_ntrip_config(nvs_partition: &EspNvsPartition<NvsDefault>) -> NtripCo
         config.port = 2101;
     }
 
+    config.tls = nvs.get_u8("ntrip_tls").ok().flatten().unwrap_or(0) != 0;
+
     config
 }
 
@@ -152,9 +157,12 @@ pub fn save_ntrip_config(config: &NtripConfig, nvs_partition: &EspNvsPartition<N
     if let Err(e) = nvs.set_u8("ntrip_port_lo", port_bytes[1]) {
         log::warn!("NTRIP: NVS set ntrip_port_lo failed: {:?}", e);
     }
+    if let Err(e) = nvs.set_u8("ntrip_tls", if config.tls { 1 } else { 0 }) {
+        log::warn!("NTRIP: NVS set ntrip_tls failed: {:?}", e);
+    }
 
-    log::info!("NTRIP: config saved to NVS (host={}, port={}, mount={})",
-        config.host, config.port, config.mountpoint);
+    log::info!("NTRIP: config saved to NVS (host={}, port={}, mount={}, tls={})",
+        config.host, config.port, config.mountpoint, config.tls);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,12 +185,14 @@ pub fn parse_ntrip_config_payload(data: &[u8]) -> Option<NtripConfig> {
     let user       = extract_json_str(text, "user").unwrap_or_default().to_string();
     let pass       = extract_json_str(text, "pass").unwrap_or_default().to_string();
     let port       = extract_json_number(text, "port").unwrap_or(2101) as u16;
+    // "tls": true or "tls": 1 — support both forms
+    let tls        = extract_json_bool(text, "tls").unwrap_or(false);
 
     if host.is_empty() {
         return None;
     }
 
-    Some(NtripConfig { host, port, mountpoint, user, pass })
+    Some(NtripConfig { host, port, mountpoint, user, pass, tls })
 }
 
 /// Extract a JSON string field value by key name.
@@ -214,6 +224,25 @@ fn extract_json_number(text: &str, key: &str) -> Option<u64> {
     let after_colon = after_key[colon_pos..].trim_start();
     let end = after_colon.find(|c: char| !c.is_ascii_digit()).unwrap_or(after_colon.len());
     after_colon[..end].parse::<u64>().ok()
+}
+
+/// Extract a JSON boolean field value by key name.
+///
+/// Accepts `true`/`false` or `1`/`0` as values.
+/// Returns `None` if key not found or value is unrecognised.
+fn extract_json_bool(text: &str, key: &str) -> Option<bool> {
+    let needle = format!("\"{}\"", key);
+    let key_pos = text.find(needle.as_str())?;
+    let after_key = &text[key_pos + needle.len()..];
+    let colon_pos = after_key.find(':')? + 1;
+    let after_colon = after_key[colon_pos..].trim_start();
+    if after_colon.starts_with("true") || after_colon.starts_with("1") {
+        Some(true)
+    } else if after_colon.starts_with("false") || after_colon.starts_with("0") {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -297,21 +326,38 @@ fn read_ntrip_headers(stream: &mut TcpStream) -> Result<bool, std::io::Error> {
     }
 
     let header_str = std::str::from_utf8(&header_buf[..header_len]).unwrap_or("");
-    if !header_str.starts_with("ICY 200 OK") {
+    let ok = header_str.starts_with("ICY 200 OK")
+        || header_str.starts_with("HTTP/1.1 200")
+        || header_str.starts_with("HTTP/1.0 200");
+    if !ok {
         // Log the first line for diagnostics
         let first_line = header_str.split("\r\n").next().unwrap_or("(empty)");
         log::warn!("NTRIP: unexpected response: {}", first_line);
-        Ok(false)
-    } else {
-        Ok(true)
     }
+    Ok(ok)
 }
 
 // ---------------------------------------------------------------------------
 // Session loop
 // ---------------------------------------------------------------------------
 
-/// Run a single NTRIP session: connect → validate → stream → disconnect.
+/// Dispatch to TCP or TLS session based on config.tls.
+///
+/// Returns `Ok(new_config)` if the caller should reconnect with updated config.
+/// Returns `Err` on connection error, timeout, or bad server response — caller applies backoff.
+fn run_ntrip_session(
+    config: &NtripConfig,
+    uart: &Arc<UartDriver<'static>>,
+    config_rx: &Receiver<Vec<u8>>,
+) -> Result<Option<NtripConfig>, std::io::Error> {
+    if config.tls {
+        run_ntrip_session_tls(config, uart, config_rx)
+    } else {
+        run_ntrip_session_tcp(config, uart, config_rx)
+    }
+}
+
+/// Run a single plain-TCP NTRIP session: connect → validate → stream → disconnect.
 ///
 /// Writes RTCM correction bytes directly to `uart.write()`.
 /// Returns `Ok(new_config)` if the caller should reconnect with updated config
@@ -322,7 +368,7 @@ fn read_ntrip_headers(stream: &mut TcpStream) -> Result<bool, std::io::Error> {
 /// `uart.write(&self)` is not mutex-protected.  GNSS TX thread and this thread
 /// can write concurrently.  Commands are rare; risk is low.
 /// KNOWN-RACE: see RESEARCH.md Pitfall 3.
-fn run_ntrip_session(
+fn run_ntrip_session_tcp(
     config: &NtripConfig,
     uart: &Arc<UartDriver<'static>>,
     config_rx: &Receiver<Vec<u8>>,
@@ -396,6 +442,144 @@ fn run_ntrip_session(
     NTRIP_STATE.store(0, Ordering::Relaxed);
     // Clean exit — caller will apply backoff before reconnecting.
     Err(std::io::Error::other("NTRIP: session ended"))
+}
+
+/// Run a single TLS NTRIP session using EspTls (mbedTLS).
+///
+/// Used for NTRIP casters that require TLS (e.g. AUSCORS port 443).
+/// NOTE: set_read_timeout() is not available on EspTls. The read loop relies on
+/// the caster sending continuous RTCM data; silence means a real disconnect.
+/// EspTls::new() may fail with ESP_ERR_NO_MEM if heap is insufficient — this is
+/// caught and returned as Err to trigger exponential backoff (not a panic).
+fn run_ntrip_session_tls(
+    config: &NtripConfig,
+    uart: &Arc<UartDriver<'static>>,
+    config_rx: &Receiver<Vec<u8>>,
+) -> Result<Option<NtripConfig>, std::io::Error> {
+    log::info!("NTRIP: TLS connecting to {}:{} mount={}",
+        config.host, config.port, config.mountpoint);
+
+    let mut tls = EspTls::new()
+        .map_err(|e| std::io::Error::new(
+            std::io::ErrorKind::ConnectionRefused,
+            format!("EspTls::new() failed (heap?): {:?}", e),
+        ))?;
+
+    tls.connect(
+        &config.host,
+        config.port,
+        &TlsConfig {
+            use_crt_bundle_attach: true,
+            common_name: Some(&config.host),
+            timeout_ms: 10_000,
+            ..TlsConfig::new()
+        },
+    ).map_err(|e| std::io::Error::new(
+        std::io::ErrorKind::ConnectionRefused,
+        format!("TLS connect failed: {:?}", e),
+    ))?;
+
+    // Send NTRIP request using HTTP/1.1 (Host header required for virtual hosting on port 443)
+    let req = build_ntrip_request_v11(config);
+    tls.write_all(req.as_bytes())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::BrokenPipe, format!("{:?}", e)))?;
+
+    // Validate server response
+    if !read_ntrip_headers_tls(&mut tls)? {
+        return Err(std::io::Error::other("NTRIP TLS: server did not respond with 200 OK"));
+    }
+
+    NTRIP_STATE.store(1, Ordering::Relaxed);
+    log::info!("NTRIP: TLS connected — streaming RTCM corrections to UM980 UART");
+
+    // RTCM streaming loop — identical to TCP version but using tls.read()
+    let mut buf = [0u8; 512];
+    loop {
+        if let Ok(payload) = config_rx.try_recv() {
+            log::info!("NTRIP: config update received during TLS session — reconnecting");
+            NTRIP_STATE.store(0, Ordering::Relaxed);
+            if let Some(new_cfg) = parse_ntrip_config_payload(&payload) {
+                return Ok(Some(new_cfg));
+            }
+            return Ok(None);
+        }
+
+        match tls.read(&mut buf) {
+            Ok(0) => {
+                log::warn!("NTRIP TLS: connection closed by caster");
+                break;
+            }
+            Ok(n) => {
+                if let Err(e) = uart.write(&buf[..n]) {
+                    log::warn!("NTRIP TLS: UART write error: {:?}", e);
+                }
+            }
+            Err(e) => {
+                log::warn!("NTRIP TLS: stream read error: {:?}", e);
+                break;
+            }
+        }
+    }
+
+    NTRIP_STATE.store(0, Ordering::Relaxed);
+    Err(std::io::Error::other("NTRIP TLS: session ended"))
+}
+
+/// Build an HTTP/1.1 NTRIP GET request string (used for TLS connections).
+///
+/// HTTP/1.1 requires a Host header for virtual hosting on port 443.
+fn build_ntrip_request_v11(config: &NtripConfig) -> String {
+    let mut req = format!(
+        "GET /{} HTTP/1.1\r\nHost: {}\r\nUser-Agent: NTRIP esp32-gnssmqtt/1.0\r\nAccept: */*\r\nConnection: close\r\n",
+        config.mountpoint, config.host
+    );
+    if !config.user.is_empty() {
+        let credentials = base64_encode(&format!("{}:{}", config.user, config.pass));
+        req.push_str(&format!("Authorization: Basic {}\r\n", credentials));
+    }
+    req.push_str("\r\n");
+    req
+}
+
+/// Read NTRIP server response headers from an EspTls connection byte-by-byte until `\r\n\r\n`.
+///
+/// Returns `Ok(true)` if the first response line is a 200 OK variant.
+/// Returns `Ok(false)` for other responses (e.g. 401 Unauthorized).
+/// Returns `Err` on I/O error or unexpected EOF before headers complete.
+fn read_ntrip_headers_tls(tls: &mut EspTls<InternalSocket>) -> Result<bool, std::io::Error> {
+    let mut header_buf = [0u8; 512];
+    let mut header_len = 0usize;
+    let mut byte_buf = [0u8; 1];
+
+    loop {
+        match tls.read(&mut byte_buf)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::BrokenPipe, format!("{:?}", e)))?
+        {
+            0 => return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "NTRIP TLS: EOF before headers complete",
+            )),
+            _ => {
+                if header_len < header_buf.len() {
+                    header_buf[header_len] = byte_buf[0];
+                    header_len += 1;
+                }
+                if header_len >= 4 && &header_buf[header_len - 4..header_len] == b"\r\n\r\n" {
+                    break;
+                }
+            }
+        }
+    }
+
+    let header_str = std::str::from_utf8(&header_buf[..header_len]).unwrap_or("");
+    let ok = header_str.starts_with("ICY 200 OK")
+        || header_str.starts_with("HTTP/1.1 200")
+        || header_str.starts_with("HTTP/1.0 200");
+    if !ok {
+        let first_line = header_str.split("\r\n").next().unwrap_or("(empty)");
+        log::warn!("NTRIP TLS: unexpected response: {}", first_line);
+    }
+    Ok(ok)
 }
 
 // ---------------------------------------------------------------------------
