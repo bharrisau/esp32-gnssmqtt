@@ -40,6 +40,8 @@ pub fn spawn_relay(
             log::info!("[HWM] {}: {} words ({} bytes) stack remaining at entry",
                 "NMEA relay", hwm_words, hwm_words * 4);
             log::info!("NMEA relay thread started");
+            let mut sentence_count: u64 = 0;
+            let mut throughput_tick = std::time::Instant::now();
             loop {
                 match nmea_rx.recv_timeout(crate::config::RELAY_RECV_TIMEOUT) {
                     Ok((sentence_type, raw)) => {
@@ -58,6 +60,14 @@ pub fn spawn_relay(
                                     Err(e) => log::warn!("NMEA relay: enqueue failed: {:?}", e),
                                 }
                             }
+                        }
+                        sentence_count += 1;
+                        if sentence_count % 100 == 0 {
+                            let elapsed = throughput_tick.elapsed();
+                            log::info!("NMEA relay: {} sentences in {:.1}s ({:.1} msg/s)",
+                                100, elapsed.as_secs_f32(),
+                                100.0 / elapsed.as_secs_f32().max(0.001));
+                            throughput_tick = std::time::Instant::now();
                         }
                     }
                     Err(RecvTimeoutError::Timeout) => {
