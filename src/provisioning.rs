@@ -254,12 +254,17 @@ pub fn run_softap_portal(
         Ok(())
     })?;
 
-    // Captive portal probe URL handlers — cause Android/iOS to show the sign-in prompt.
-    // All redirect to the portal form at 192.168.71.1/.
-    // Android probes: /generate_204, /connectivitycheck
-    // iOS probes: /hotspot-detect.html, /success.html, /library/test/success.html
-    // Windows probe: /ncsi.txt
-    // Mikrotik/generic: /redirect
+    // Captive portal probe URL handlers — cause Android/iOS/Windows to show the sign-in prompt.
+    // Android probes: /generate_204, /connectivitycheck → 302 redirect (triggers captive detection)
+    // iOS probes: /hotspot-detect.html → exact Apple success HTML (200 OK)
+    //             /success.html, /library/test/success.html → meta-refresh redirect (200 OK)
+    // Windows 10/11 probe: /connecttest.txt → exact "Microsoft Connect Test" (200 OK)
+    // Windows older probe: /ncsi.txt → exact "Microsoft NCSI" (200 OK)
+    // Mikrotik/generic: /redirect → meta-refresh redirect (200 OK)
+    //
+    // iOS and Windows require exact response bodies — returning redirect_html instead causes
+    // the OS to skip the captive portal notification (BUG-5 fix).
+    const IOS_SUCCESS_HTML: &[u8] = b"<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>";
     let redirect_html: &'static [u8] = b"<html><head><meta http-equiv='refresh' content='0;url=http://192.168.71.1/'></head></html>";
 
     server.fn_handler("/generate_204", Method::Get, |req| {
@@ -270,8 +275,8 @@ pub fn run_softap_portal(
         req.into_response(302, Some("Found"), &[("Location", "http://192.168.71.1/")])?
             .write_all(b"")
     })?;
-    server.fn_handler("/hotspot-detect.html", Method::Get, move |req| {
-        req.into_ok_response()?.write_all(redirect_html)
+    server.fn_handler("/hotspot-detect.html", Method::Get, |req| {
+        req.into_ok_response()?.write_all(IOS_SUCCESS_HTML)
     })?;
     server.fn_handler("/success.html", Method::Get, move |req| {
         req.into_ok_response()?.write_all(redirect_html)
@@ -281,8 +286,11 @@ pub fn run_softap_portal(
     }) {
         log::warn!("captive portal: failed to register /library/test/success.html: {:?}", e);
     }
-    server.fn_handler("/ncsi.txt", Method::Get, move |req| {
-        req.into_ok_response()?.write_all(redirect_html)
+    server.fn_handler("/connecttest.txt", Method::Get, |req| {
+        req.into_ok_response()?.write_all(b"Microsoft Connect Test")
+    })?;
+    server.fn_handler("/ncsi.txt", Method::Get, |req| {
+        req.into_ok_response()?.write_all(b"Microsoft NCSI")
     })?;
     server.fn_handler("/redirect", Method::Get, move |req| {
         req.into_ok_response()?.write_all(redirect_html)
