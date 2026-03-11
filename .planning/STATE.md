@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Field Deployment
 status: executing
-stopped_at: Wave 1 complete — 20-01 captive portal, 20-02 MQTT throughput, 20-03 UM980 NVS config
-last_updated: "2026-03-11T13:43:24.290Z"
+stopped_at: Completed 20-04-PLAN.md — NTRIP TLS support + SoftAP portal NTRIP form
+last_updated: "2026-03-11T13:55:42.356Z"
 last_activity: "2026-03-09 — Phase 19 plan 01 complete; SoftAP DHCP DNS fix via EspNetif::new_with_conf"
 progress:
   total_phases: 7
@@ -64,6 +64,7 @@ Progress: [██████████] 100%
 | Phase 20-field-testing-fixes P01 | 15 | 1 tasks | 1 files |
 | Phase 20-field-testing-fixes P02 | 15 | 2 tasks | 3 files |
 | Phase 20-field-testing-fixes P03 | 17 | 2 tasks | 2 files |
+| Phase 20-field-testing-fixes P04 | 25 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,9 @@ Key carry-forward notes:
 - [Phase 20-03]: get_blob() returns Ok(Some(&[u8])) not Ok(Some(usize)) — fixed during Task 2; use data.len() and pass slice directly
 - [Phase 20-03]: NVS save_gnss_config called only after apply_config succeeds (not on hash-dedup skip) — NVS only holds applied configs
 - [Phase 20-03]: UM980 reboot monitor stack increased to 8192 for 512-byte vec allocation headroom; namespace 'gnss'/key 'gnss_config' follows 'prov'/'ntrip' convention
+- [Phase 20-field-testing-fixes]: run_ntrip_session dispatches to TCP or TLS path based on config.tls — no generics; EspTls set_read_timeout unavailability handled by clean split
+- [Phase 20-field-testing-fixes]: read_ntrip_headers accepts ICY 200 OK, HTTP/1.1 200, HTTP/1.0 200 — AUSCORS uses standard HTTP response not NTRIP v1 ICY
+- [Phase 20-field-testing-fixes]: Portal NTRIP section save non-fatal: WiFi/MQTT credentials committed first; ntrip_tls NVS key u8 0/1 consistent with mqtt_tls convention
 
 ### Roadmap Evolution
 
@@ -143,7 +147,7 @@ Key carry-forward notes:
 
 ## Session Continuity
 
-Last session: 2026-03-11T13:43:24.285Z
-Stopped at: Wave 1 complete — 20-01 captive portal, 20-02 MQTT throughput, 20-03 UM980 NVS config
+Last session: 2026-03-11T13:55:42.352Z
+Stopped at: Completed 20-04-PLAN.md — NTRIP TLS support + SoftAP portal NTRIP form
 Resume file: None
 Next action: Phase 19 Plan 02 — NVS versioning (BUG-3/BUG-4 fix).
