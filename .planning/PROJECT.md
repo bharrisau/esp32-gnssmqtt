@@ -53,9 +53,31 @@ GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker
 - ✓ MQTT publish thread refactor: single publish thread owns EspMqttClient exclusively; SyncSender<MqttMessage> across all relay threads; bytes crate for zero-copy RTCM — v2.0
 - ✓ MQTT outbox observability: MQTT_ENQUEUE_ERRORS + MQTT_OUTBOX_DROPS atomics; bench:N trigger for field diagnostics — v2.0
 
+## Current Milestone: v2.1 Server and nostd Foundation
+
+**Goal:** Build a companion Rust server that converts MQTT telemetry into RINEX files and a live web UI, while auditing and scaffolding the embassy/nostd crate ecosystem needed to eventually port the firmware off ESP-IDF.
+
+**Target features:**
+- MQTT-subscribed server binary: RTCM3 MSM decode → RINEX 2.x .26O/.26P files with hourly rotation
+- HTTP + WebSocket server: live skyplot (polar SVG), SNR bar chart, device health panel
+- Complete ESP-IDF dependency audit against embassy/nostd equivalents
+- Gap crate skeletons with trait definitions for every missing nostd capability (NVS, OTA, SoftAP, NTRIP TLS…)
+- Begin implementation of priority gap crates
+
 ### Active
 
-(None — v2.0 complete. Define next milestone requirements with `/gsd:new-milestone`)
+- [ ] Server subscribes to MQTT RTCM3 and NMEA topics for a configured device ID
+- [ ] Server decodes RTCM3 MSM messages to extract pseudorange, carrier phase, and SNR observations
+- [ ] Server decodes RTCM3 ephemeris messages (1019/1020/1044/1045) for GPS/GLONASS/BeiDou/Galileo
+- [ ] Server writes RINEX 2.x observation files (.26O) with hourly rotation
+- [ ] Server writes RINEX 2.x mixed navigation files (.26P) with hourly rotation
+- [ ] HTTP server with WebSocket pushes live satellite state to browser
+- [ ] Browser renders polar skyplot SVG (elevation/azimuth per satellite from NMEA GSV)
+- [ ] Browser renders SNR bar chart per satellite
+- [ ] Browser shows device health panel from MQTT heartbeat
+- [ ] Complete audit of all ESP-IDF crate dependencies mapped to nostd/embassy equivalents
+- [ ] Gap crates created with trait definitions for each capability lacking a nostd solution
+- [ ] Priority gap crates (NVS at minimum) begin implementation
 
 ### Out of Scope
 
@@ -113,4 +135,4 @@ GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker
 | NTRIP TLS via EspTls (mbedTLS crt_bundle_attach) | AUSCORS requires port 443/TLS; ESP-IDF's bundled CA certs cover the certificate chain | ✓ Good — no manual cert management required |
 
 ---
-*Last updated: 2026-03-12 after v2.0 milestone*
+*Last updated: 2026-03-12 after v2.1 milestone start*

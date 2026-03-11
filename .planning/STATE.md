@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Field Deployment
-status: milestone_complete
-stopped_at: v2.0 milestone archived 2026-03-12
+milestone: v2.1
+milestone_name: Server and nostd Foundation
+status: defining_requirements
+stopped_at: —
 last_updated: "2026-03-12"
-last_activity: "2026-03-12 — v2.0 Field Deployment milestone archived; tagged v2.0"
+last_activity: "2026-03-12 — Milestone v2.1 started"
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 24
-  completed_plans: 24
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker in real time, with remote reconfiguration, OTA updates, and automatic recovery — safe for unattended operation.
-**Current focus:** Planning next milestone (`/gsd:new-milestone`)
+**Current focus:** Milestone v2.1 — Server and nostd Foundation
 
 ## Current Position
 
-Phase: 19 of 19 (pre-2.0-bugfix)
-Plan: 1 of 3 in current phase (19-01 complete — BUG-1 DHCP DNS fix; BUG-2 unblocked)
-Status: Phase 19 in progress — BUG-1 fixed (WifiDriver+wrap_all DNS pre-config); BUG-3/BUG-4 NVS versioning pending (19-02); FEAT-1 boot button pending (19-03)
-Last activity: 2026-03-09 — Phase 19 plan 01 complete; SoftAP DHCP DNS fix via EspNetif::new_with_conf
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-12 — Milestone v2.1 started
 
 Progress: [██████████] 100%
 
