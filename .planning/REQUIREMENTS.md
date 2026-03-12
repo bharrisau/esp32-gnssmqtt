@@ -25,8 +25,8 @@ Requirements for the Server and nostd Foundation milestone. Each maps to roadmap
 
 ### RINEX Files
 
-- [ ] **RINEX-01**: Server writes RINEX 2.11 observation files (`.26O`) with hourly rotation and correct column-positioned format
-- [ ] **RINEX-02**: Observation file includes all mandatory headers (VERSION/TYPE, TYPES OF OBSERV, WAVELENGTH FACT, TIME OF FIRST OBS, END OF HEADER) plus APPROX POSITION XYZ
+- [x] **RINEX-01**: Server writes RINEX 2.11 observation files (`.26O`) with hourly rotation and correct column-positioned format
+- [x] **RINEX-02**: Observation file includes all mandatory headers (VERSION/TYPE, TYPES OF OBSERV, WAVELENGTH FACT, TIME OF FIRST OBS, END OF HEADER) plus APPROX POSITION XYZ
 - [ ] **RINEX-03**: Server writes RINEX 2.11 mixed navigation files (`.26P`) from decoded ephemeris messages with hourly rotation
 - [ ] **RINEX-04**: RINEX output is accepted by RTKLIB (validated with `rnx2rtkp` or `rtkplot`)
 
@@ -89,8 +89,8 @@ Which phases cover which requirements. Updated during roadmap revision 2026-03-1
 | RTCM-04 | Phase 23 | Complete |
 | NOSTD-02 | Phase 23 | Complete |
 | NOSTD-03 | Phase 23 | Complete |
-| RINEX-01 | Phase 24 | Pending |
-| RINEX-02 | Phase 24 | Pending |
+| RINEX-01 | Phase 24 | Complete |
+| RINEX-02 | Phase 24 | Complete |
 | RINEX-03 | Phase 24 | Pending |
 | RINEX-04 | Phase 24 | Pending |
 | NOSTD-04a | Phase 24 | Complete |
