@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Server and nostd Foundation
 status: planning
-stopped_at: Completed 22-workspace-nostd-audit 22-02-PLAN.md
-last_updated: "2026-03-12T03:19:28.900Z"
+stopped_at: Phase 23 context gathered
+last_updated: "2026-03-12T05:29:23.495Z"
 last_activity: 2026-03-12 — v2.1 roadmap revised to 4 phases (22-25); gap crate work interleaved with server feature phases; 20/20 requirements mapped (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
 progress:
   total_phases: 4
@@ -94,7 +94,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T03:16:12.467Z
-Stopped at: Completed 22-workspace-nostd-audit 22-02-PLAN.md
-Resume file: None
+Last session: 2026-03-12T05:29:23.491Z
+Stopped at: Phase 23 context gathered
+Resume file: .planning/phases/23-mqtt-rtcm3-gnss-nvs-crate/23-CONTEXT.md
 Next action: /gsd:plan-phase 22
