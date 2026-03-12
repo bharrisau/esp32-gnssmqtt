@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GNSS Server</title>
+  <style>
+    body { font-family: sans-serif; background: #1a1a2e; color: #eee; margin: 0; padding: 16px; }
+    h1 { margin: 0 0 16px; font-size: 1.4em; color: #4fc3f7; }
+    .panels { display: flex; flex-wrap: wrap; gap: 16px; }
+    .panel { background: #16213e; border-radius: 8px; padding: 16px; }
+    .panel h2 { margin: 0 0 12px; font-size: 1em; color: #90caf9; }
+    #health-panel span { display: inline-block; margin-right: 16px; font-size: 0.9em; }
+    #health-panel label { color: #90caf9; font-size: 0.75em; display: block; }
+    svg text { font-family: sans-serif; }
+  </style>
+</head>
+<body>
+  <h1>GNSS Server</h1>
+  <div class="panels">
+    <div class="panel" id="health-panel">
+      <h2>Health</h2>
+      <span><label>Uptime</label><span id="uptime">--</span></span>
+      <span><label>Fix Type</label><span id="fix_type">--</span></span>
+      <span><label>Satellites</label><span id="satellites">--</span></span>
+      <span><label>HDOP</label><span id="hdop">--</span></span>
+      <span><label>Heap Free</label><span id="heap">--</span></span>
+    </div>
+    <div class="panel">
+      <h2>Sky Plot</h2>
+      <svg id="skyplot" width="320" height="320"></svg>
+    </div>
+    <div class="panel">
+      <h2>SNR</h2>
+      <svg id="snrchart" width="320" height="150"></svg>
+    </div>
+  </div>
+
+  <script>
+    // WebSocket client — auto-reconnects on close
+    var ws;
+
+    function connect() {
+      ws = new WebSocket('ws://' + location.host + '/ws');
+
+      ws.onmessage = function(event) {
+        var msg;
+        try { msg = JSON.parse(event.data); } catch(e) { return; }
+        if (msg.type === 'satellites') {
+          drawSkyplot(document.getElementById('skyplot'), msg.satellites);
+          drawSnrChart(document.getElementById('snrchart'), msg.satellites);
+        } else if (msg.type === 'heartbeat') {
+          updateHealth(msg.data);
+        }
+      };
+
+      ws.onclose = function() {
+        setTimeout(function() { location.reload(); }, 3000);
+      };
+    }
+
+    connect();
+
+    // Convert azimuth/elevation to SVG x,y coordinates (North-up, 0° el at edge)
+    function azel_to_xy(az_deg, el_deg, cx, cy, r) {
+      var az_rad = (az_deg - 90) * Math.PI / 180;
+      var r_sat = r * (1.0 - el_deg / 90.0);
+      return {
+        x: cx + r_sat * Math.cos(az_rad),
+        y: cy + r_sat * Math.sin(az_rad)
+      };
+    }
+
+    function svgElem(tag, attrs) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (var k in attrs) { el.setAttribute(k, attrs[k]); }
+      return el;
+    }
+
+    function drawSkyplot(svgEl, satellites) {
+      // Clear
+      while (svgEl.firstChild) { svgEl.removeChild(svgEl.firstChild); }
+
+      var w = parseInt(svgEl.getAttribute('width'));
+      var h = parseInt(svgEl.getAttribute('height'));
+      var cx = w / 2, cy = h / 2;
+      var r = Math.min(w, h) / 2 - 20;
+
+      // Background
+      svgEl.appendChild(svgElem('circle', { cx: cx, cy: cy, r: r, fill: '#0d1b2a', stroke: '#334', 'stroke-width': 1 }));
+
+      // Concentric elevation rings: 0, 30, 60, 90 degrees
+      [0, 30, 60, 90].forEach(function(el) {
+        var rRing = r * (1 - el / 90);
+        svgEl.appendChild(svgElem('circle', { cx: cx, cy: cy, r: rRing, fill: 'none', stroke: '#334', 'stroke-width': 1, 'stroke-dasharray': el === 0 ? '' : '4,4' }));
+        if (el > 0 && el < 90) {
+          var lbl = svgElem('text', { x: cx + 2, y: cy - rRing + 2, fill: '#556', 'font-size': '9', 'text-anchor': 'start' });
+          lbl.textContent = el + '\u00b0';
+          svgEl.appendChild(lbl);
+        }
+      });
+
+      // Cardinal labels
+      var cardinals = [['N', cx, cy - r - 8], ['S', cx, cy + r + 14], ['E', cx + r + 6, cy + 4], ['W', cx - r - 8, cy + 4]];
+      cardinals.forEach(function(c) {
+        var t = svgElem('text', { x: c[1], y: c[2], fill: '#aaa', 'font-size': '11', 'text-anchor': 'middle', 'font-weight': 'bold' });
+        t.textContent = c[0];
+        svgEl.appendChild(t);
+      });
+
+      // Satellites
+      satellites.forEach(function(sat) {
+        if (sat.elevation === null || sat.azimuth === null) { return; }
+        var pos = azel_to_xy(sat.azimuth, sat.elevation, cx, cy, r);
+        var color = gnssColor(sat.gnss_type);
+        svgEl.appendChild(svgElem('circle', { cx: pos.x, cy: pos.y, r: 8, fill: color, stroke: '#fff', 'stroke-width': 1, opacity: 0.9 }));
+        var t = svgElem('text', { x: pos.x, y: pos.y - 10, fill: '#fff', 'font-size': '8', 'text-anchor': 'middle' });
+        t.textContent = sat.prn;
+        svgEl.appendChild(t);
+      });
+    }
+
+    function drawSnrChart(svgEl, satellites) {
+      // Clear
+      while (svgEl.firstChild) { svgEl.removeChild(svgEl.firstChild); }
+
+      var w = parseInt(svgEl.getAttribute('width'));
+      var h = parseInt(svgEl.getAttribute('height'));
+      var maxSnr = 60;
+      var barW = Math.max(4, Math.floor((w - 10) / Math.max(satellites.length, 1)) - 2);
+      var labelH = 16;
+      var chartH = h - labelH;
+
+      satellites.forEach(function(sat, i) {
+        var x = 5 + i * (barW + 2);
+        var snrVal = sat.snr !== null ? sat.snr : 0;
+        var barH = Math.round(chartH * (snrVal / maxSnr));
+        var color = gnssColor(sat.gnss_type);
+
+        svgEl.appendChild(svgElem('rect', {
+          x: x, y: chartH - barH,
+          width: barW, height: barH,
+          fill: color, opacity: 0.85, rx: 2
+        }));
+
+        // PRN label below bar
+        var t = svgElem('text', { x: x + barW / 2, y: h - 2, fill: '#ccc', 'font-size': '8', 'text-anchor': 'middle' });
+        t.textContent = sat.prn;
+        svgEl.appendChild(t);
+      });
+    }
+
+    function gnssColor(gnssType) {
+      switch (gnssType) {
+        case 'GPS':     return '#3498db';
+        case 'GLONASS': return '#e74c3c';
+        case 'GALILEO': return '#2ecc71';
+        case 'BEIDOU':  return '#f39c12';
+        default:        return '#95a5a6';
+      }
+    }
+
+    function updateHealth(d) {
+      function val(v, fmt) { return v !== undefined && v !== null ? (fmt ? fmt(v) : String(v)) : '--'; }
+
+      document.getElementById('uptime').textContent = val(d.uptime_s, function(s) {
+        var h = Math.floor(s / 3600);
+        var m = Math.floor((s % 3600) / 60);
+        return h + 'h ' + m + 'm';
+      });
+
+      document.getElementById('fix_type').textContent = val(d.fix_type, function(f) {
+        var map = { 0: 'No fix', 1: 'SPS', 2: 'DGPS', 4: 'RTK Fixed', 5: 'RTK Float' };
+        return map[f] !== undefined ? map[f] : String(f);
+      });
+
+      document.getElementById('satellites').textContent = val(d.satellites);
+      document.getElementById('hdop').textContent = val(d.hdop);
+      document.getElementById('heap').textContent = val(d.heap_free_bytes, function(b) {
+        return Math.round(b / 1024) + ' KB';
+      });
+    }
+  </script>
+</body>
+</html>

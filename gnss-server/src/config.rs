@@ -40,6 +40,10 @@ fn default_output_dir() -> String {
     "./rinex_output".to_string()
 }
 
+fn default_http_port() -> u16 {
+    8080
+}
+
 /// Top-level server configuration.
 #[derive(Debug, serde::Deserialize)]
 pub struct ServerConfig {
@@ -50,6 +54,10 @@ pub struct ServerConfig {
     /// Directory where RINEX output files are written (default: ./rinex_output)
     #[serde(default = "default_output_dir")]
     pub output_dir: String,
+    /// HTTP server port for the web UI (default: 8080, override with GNSS_HTTP_PORT env var)
+    #[serde(default = "default_http_port")]
+    #[allow(dead_code)]
+    pub http_port: u16,
 }
 
 /// Load server configuration from a TOML file, with environment variable overrides.
