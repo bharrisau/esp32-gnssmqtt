@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Server and nostd Foundation
 status: planning
-stopped_at: Completed 23-03-PLAN.md
-last_updated: "2026-03-12T06:26:38.408Z"
+stopped_at: Completed 24-03-PLAN.md
+last_updated: "2026-03-12T07:29:10.729Z"
 last_activity: 2026-03-12 — v2.1 roadmap revised to 4 phases (22-25); gap crate work interleaved with server feature phases; 20/20 requirements mapped (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 8
+  completed_plans: 6
   percent: 84
 ---
 
@@ -61,6 +61,7 @@ Phase 24 and Phase 25 both depend on Phase 23 and can run in parallel with each 
 | Phase 23-mqtt-rtcm3-gnss-nvs-crate P02 | 5 | 2 tasks | 4 files |
 | Phase 23-mqtt-rtcm3-gnss-nvs-crate P01 | 14 | 3 tasks | 6 files |
 | Phase 23-mqtt-rtcm3-gnss-nvs-crate P03 | 7 | 1 tasks | 6 files |
+| Phase 24-rinex-files-gnss-ota-gap-crate P03 | 2 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,7 @@ Key carry-forward decisions affecting v2.1:
 - [Phase 23-mqtt-rtcm3-gnss-nvs-crate]: BeiDou ephemeris is RTCM msg1042 (Msg1042T) not 1044 (QZSS) — plan had incorrect type; corrected in rtcm_decode.rs and observation.rs
 - [Phase 23-mqtt-rtcm3-gnss-nvs-crate]: Signal extraction inline in match arms avoids naming private msg1074_sig::DataType — rtcm-rs module subpaths not directly accessible
 - [Phase 23-mqtt-rtcm3-gnss-nvs-crate]: MSM4 cnr_dbhz is Option<u8> (df403 inv:0); MSM7 is Option<f64> (df408 inv:0) — MSM4 converted with .map(|v| v as f64) for uniform Observation struct
+- [Phase 24-rinex-files-gnss-ota-gap-crate]: gnss-ota gap crate: trait-only with no external deps; OtaSlot + OtaManager via core::fmt::Debug; BLOCKER.md cites esp-rs/esp-hal#3259 and three esp-hal-ota C6 issues
 
 ### Pending Todos
 
@@ -105,7 +107,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T06:21:18.249Z
-Stopped at: Completed 23-03-PLAN.md
+Last session: 2026-03-12T07:29:10.724Z
+Stopped at: Completed 24-03-PLAN.md
 Resume file: None
 Next action: /gsd:plan-phase 22
