@@ -19,7 +19,7 @@ created: 2026-03-12
 |----------|-------|
 | **Framework** | cargo test |
 | **Config file** | Cargo.toml |
-| **Quick run command** | `cargo test -p gnss-rtcm3 -p gnss-ota 2>&1 \| tail -20` |
+| **Quick run command** | `cargo test -p gnss-server 2>&1 \| tail -20` |
 | **Full suite command** | `cargo test --workspace 2>&1 \| tail -40` |
 | **Estimated runtime** | ~30 seconds |
 
@@ -27,7 +27,7 @@ created: 2026-03-12
 
 ## Sampling Rate
 
-- **After every task commit:** Run `cargo test -p gnss-rtcm3 -p gnss-ota 2>&1 | tail -20`
+- **After every task commit:** Run `cargo test -p gnss-server 2>&1 | tail -20`
 - **After every plan wave:** Run `cargo test --workspace 2>&1 | tail -40`
 - **Before `/gsd:verify-work`:** Full suite must be green
 - **Max feedback latency:** 30 seconds
@@ -38,13 +38,13 @@ created: 2026-03-12
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 24-01-01 | 01 | 0 | RINEX-01 | unit | `cargo test -p gnss-rtcm3 test_rinex_obs` | ❌ W0 | ⬜ pending |
-| 24-01-02 | 01 | 1 | RINEX-01 | unit | `cargo test -p gnss-rtcm3 test_rinex_obs_header` | ❌ W0 | ⬜ pending |
-| 24-01-03 | 01 | 1 | RINEX-02 | unit | `cargo test -p gnss-rtcm3 test_rinex_column_format` | ❌ W0 | ⬜ pending |
-| 24-02-01 | 02 | 1 | RINEX-03 | unit | `cargo test -p gnss-rtcm3 test_rinex_nav` | ❌ W0 | ⬜ pending |
-| 24-02-02 | 02 | 1 | RINEX-03 | unit | `cargo test -p gnss-rtcm3 test_rinex_nav_header` | ❌ W0 | ⬜ pending |
+| 24-01-01 | 01 | 0 | RINEX-01 | unit | `cargo test -p gnss-server test_rinex_obs` | ❌ W0 | ⬜ pending |
+| 24-01-02 | 01 | 1 | RINEX-01 | unit | `cargo test -p gnss-server test_rinex_obs_header` | ❌ W0 | ⬜ pending |
+| 24-01-03 | 01 | 1 | RINEX-02 | unit | `cargo test -p gnss-server test_rinex_column_format` | ❌ W0 | ⬜ pending |
+| 24-02-01 | 02 | 1 | RINEX-03 | unit | `cargo test -p gnss-server test_rinex_nav` | ❌ W0 | ⬜ pending |
+| 24-02-02 | 02 | 1 | RINEX-03 | unit | `cargo test -p gnss-server test_rinex_nav_header` | ❌ W0 | ⬜ pending |
 | 24-03-01 | 03 | 2 | RINEX-04 | manual | — | — | ⬜ pending |
-| 24-04-01 | 04 | 1 | NOSTD-04a | unit | `cargo test -p gnss-ota` | ❌ W0 | ⬜ pending |
+| 24-03-01 | 03 | 1 | NOSTD-04a | unit | `cargo check --target thumbv7em-none-eabihf -p gnss-ota` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -52,10 +52,8 @@ created: 2026-03-12
 
 ## Wave 0 Requirements
 
-- [ ] `crates/gnss-rtcm3/src/rinex.rs` — RINEX writer module stubs
-- [ ] `crates/gnss-rtcm3/tests/rinex_tests.rs` — unit test stubs for obs/nav format
+- [ ] `gnss-server/src/rinex_writer.rs` — RINEX writer module stubs (inline `#[cfg(test)]` module, no separate test file)
 - [ ] `crates/gnss-ota/src/lib.rs` — OTA trait stub
-- [ ] `crates/gnss-ota/tests/` — placeholder test file
 
 *Wave 0 creates the file structure so subsequent tasks have targets to test against.*
 
