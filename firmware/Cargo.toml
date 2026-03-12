@@ -1,5 +1,3 @@
-cargo-features = ["panic-immediate-abort"]
-
 [package]
 name = "esp32-gnssmqtt-firmware"
 version = "0.1.0"
@@ -25,4 +23,3 @@ partition_table = "partitions.csv"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(esp_idf_log_timestamp_source_system)'] }
-
