@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Server and nostd Foundation
 status: planning
-stopped_at: Completed 24-01-PLAN.md
-last_updated: "2026-03-12T07:42:10.339Z"
+stopped_at: Completed 24-02-PLAN.md
+last_updated: "2026-03-12T07:53:43.366Z"
 last_activity: 2026-03-12 — v2.1 roadmap revised to 4 phases (22-25); gap crate work interleaved with server feature phases; 20/20 requirements mapped (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
   percent: 84
 ---
 
@@ -63,6 +63,7 @@ Phase 24 and Phase 25 both depend on Phase 23 and can run in parallel with each 
 | Phase 23-mqtt-rtcm3-gnss-nvs-crate P03 | 7 | 1 tasks | 6 files |
 | Phase 24-rinex-files-gnss-ota-gap-crate P03 | 2 | 1 tasks | 3 files |
 | Phase 24-rinex-files-gnss-ota-gap-crate P01 | 11 | 1 tasks | 5 files |
+| Phase 24-rinex-files-gnss-ota-gap-crate P02 | 7 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,8 @@ Key carry-forward decisions affecting v2.1:
 - [Phase 24-rinex-files-gnss-ota-gap-crate]: gnss-ota gap crate: trait-only with no external deps; OtaSlot + OtaManager via core::fmt::Debug; BLOCKER.md cites esp-rs/esp-hal#3259 and three esp-hal-ota C6 issues
 - [Phase 24-rinex-files-gnss-ota-gap-crate]: write_obs LLI/SSI are I1 format (1 char each); plan test expectation was wrong with extra space; RINEX 2.11 obs field = F14.3 + LLI(I1) + SSI(I1) = 16 chars
 - [Phase 24-rinex-files-gnss-ota-gap-crate]: pseudorange_ms stores full reconstructed range (rough_int + rough_mod + fine) in Observation; rough_range_ms kept as documentation field; GLONASS carrier_phase_cycles returns None (no FCN in MSM signal data)
+- [Phase 24-rinex-files-gnss-ota-gap-crate]: to_d19_12 returns ' 0.000000000000D+00' (19 chars, 1 leading space) — plan example had 2 leading spaces (20 chars typo); RINEX D19.12 is 19 chars total
+- [Phase 24-rinex-files-gnss-ota-gap-crate]: write_nav_header uses 'NAVIGATION DATA' label (RINEX 2.11 sec 5.3); plan draft 'N: GPS NAV DATA' was incorrect
 
 ### Pending Todos
 
@@ -110,7 +113,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T07:42:10.335Z
-Stopped at: Completed 24-01-PLAN.md
+Last session: 2026-03-12T07:53:43.363Z
+Stopped at: Completed 24-02-PLAN.md
 Resume file: None
 Next action: /gsd:plan-phase 22
