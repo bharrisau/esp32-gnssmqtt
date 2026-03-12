@@ -36,16 +36,24 @@
 
 | Module | ESP-IDF API | no_std Equivalent | Status |
 |--------|------------|-------------------|--------|
-| provisioning.rs, config_relay.rs, ntrip_client.rs, ota.rs | `EspNvs`, `EspNvsPartition<NvsDefault>`, `get_str/get_u8/get_blob/set_*` | sequential-storage over esp-storage | GAP — sequential-storage on ESP32-C6 unverified; Phase 23 adds gnss-nvs crate + validation |
+| provisioning.rs, config_relay.rs, ntrip_client.rs, ota.rs | `EspNvs`, `EspNvsPartition<NvsDefault>`, `get_str/get_u8/get_blob/set_*` | Log-based KV store over esp-storage (sequential-storage likely implements this via append-only records) | GAP — sequential-storage on ESP32-C6 unverified; Phase 23 validates and wraps with ecosystem-reusable crate |
 | main.rs | `EspDefaultNvsPartition::take()` | esp-storage partition init | GAP — see above |
+
+**NVS approach:** Use a log-based KV store strategy — records are appended sequentially, with compaction when the flash region fills. `sequential-storage` likely already implements this pattern. Two implementation paths:
+1. Use `sequential-storage` directly over `esp-hal` flash driver
+2. Create a thin, ecosystem-reusable crate wrapping `sequential-storage` with a typed key-value API
+
+**Crate naming:** New crates must be generic and ecosystem-reusable (not firmware-specific). The goal is to fill gaps in the esp-hal/rust-embedded ecosystem, not to create project-specific glue.
 
 ### 4. OTA
 
 | Module | ESP-IDF API | no_std Equivalent | Status |
 |--------|------------|-------------------|--------|
-| ota.rs | `EspOta`, `EspOta::initiate_update()`, `update.write()`, `update.complete()` | esp-bootloader-esp-idf + esp-hal-ota | GAP — esp-hal-ota 0.4.6 ESP32-C6 unconfirmed |
-| ota.rs | `EspOta::mark_running_slot_valid()` | esp-bootloader-esp-idf rollback API | GAP — same blocker |
-| ota.rs | `EspHttpConnection` (HTTP client for firmware download) | embassy-net TCP + manual HTTP/1.1 client or picohttp | GAP — no turnkey no_std HTTP client for OTA streaming |
+| ota.rs | `EspOta`, `EspOta::initiate_update()`, `update.write()`, `update.complete()` | esp-hal-ota (dual-slot OTA for esp-hal targets) | GAP — esp-hal-ota 0.4.6 ESP32-C6 support unconfirmed; willing to contribute if C6 is untested |
+| ota.rs | `EspOta::mark_running_slot_valid()` | esp-hal-ota rollback API | GAP — same blocker |
+| ota.rs | `EspHttpConnection` (HTTP client for firmware download) | embassy-net TCP + manual HTTP/1.1 or available esp-hal ecosystem HTTP client | GAP — evaluate available HTTP clients in the esp-hal ecosystem (target is esp-hal, not pure no_std) |
+
+**OTA target clarification:** The migration target is **esp-hal**, not necessarily fully no_std/bare-metal. There may be intermediate points in the esp-hal ecosystem (e.g., using esp-hal with some ROM/IDF library calls). Evaluate what HTTP clients are available specifically for esp-hal targets. We are willing to help mature `esp-hal-ota` if ESP32-C6 support is incomplete — contribution is viable.
 
 ### 5. UART
 
@@ -58,24 +66,36 @@
 
 | Module | ESP-IDF API | no_std Equivalent | Status |
 |--------|------------|-------------------|--------|
-| ntrip_client.rs | `EspTls`, `TlsConfig`, `use_crt_bundle_attach`, `InternalSocket` | embedded-tls (TLS 1.3 client only) or rustls-embedded | GAP — embedded-tls supports TLS 1.3 client but AUSCORS may require TLS 1.2; no CA bundle |
+| ntrip_client.rs | `EspTls`, `TlsConfig`, `use_crt_bundle_attach`, `InternalSocket` | rustls (unbuffered API) with pinned cert hash | GAP — two viable approaches; see below |
 | ota.rs | `EspHttpConnection` (may use TLS) | see above | GAP — same |
 
-**TLS Blocker detail:** `embedded-tls` is no_std but TLS 1.2 support is limited. The ESP-IDF approach uses mbedTLS with the bundled Espressif CA certificate store. In embassy, there is no equivalent CA bundle; CAs must be embedded at compile time. This is a significant gap for AUSCORS (port 443).
+**TLS Blocker detail:** `embedded-tls` is no_std but TLS 1.2 support is limited. The ESP-IDF approach uses mbedTLS with the bundled Espressif CA certificate store. In embassy/esp-hal, there is no equivalent CA bundle; CAs must be embedded at compile time or an alternative trust approach used.
+
+**NTRIP TLS options (pick the better approach as primary recommendation):**
+
+Option 1: Drop NTRIP input stream entirely. Receive RTCM corrections via MQTT from an external server. Avoids TLS client complexity entirely; RTCM over MQTT is already part of the architecture.
+
+Option 2 (preferred): Keep NTRIP client. Send a trusted cert hash with the NTRIP settings in the provisioning config payload. Use **rustls** with its unbuffered API — this is likely fine for streaming NTRIP data where the TLS session is long-lived. The provisioning form gains a `cert_hash` field; the firmware pins to this hash instead of using a CA bundle.
+
+**Evaluate:** rustls is the primary TLS library to evaluate for this path. The unbuffered API reduces stack/heap pressure suitable for embedded contexts.
 
 ### 7. HTTP Server (SoftAP Portal)
 
 | Module | ESP-IDF API | no_std Equivalent | Status |
 |--------|------------|-------------------|--------|
-| provisioning.rs | `EspHttpServer`, `EspHttpConnection`, `EspHttpRequest` | picoserve (no_std HTTP server) or hand-rolled TCP handler | GAP — no production-ready no_std HTTP server with form parsing |
+| provisioning.rs | `EspHttpServer`, `EspHttpConnection`, `EspHttpRequest` | picoserve (no_std HTTP server) — see also nanofish | GAP — no production-ready no_std HTTP server with form parsing |
 | provisioning.rs | `embedded_svc::http::{Headers, Method}` | picoserve traits / manual | GAP |
 | provisioning.rs | `embedded_svc::io::Write` | heapless / embedded-io | SOLVABLE |
+
+**HTTP server candidates:**
+- **picoserve**: looks suitable; no_std async HTTP server
+- **nanofish**: does both HTTP client and server; may be smaller than picoserve — worth evaluating if binary size matters
 
 ### 8. MQTT Client
 
 | Module | ESP-IDF API | no_std Equivalent | Status |
 |--------|------------|-------------------|--------|
-| mqtt.rs, mqtt_publish.rs | `EspMqttClient`, MQTT 3.1.1 over TCP | rumqttc (requires std) / minimq (no_std) / rust-mqtt (no_std) | GAP — minimq and rust-mqtt are no_std but lack the reliability of ESP-IDF MQTT; Phase 22 audit only |
+| mqtt.rs, mqtt_publish.rs | `EspMqttClient`, MQTT 3.1.1 over TCP | rumqttc (requires std) / minimq (no_std) / rust-mqtt (no_std) | GAP — BENCHMARK PHASE 23 / IMPL PHASE 24 |
 | mqtt_publish.rs | `embedded_svc::mqtt::client::{QoS, EventPayload}` | minimq / rust-mqtt enums | SOLVABLE (trait-level) |
 
 ### 9. DNS Hijack (Captive Portal)
@@ -118,13 +138,13 @@ Per Phase 22 success criteria, NVS/OTA/SoftAP/DNS/log hook are explicitly ranked
 
 | Rank | Capability | Phase | Rationale |
 |------|-----------|-------|-----------|
-| 1 | **NVS** (sequential-storage backing) | Phase 23 | Credential persistence is required for any autonomous device; blocks all provisioning |
-| 2 | **OTA** (esp-hal-ota dual-slot) | Phase 24 | Remote firmware update critical for field device; ESP32-C6 validation needed |
-| 3 | **SoftAP + DNS hijack** (gnss-softap + gnss-dns) | Phase 25 | Provisioning path; SoftAP password RESOLVED in esp-radio; DNS hijack SOLVABLE with UDP |
+| 1 | **NVS** (log-based KV store; sequential-storage backing) | Phase 23 | Credential persistence is required for any autonomous device; blocks all provisioning |
+| 2 | **OTA** (esp-hal-ota dual-slot) | Phase 24 | Remote firmware update critical for field device; ESP32-C6 validation needed; contribute if C6 untested |
+| 3 | **SoftAP + DNS hijack** (ecosystem-reusable crates) | Phase 25 | Provisioning path; SoftAP password RESOLVED in esp-radio; DNS hijack SOLVABLE with UDP |
 | 4 | **Log hook** (vprintf) | Phase 25 | Existing approach (C FFI vprintf hook) works unchanged in no_std esp-hal |
-| 5 | **TLS** (embedded-tls) | Future | AUSCORS/port-443 NTRIP requires TLS 1.2; embedded-tls is TLS 1.3-only; hard blocker |
-| 6 | **HTTP server** (SoftAP portal) | Future | No production-ready no_std HTTP server with form parsing; need picoserve or DIY |
-| 7 | **MQTT client** | Future | minimq/rust-mqtt exist but maturity gap vs ESP-IDF MQTT |
+| 5 | **TLS** (rustls unbuffered, cert-hash pinning) | Future | NTRIP TLS — preferred approach is cert-hash pinning via rustls; alternative is RTCM-over-MQTT |
+| 6 | **HTTP server** (SoftAP portal) | Future | No production-ready no_std HTTP server with form parsing; evaluate picoserve vs nanofish |
+| 7 | **MQTT client** | BENCHMARK PHASE 23 / IMPL PHASE 24 | minimq/rust-mqtt exist but maturity gap vs ESP-IDF MQTT; benchmark before committing |
 | 8 | **SNTP** | Future | Low priority; uptime from SystemTimer is acceptable |
 
 ## Key Findings
@@ -134,11 +154,11 @@ Per Phase 22 success criteria, NVS/OTA/SoftAP/DNS/log hook are explicitly ranked
 - DNS hijack: implementable with embassy-net UDP sockets (~50 lines); not an ESP-IDF-specific feature
 - Log hook (vprintf): `esp_log_set_vprintf()` is a C ROM function available in any esp-hal build; the C shim works unchanged
 
-**Hard GAPs for full embassy port:**
-- TLS: embedded-tls supports TLS 1.3 client only; AUSCORS NTRIP (port 443) requires TLS 1.2; no CA bundle in no_std
-- HTTP server: no production-ready no_std HTTP server with multi-field form POST parsing
-- MQTT client: minimq/rust-mqtt exist but maturity gap vs ESP-IDF MQTT client
-- OTA: esp-hal-ota 0.4.6 ESP32-C6 support unconfirmed ("cannot test if it works properly on esp32c6")
+**Hard GAPs for full embassy/esp-hal port:**
+- TLS: no CA bundle in esp-hal; preferred path is cert-hash pinning via rustls unbuffered API; alternative is dropping NTRIP and routing corrections via MQTT
+- HTTP server: no production-ready no_std HTTP server with multi-field form POST parsing; picoserve and nanofish are candidates
+- MQTT client: minimq/rust-mqtt exist but maturity gap vs ESP-IDF MQTT client; benchmark required
+- OTA: esp-hal-ota 0.4.6 ESP32-C6 support unconfirmed; willing to contribute if C6 path is untested
 - NVS: sequential-storage on ESP32-C6 flash unverified; build/hardware test needed in Phase 23
 
 ## State of the Art Notes
@@ -154,3 +174,23 @@ Per Phase 22 success criteria, NVS/OTA/SoftAP/DNS/log hook are explicitly ranked
 - `esp-wifi` crate: replaced by `esp-radio`; crates.io page still exists but development moved
 - `esp-hal-embassy` crate: functionality merged into `esp-rtos`
 - esp-storage standalone repository: archived, moved to esp-hal monorepo
+
+## Implementation Notes
+
+Additional requirements and design decisions to carry forward into Phase 23-25 implementation.
+
+### WiFi Scan in SoftAP Portal
+
+When the SoftAP provisioning portal is running, perform a WiFi station scan (scan for nearby APs while in AP+STA mode) and display the discovered SSIDs on the portal web page. This lets the user select their home/office network from a dropdown rather than typing the SSID manually — improves UX for WiFi credential entry significantly.
+
+### UM980 Reset on Config Apply
+
+Add a `reset: true` boolean field to the `/config` MQTT payload spec. Behaviour:
+- When `reset: true` is present and set, emit a RESET command to the UM980 and wait for it to respond with the device name before applying the new configuration.
+- Also trigger this reset+reapply sequence on the **first config apply after a device reboot** (device may have lost volatile UM980 state during power cycle).
+
+This ensures the UM980 is always in a known clean state when configuration is applied.
+
+### SoftAP SSID
+
+Change the SoftAP SSID from the current value to `GNSS-[ID]` where `[ID]` is the device ID (same value used elsewhere in the firmware, e.g., the MQTT client ID). Use this same `GNSS-[ID]` string as the WPA2 PSK password for the SoftAP network. Both SSID and password derive from the device ID, making pairing straightforward without per-device configuration.
