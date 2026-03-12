@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Server and nostd Foundation
 status: planning
-stopped_at: Completed 25-03-PLAN.md
-last_updated: "2026-03-12T09:24:23.727Z"
+stopped_at: "Completed 25-02 Task 1; awaiting human-verify checkpoint for browser confirmation at http://localhost:8080"
+last_updated: "2026-03-12T09:28:20.762Z"
 last_activity: 2026-03-12 — v2.1 roadmap revised to 4 phases (22-25); gap crate work interleaved with server feature phases; 20/20 requirements mapped (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
   percent: 84
 ---
 
@@ -66,6 +66,7 @@ Phase 24 and Phase 25 both depend on Phase 23 and can run in parallel with each 
 | Phase 24-rinex-files-gnss-ota-gap-crate P02 | 7 | 2 tasks | 3 files |
 | Phase 25-web-ui-remaining-gap-crate-skeletons P01 | 10 | 2 tasks | 6 files |
 | Phase 25-web-ui-remaining-gap-crate-skeletons P03 | 3 | 2 tasks | 9 files |
+| Phase 25-web-ui-remaining-gap-crate-skeletons P02 | 5 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,7 @@ Key carry-forward decisions affecting v2.1:
 - [Phase 25-web-ui-remaining-gap-crate-skeletons]: gnss-softap BLOCKER: WPA2 resolved in esp-radio 0.16.x; active gap is no_std HTTP server with multi-field form POST parsing (picoserve maturity)
 - [Phase 25-web-ui-remaining-gap-crate-skeletons]: gnss-dns: SOLVABLE — no turnkey crate, ~50 lines of embassy-net UDP + DNS response construction sufficient
 - [Phase 25-web-ui-remaining-gap-crate-skeletons]: gnss-log: Rust log::Log side portable no_std (no blocker); C component capture requires one esp_log_set_vprintf FFI call (recommended: c-log-capture feature gate)
+- [Phase 25-web-ui-remaining-gap-crate-skeletons]: broadcast::channel capacity 16 in main(); _ws_rx_discard holds receiver so channel stays open when no WebSocket clients connected
 
 ### Pending Todos
 
@@ -120,7 +122,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T09:24:23.723Z
-Stopped at: Completed 25-03-PLAN.md
+Last session: 2026-03-12T09:28:20.758Z
+Stopped at: Completed 25-02 Task 1; awaiting human-verify checkpoint for browser confirmation at http://localhost:8080
 Resume file: None
 Next action: /gsd:plan-phase 22
