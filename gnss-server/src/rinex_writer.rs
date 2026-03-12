@@ -1,12 +1,12 @@
-// RINEX writer is wired to main in a later plan; allow dead_code until then.
+// RINEX writers are wired to main in Task 2; allow dead_code until then.
 #![allow(dead_code)]
 
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
-use chrono::{DateTime, Datelike, Timelike, Utc};
+use chrono::{DateTime, Datelike, Duration, TimeZone, Timelike, Utc};
 
-use crate::observation::{Constellation, EpochGroup, Observation};
+use crate::observation::{Constellation, EpochGroup, EphemerisMsg, Observation};
 
 // Physics constants
 const GPS_L1_HZ: f64 = 1_575_420_000.0;
@@ -209,6 +209,304 @@ pub fn write_epoch<W: Write>(
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Navigation file helpers
+// ---------------------------------------------------------------------------
+
+/// Format f64 as RINEX D19.12 (Fortran double-precision notation).
+///
+/// Output is always exactly 19 characters: sign(1) + digit(1) + dot(1) + 12 decimal + D(1) + sign(1) + 2 digits = 19.
+/// Examples: " 0.000000000000D+00", " 1.234567890123D-04", "-1.000000000000D+10"
+pub fn to_d19_12(val: f64) -> String {
+    if !val.is_finite() || val == 0.0 {
+        return " 0.000000000000D+00".to_string();
+    }
+    // {:19.12E} produces exactly 19 chars but Rust uses variable-length exponents (e.g. E10 vs E-4)
+    // We need D + two-digit signed exponent always. Strategy: format mantissa separately.
+    // {:+.12E} gives "+1.234567890123E-4" — extract mantissa (16 chars with sign) and exponent.
+    let s = format!("{:.12E}", val); // e.g. "1.234567890123E-4" or "-1.000000000000E10"
+    if let Some(e_pos) = s.find('E') {
+        let mantissa = &s[..e_pos]; // e.g. "1.234567890123" or "-1.000000000000"
+        let exp: i32 = s[e_pos + 1..].parse().unwrap_or(0);
+        // For positive mantissa: " " + mantissa (14 chars) + "D" + sign + 2-digit exp = 1+14+1+3 = 19
+        // For negative mantissa: mantissa already starts with "-" (15 chars) + "D" + sign + 2-digit exp = 15+1+3 = 19
+        if mantissa.starts_with('-') {
+            format!("{}D{:+03}", mantissa, exp)
+        } else {
+            format!(" {}D{:+03}", mantissa, exp)
+        }
+    } else {
+        " 0.000000000000D+00".to_string()
+    }
+}
+
+/// Compute current GPS week from UTC system clock.
+///
+/// GPS epoch: 1980-01-06 00:00:00 UTC. Does not apply the 1024-week rollover.
+pub fn current_gps_week() -> u32 {
+    let gps_epoch = Utc.with_ymd_and_hms(1980, 1, 6, 0, 0, 0).unwrap();
+    let now = Utc::now();
+    let days = (now - gps_epoch).num_days();
+    (days / 7) as u32
+}
+
+/// Convert GPS time-of-week (ms) + GPS week number to UTC DateTime.
+///
+/// GPS time is ahead of UTC by 18 leap seconds (as of 2026; next event unknown).
+pub fn gps_tow_to_utc(gps_week: u32, tow_ms: u32) -> DateTime<Utc> {
+    let gps_epoch = Utc.with_ymd_and_hms(1980, 1, 6, 0, 0, 0).unwrap();
+    let total_ms = gps_week as i64 * 7 * 24 * 3600 * 1000 + tow_ms as i64;
+    gps_epoch + Duration::milliseconds(total_ms) - Duration::seconds(18)
+}
+
+/// Write the RINEX 2.11 navigation file header.
+///
+/// Three lines: RINEX VERSION/TYPE, PGM/RUN BY/DATE, END OF HEADER.
+pub fn write_nav_header<W: Write>(w: &mut BufWriter<W>, date: &DateTime<Utc>) -> std::io::Result<()> {
+    writeln!(
+        w,
+        "{:<60}{:<20}",
+        "     2.11           NAVIGATION DATA",
+        "RINEX VERSION / TYPE"
+    )?;
+    writeln!(
+        w,
+        "{:<20}{:<20}{:<20}{:<20}",
+        "gnss-server",
+        "gnss",
+        date.format("%Y%m%d").to_string(),
+        "PGM / RUN BY / DATE"
+    )?;
+    writeln!(w, "{:<60}{:<20}", "", "END OF HEADER")?;
+    Ok(())
+}
+
+/// Write a single GPS navigation record (8 lines) from Msg1019T.
+///
+/// Line 1: PRN/EPOCH/SV CLK (satellite_id, epoch, af0, af1, af2)
+/// Lines 2-8: BROADCAST ORBIT 1-7 (3 spaces + 4 × D19.12)
+fn write_gps_nav<W: Write>(
+    w: &mut BufWriter<W>,
+    epoch_utc: &DateTime<Utc>,
+    msg: &rtcm_rs::msg::Msg1019T,
+) -> std::io::Result<()> {
+    let yy = epoch_utc.year() % 100;
+    // Line 1: PRN EPOCH SV CLK
+    writeln!(
+        w,
+        "{:2} {:02} {:2} {:2} {:2} {:2}{:5.1}{}{}{}",
+        msg.gps_satellite_id,
+        yy,
+        epoch_utc.month(),
+        epoch_utc.day(),
+        epoch_utc.hour(),
+        epoch_utc.minute(),
+        epoch_utc.second() as f64,
+        to_d19_12(msg.af0_s),
+        to_d19_12(msg.af1_s_s as f64),
+        to_d19_12(msg.af2_s_s2 as f64),
+    )?;
+    // Orbit 1: IODE, Crs, Delta n, M0
+    writeln!(
+        w,
+        "   {}{}{}{}",
+        to_d19_12(msg.iode as f64),
+        to_d19_12(msg.crs_m as f64),
+        to_d19_12(msg.delta_n_sc_s as f64),
+        to_d19_12(msg.m0_sc),
+    )?;
+    // Orbit 2: Cuc, e, Cus, sqrt(A)
+    writeln!(
+        w,
+        "   {}{}{}{}",
+        to_d19_12(msg.cuc_rad as f64),
+        to_d19_12(msg.eccentricity),
+        to_d19_12(msg.cus_rad as f64),
+        to_d19_12(msg.sqrt_a_sqrt_m),
+    )?;
+    // Orbit 3: Toe, Cic, OMEGA0, Cis
+    writeln!(
+        w,
+        "   {}{}{}{}",
+        to_d19_12(msg.toe_s as f64),
+        to_d19_12(msg.cic_rad as f64),
+        to_d19_12(msg.omega0_sc),
+        to_d19_12(msg.cis_rad as f64),
+    )?;
+    // Orbit 4: i0, Crc, omega, OMEGA DOT
+    writeln!(
+        w,
+        "   {}{}{}{}",
+        to_d19_12(msg.i0_sc),
+        to_d19_12(msg.crc_m as f64),
+        to_d19_12(msg.omega_sc),
+        to_d19_12(msg.omegadot_sc_s),
+    )?;
+    // Orbit 5: IDOT, Codes on L2, GPS week, L2 P flag
+    writeln!(
+        w,
+        "   {}{}{}{}",
+        to_d19_12(msg.idot_sc_s),
+        to_d19_12(msg.code_on_l2_ind as f64),
+        to_d19_12(msg.gps_week_number as f64),
+        to_d19_12(msg.l2_p_data_flag as f64),
+    )?;
+    // Orbit 6: SV accuracy, SV health, TGD, IODC
+    writeln!(
+        w,
+        "   {}{}{}{}",
+        to_d19_12(msg.ura_index as f64),
+        to_d19_12(msg.sv_health_ind as f64),
+        to_d19_12(msg.tgd_s as f64),
+        to_d19_12(msg.iodc as f64),
+    )?;
+    // Orbit 7: Transmission time, fit interval, 0.0, 0.0
+    // toc_s used as transmission time (time of clock); 0.0 for spare fields
+    writeln!(
+        w,
+        "   {}{}{}{}",
+        to_d19_12(msg.toc_s as f64),
+        to_d19_12(msg.fit_interval_ind as f64),
+        to_d19_12(0.0),
+        to_d19_12(0.0),
+    )?;
+    Ok(())
+}
+
+/// Write a single GLONASS navigation record (4 lines) from Msg1020T.
+///
+/// Line 1: SLOT/EPOCH/SV CLK (satellite_id, epoch, -tau_n, gamma_n, message_frame_time)
+/// Lines 2-4: BROADCAST ORBIT 1-3 (3 spaces + 4 × D19.12) with positions in km
+fn write_glo_nav<W: Write>(
+    w: &mut BufWriter<W>,
+    epoch_utc: &DateTime<Utc>,
+    msg: &rtcm_rs::msg::Msg1020T,
+) -> std::io::Result<()> {
+    let yy = epoch_utc.year() % 100;
+    // Frame time tk in seconds = hours*3600 + minutes*60 + seconds (tk_s is 0 or 30)
+    let tk_s = msg.tk_h as f64 * 3600.0 + msg.tk_min as f64 * 60.0 + msg.tk_s as f64;
+    // Line 1: SLOT EPOCH SV CLK
+    // clock_bias = -tau_n (negated per RINEX convention)
+    writeln!(
+        w,
+        "{:2} {:02} {:2} {:2} {:2} {:2}{:5.1}{}{}{}",
+        msg.glo_satellite_id,
+        yy,
+        epoch_utc.month(),
+        epoch_utc.day(),
+        epoch_utc.hour(),
+        epoch_utc.minute(),
+        epoch_utc.second() as f64,
+        to_d19_12(-msg.tau_n_s),
+        to_d19_12(msg.gamma_n as f64),
+        to_d19_12(tk_s),
+    )?;
+    // Orbit 1: X position (km), X velocity (km/s), X accel (km/s²), health
+    writeln!(
+        w,
+        "   {}{}{}{}",
+        to_d19_12(msg.xn_km),
+        to_d19_12(msg.xn_first_deriv_km_s),
+        to_d19_12(msg.xn_second_deriv_km_s2 as f64),
+        to_d19_12(msg.glo_eph_health_flag as f64),
+    )?;
+    // Orbit 2: Y position (km), Y velocity (km/s), Y accel (km/s²), frequency channel number
+    writeln!(
+        w,
+        "   {}{}{}{}",
+        to_d19_12(msg.yn_km),
+        to_d19_12(msg.yn_first_deriv_km_s),
+        to_d19_12(msg.yn_second_deriv_km_s2 as f64),
+        to_d19_12(msg.glo_satellite_freq_chan_number as f64),
+    )?;
+    // Orbit 3: Z position (km), Z velocity (km/s), Z accel (km/s²), age of oper info
+    writeln!(
+        w,
+        "   {}{}{}{}",
+        to_d19_12(msg.zn_km),
+        to_d19_12(msg.zn_first_deriv_km_s),
+        to_d19_12(msg.zn_second_deriv_km_s2 as f64),
+        to_d19_12(msg.en_d as f64),
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Nav writer struct
+// ---------------------------------------------------------------------------
+
+/// RINEX 2.11 navigation file writer with hourly rotation.
+///
+/// Opens a new file at each UTC hour boundary. File naming follows RINEX 2.11 convention:
+/// `{station:4}{doy:03}{session}{yy:02}.{yy}P` where session is "0".
+pub struct RinexNavWriter {
+    current_hour: u32,
+    writer: Option<BufWriter<std::fs::File>>,
+    output_dir: PathBuf,
+    station: String,
+    gps_week: u32,
+}
+
+impl RinexNavWriter {
+    /// Create a new nav writer. No file is opened until the first ephemeris is written.
+    pub fn new(output_dir: impl Into<PathBuf>, station: String, gps_week: u32) -> Self {
+        Self {
+            current_hour: u32::MAX,
+            writer: None,
+            output_dir: output_dir.into(),
+            station,
+            gps_week,
+        }
+    }
+
+    /// Write an ephemeris message. Rotates to a new file when the UTC hour changes.
+    pub fn write_ephemeris(
+        &mut self,
+        epoch_utc: &DateTime<Utc>,
+        eph: &EphemerisMsg,
+    ) -> anyhow::Result<()> {
+        let hour = epoch_utc.hour();
+        if hour != self.current_hour {
+            if let Some(w) = self.writer.take() {
+                w.into_inner()
+                    .map_err(|e| anyhow::anyhow!("nav flush error: {}", e.error()))?;
+            }
+            let filename = self.make_filename(epoch_utc);
+            let file = std::fs::File::create(&filename)?;
+            let mut bw = BufWriter::new(file);
+            write_nav_header(&mut bw, epoch_utc)?;
+            self.writer = Some(bw);
+            self.current_hour = hour;
+        }
+
+        if let Some(w) = &mut self.writer {
+            match eph {
+                EphemerisMsg::Gps(msg) => write_gps_nav(w, epoch_utc, msg)?,
+                EphemerisMsg::Glonass(msg) => write_glo_nav(w, epoch_utc, msg)?,
+                EphemerisMsg::Galileo(_) => {
+                    log::warn!("Galileo ephemeris received but nav writer not implemented — skipping");
+                }
+                EphemerisMsg::Beidou(_) => {
+                    log::warn!("BeiDou ephemeris received but nav writer not implemented — skipping");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Build the RINEX 2.11 navigation filename for the given epoch.
+    ///
+    /// Format: `{ssss}{ddd}{f}{yy}.{yy}P`
+    fn make_filename(&self, epoch_utc: &DateTime<Utc>) -> PathBuf {
+        let station = format!("{:4}", self.station);
+        let station = &station[..4.min(station.len())];
+        let doy = epoch_utc.ordinal();
+        let yy = epoch_utc.year() % 100;
+        let name = format!("{}{:03}0{:02}.{:02}P", station, doy, yy, yy);
+        self.output_dir.join(name)
+    }
+}
+
 /// RINEX 2.11 observation file writer with hourly rotation.
 ///
 /// Opens a new file at each UTC hour boundary. File naming follows the RINEX 2.11 convention:
@@ -280,6 +578,94 @@ mod tests {
     use super::*;
     use crate::observation::{Constellation, EpochGroup, Observation};
     use chrono::TimeZone;
+
+    // --- to_d19_12 tests ---
+
+    #[test]
+    fn d19_12_zero_produces_exact_string() {
+        let s = to_d19_12(0.0);
+        assert_eq!(s.len(), 19, "to_d19_12(0.0) must be 19 chars, got {:?}", s);
+        assert_eq!(s, " 0.000000000000D+00", "to_d19_12(0.0) must equal ' 0.000000000000D+00'");
+    }
+
+    #[test]
+    fn d19_12_small_negative_exponent_two_digits() {
+        let s = to_d19_12(1.234567890123e-4);
+        assert_eq!(s.len(), 19, "to_d19_12 must always be 19 chars, got {:?}", s);
+        assert!(
+            s.contains("D-04"),
+            "to_d19_12(1.234...e-4) must contain 'D-04' (two-digit exponent), got {:?}",
+            s
+        );
+    }
+
+    #[test]
+    fn d19_12_negative_value_positive_exponent() {
+        let s = to_d19_12(-1.0e10);
+        assert_eq!(s.len(), 19, "to_d19_12 must always be 19 chars, got {:?}", s);
+        assert!(
+            s.contains("D+10"),
+            "to_d19_12(-1.0e10) must contain 'D+10', got {:?}",
+            s
+        );
+    }
+
+    #[test]
+    fn d19_12_always_19_chars_various() {
+        // GPS/GLONASS nav data uses exponents in the range -99..+99 at most.
+        // f64::MIN_POSITIVE (exponent -308) is out of scope for RINEX nav values.
+        for val in &[0.0f64, 1.0, -1.0, 1e-10, -1e-10, 1e10, -1e10, 1.23456789e-4, 1.23456789e-99, 1e99] {
+            let s = to_d19_12(*val);
+            assert_eq!(s.len(), 19, "to_d19_12({}) must be 19 chars, got {:?}", val, s);
+        }
+    }
+
+    // --- gps_tow_to_utc test ---
+
+    #[test]
+    fn gps_tow_to_utc_known_epoch() {
+        // GPS epoch = 1980-01-06T00:00:00Z (week 0, tow 0)
+        // GPS week 2000, tow 0: 2000 weeks after 1980-01-06 = 2058-04-07 (approx)
+        // Simple test: week=0, tow=0 + 18 leap seconds offset = 1979-12-31T23:59:42Z
+        // tow_ms=0 at week=0: gps_epoch + 0ms - 18s = 1980-01-05T23:59:42Z
+        let utc = gps_tow_to_utc(0, 0);
+        // The GPS epoch is 1980-01-06 and we subtract 18 leap seconds
+        assert_eq!(utc.year(), 1980);
+        assert_eq!(utc.month(), 1);
+        assert_eq!(utc.day(), 5); // 1 day earlier due to 18s correction wrapping
+        // Test known week: GPS week 1 = 7 days after gps epoch = 1980-01-13
+        // tow=0 on week 1 = 1980-01-13T00:00:00Z - 18s = 1980-01-12T23:59:42Z
+        let utc_w1 = gps_tow_to_utc(1, 0);
+        assert_eq!(utc_w1.day(), 12);
+    }
+
+    // --- write_gps_nav_header test ---
+
+    #[test]
+    fn nav_header_navigation_data_label_at_col_61() {
+        let mut buf = Vec::new();
+        {
+            let mut bw = BufWriter::new(&mut buf);
+            let utc = Utc.with_ymd_and_hms(2026, 3, 12, 0, 0, 0).unwrap();
+            write_nav_header(&mut bw, &utc).unwrap();
+        }
+        let text = String::from_utf8(buf).unwrap();
+        let first_line = text.lines().next().unwrap();
+        assert_eq!(first_line.len(), 80, "Nav header first line must be 80 chars");
+        let label_area = &first_line[60..];
+        assert!(
+            label_area.starts_with("RINEX VERSION / TYPE"),
+            "Expected 'RINEX VERSION / TYPE' at col 61 in nav header, got: {:?}",
+            label_area
+        );
+        // Also check "NAVIGATION DATA" is present in data area
+        let data_area = &first_line[..60];
+        assert!(
+            data_area.contains("NAVIGATION DATA"),
+            "Nav header first line data area must contain 'NAVIGATION DATA', got: {:?}",
+            data_area
+        );
+    }
 
     fn make_obs(c: Constellation, sv_id: u8, pr_ms: Option<f64>, phase_ms: Option<f64>, cnr: Option<f64>, epoch_ms: u32) -> Observation {
         Observation {
