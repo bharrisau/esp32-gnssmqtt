@@ -36,6 +36,10 @@ pub struct MqttConfig {
     pub password: Option<String>,
 }
 
+fn default_output_dir() -> String {
+    "./rinex_output".to_string()
+}
+
 /// Top-level server configuration.
 #[derive(Debug, serde::Deserialize)]
 pub struct ServerConfig {
@@ -43,6 +47,9 @@ pub struct ServerConfig {
     pub device_id: String,
     /// MQTT broker connection settings
     pub mqtt: MqttConfig,
+    /// Directory where RINEX output files are written (default: ./rinex_output)
+    #[serde(default = "default_output_dir")]
+    pub output_dir: String,
 }
 
 /// Load server configuration from a TOML file, with environment variable overrides.

@@ -1,6 +1,3 @@
-// RINEX writers are wired to main in Task 2; allow dead_code until then.
-#![allow(dead_code)]
-
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
@@ -444,6 +441,7 @@ pub struct RinexNavWriter {
     writer: Option<BufWriter<std::fs::File>>,
     output_dir: PathBuf,
     station: String,
+    #[allow(dead_code)]
     gps_week: u32,
 }
 
@@ -517,6 +515,7 @@ pub struct RinexObsWriter {
     writer: Option<BufWriter<std::fs::File>>,
     output_dir: PathBuf,
     station: String,
+    #[allow(dead_code)]
     gps_week: u32,
 }
 

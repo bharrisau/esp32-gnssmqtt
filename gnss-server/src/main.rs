@@ -35,15 +35,21 @@ async fn main() -> anyhow::Result<()> {
 
     let config_arc = Arc::new(config);
 
+    // Create output directory at startup (before spawning tasks)
+    std::fs::create_dir_all(&config_arc.output_dir)?;
+
     tokio::spawn(mqtt::mqtt_supervisor(
-        config_arc,
+        Arc::clone(&config_arc),
         msg_tx,
         state_tx,
     ));
 
     // Spawn RTCM decode task — reads MqttMessage::Rtcm from channel and decodes frames.
-    // Phase 24 RINEX writer will consume EpochGroup events; for now they are logged and discarded.
-    tokio::spawn(run_decode_task(msg_rx));
+    tokio::spawn(run_decode_task(
+        msg_rx,
+        config_arc.output_dir.clone(),
+        config_arc.device_id.clone(),
+    ));
 
     loop {
         tokio::select! {
@@ -64,29 +70,34 @@ async fn main() -> anyhow::Result<()> {
 /// RTCM3 decode task.
 ///
 /// Reads MqttMessage from the channel, calls decode_rtcm_payload() for Rtcm variants,
-/// and logs epoch boundary events. EpochGroup events are discarded here; Phase 24 will
-/// wire them to the RINEX writer.
-async fn run_decode_task(mut msg_rx: mpsc::Receiver<mqtt::MqttMessage>) {
+/// forwards EpochGroup events to RinexObsWriter and EphemerisMsg events to RinexNavWriter.
+async fn run_decode_task(
+    mut msg_rx: mpsc::Receiver<mqtt::MqttMessage>,
+    output_dir: String,
+    station: String,
+) {
+    let gps_week = rinex_writer::current_gps_week();
     let mut epoch_buf = epoch::EpochBuffer::new();
+    let mut obs_writer = rinex_writer::RinexObsWriter::new(&output_dir, station.clone(), gps_week);
+    let mut nav_writer = rinex_writer::RinexNavWriter::new(&output_dir, station, gps_week);
+
     while let Some(msg) = msg_rx.recv().await {
         if let mqtt::MqttMessage::Rtcm(payload) = msg {
             let events = rtcm_decode::decode_rtcm_payload(&payload, &mut epoch_buf);
             for event in events {
                 match event {
                     observation::RtcmEvent::Epoch(group) => {
-                        // Epoch log line is emitted inside EpochBuffer::build_group().
-                        // Discard group here; Phase 24 RINEX writer will consume it.
-                        log::debug!(
-                            "Epoch flushed: epoch_ms={} gps={} glo={} gal={} bds={}",
-                            group.epoch_ms,
-                            group.gps_count,
-                            group.glo_count,
-                            group.gal_count,
-                            group.bds_count,
-                        );
+                        let epoch_utc =
+                            rinex_writer::gps_tow_to_utc(gps_week, group.epoch_ms);
+                        if let Err(e) = obs_writer.write_group(&epoch_utc, &group) {
+                            log::warn!("RINEX obs write error: {e}");
+                        }
                     }
-                    observation::RtcmEvent::Ephemeris(_eph) => {
-                        log::debug!("Ephemeris message received (discarded — Phase 24 will store)");
+                    observation::RtcmEvent::Ephemeris(eph) => {
+                        let epoch_utc = chrono::Utc::now();
+                        if let Err(e) = nav_writer.write_ephemeris(&epoch_utc, &eph) {
+                            log::warn!("RINEX nav write error: {e}");
+                        }
                     }
                 }
             }
