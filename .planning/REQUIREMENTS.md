@@ -32,10 +32,10 @@ Requirements for the Server and nostd Foundation milestone. Each maps to roadmap
 
 ### Web UI
 
-- [ ] **UI-01**: HTTP server serves a static HTML page; WebSocket pushes satellite state at ~1 Hz
-- [ ] **UI-02**: Browser renders polar skyplot SVG showing satellite elevation, azimuth, and PRN from NMEA GSV
-- [ ] **UI-03**: Browser renders SNR/C/N0 bar chart per satellite from NMEA GSV
-- [ ] **UI-04**: Browser shows device health panel (uptime, fix type, satellites, HDOP, heap free) from MQTT heartbeat
+- [x] **UI-01**: HTTP server serves a static HTML page; WebSocket pushes satellite state at ~1 Hz
+- [x] **UI-02**: Browser renders polar skyplot SVG showing satellite elevation, azimuth, and PRN from NMEA GSV
+- [x] **UI-03**: Browser renders SNR/C/N0 bar chart per satellite from NMEA GSV
+- [x] **UI-04**: Browser shows device health panel (uptime, fix type, satellites, HDOP, heap free) from MQTT heartbeat
 
 ### nostd / Embassy Gap Work
 
@@ -94,10 +94,10 @@ Which phases cover which requirements. Updated during roadmap revision 2026-03-1
 | RINEX-03 | Phase 24 | Complete |
 | RINEX-04 | Phase 24 | Complete |
 | NOSTD-04a | Phase 24 | Complete |
-| UI-01 | Phase 25 | Pending |
-| UI-02 | Phase 25 | Pending |
-| UI-03 | Phase 25 | Pending |
-| UI-04 | Phase 25 | Pending |
+| UI-01 | Phase 25 | Complete |
+| UI-02 | Phase 25 | Complete |
+| UI-03 | Phase 25 | Complete |
+| UI-04 | Phase 25 | Complete |
 | NOSTD-04b | Phase 25 | Pending |
 
 **Coverage:**
