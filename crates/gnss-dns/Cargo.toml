@@ -1,0 +1,10 @@
+[package]
+name = "gnss-dns"
+version = "0.1.0"
+edition = "2021"
+description = "Captive portal DNS responder trait for embedded GNSS firmware — nostd gap crate"
+
+[dependencies]
+# No external dependencies — trait-only skeleton
+# ESP-IDF implementation would add: (none — uses std::net::UdpSocket)
+# nostd implementation: SOLVABLE with embassy-net UDP; no turnkey crate — see BLOCKER.md

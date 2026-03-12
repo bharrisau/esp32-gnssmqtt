@@ -1,0 +1,11 @@
+[package]
+name = "gnss-softap"
+version = "0.1.0"
+edition = "2021"
+description = "SoftAP captive portal trait for embedded GNSS firmware — nostd gap crate"
+
+[dependencies]
+# No external dependencies — trait-only skeleton
+# ESP-IDF implementation would add: esp-idf-svc, embedded-svc, heapless
+# nostd implementation: SoftAP WPA2 password resolved in esp-radio 0.16.x;
+# remaining gap is no_std HTTP server with multi-field form POST parsing — see BLOCKER.md
