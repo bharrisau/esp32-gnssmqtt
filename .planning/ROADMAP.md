@@ -95,7 +95,11 @@ Archive: `.planning/milestones/v2.0-ROADMAP.md`
   3. The firmware `.cargo/config.toml` applies only to the `firmware/` member — server and gap crate builds are unaffected by embedded-target overrides
   4. Audit document enumerates every `esp-idf-svc`, `esp-idf-hal`, and `esp-idf-sys` usage by category (WiFi, NVS, OTA, UART, TLS, log hook, SoftAP, DNS), with each usage mapped to an esp-hal/embassy equivalent or marked as a gap with the specific blocker recorded
   5. Gap list is prioritised — NVS, OTA, SoftAP, DNS hijack, and log hook explicitly ranked for Phase 23-25 implementation order; document committed to the repo
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 22-01-PLAN.md — Workspace restructure: root Cargo.toml, firmware/ member, gnss-server stub, both builds verified
+- [ ] 22-02-PLAN.md — Nostd audit document: all 12 ESP-IDF categories mapped with gap priority ranking
 
 ### Phase 23: MQTT + RTCM3 + gnss-nvs crate
 **Goal**: Server connects to MQTT and decodes all RTCM3 MSM and ephemeris messages into verified observation structs; gnss-nvs crate provides a working NvsStore trait with ESP-IDF and sequential-storage implementations
