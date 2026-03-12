@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Server and nostd Foundation
 status: planning
-stopped_at: Completed 25-01-PLAN.md
-last_updated: "2026-03-12T09:18:26.814Z"
+stopped_at: Completed 25-03-PLAN.md
+last_updated: "2026-03-12T09:24:23.727Z"
 last_activity: 2026-03-12 — v2.1 roadmap revised to 4 phases (22-25); gap crate work interleaved with server feature phases; 20/20 requirements mapped (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
   percent: 84
 ---
 
@@ -65,6 +65,7 @@ Phase 24 and Phase 25 both depend on Phase 23 and can run in parallel with each 
 | Phase 24-rinex-files-gnss-ota-gap-crate P01 | 11 | 1 tasks | 5 files |
 | Phase 24-rinex-files-gnss-ota-gap-crate P02 | 7 | 2 tasks | 3 files |
 | Phase 25-web-ui-remaining-gap-crate-skeletons P01 | 10 | 2 tasks | 6 files |
+| Phase 25-web-ui-remaining-gap-crate-skeletons P03 | 3 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,9 @@ Key carry-forward decisions affecting v2.1:
 - [Phase 24-rinex-files-gnss-ota-gap-crate]: write_nav_header uses 'NAVIGATION DATA' label (RINEX 2.11 sec 5.3); plan draft 'N: GPS NAV DATA' was incorrect
 - [Phase 25-web-ui-remaining-gap-crate-skeletons]: GP talker (not GN) used in nmea_parse tests — nmea 0.7 parse_gsv rejects GN talker (UnknownGnssType error); in production, GN sentences return None via .ok()?
 - [Phase 25-web-ui-remaining-gap-crate-skeletons]: index.html embedded via include_str! (single binary, no runtime file dependency); broadcast::Sender<String> is the fan-out primitive for WebSocket clients
+- [Phase 25-web-ui-remaining-gap-crate-skeletons]: gnss-softap BLOCKER: WPA2 resolved in esp-radio 0.16.x; active gap is no_std HTTP server with multi-field form POST parsing (picoserve maturity)
+- [Phase 25-web-ui-remaining-gap-crate-skeletons]: gnss-dns: SOLVABLE — no turnkey crate, ~50 lines of embassy-net UDP + DNS response construction sufficient
+- [Phase 25-web-ui-remaining-gap-crate-skeletons]: gnss-log: Rust log::Log side portable no_std (no blocker); C component capture requires one esp_log_set_vprintf FFI call (recommended: c-log-capture feature gate)
 
 ### Pending Todos
 
@@ -116,7 +120,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T09:18:26.810Z
-Stopped at: Completed 25-01-PLAN.md
+Last session: 2026-03-12T09:24:23.723Z
+Stopped at: Completed 25-03-PLAN.md
 Resume file: None
 Next action: /gsd:plan-phase 22

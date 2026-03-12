@@ -43,7 +43,7 @@ Requirements for the Server and nostd Foundation milestone. Each maps to roadmap
 - [x] **NOSTD-02**: `gnss-nvs` crate created with a `NvsStore` trait (namespaced, typed getters/setters, blob support) and ESP-IDF NVS backing implementation
 - [x] **NOSTD-03**: `sequential-storage` backed `NvsStore` implementation started (nostd flash backing for embassy port)
 - [x] **NOSTD-04a**: `gnss-ota` gap crate — dual-slot OTA trait definition and `BLOCKER.md` documenting the specific nostd blocker preventing implementation today
-- [ ] **NOSTD-04b**: `gnss-softap` + `gnss-dns` + `gnss-log` gap crate skeletons — trait definitions and `BLOCKER.md` for each documenting specific nostd blockers
+- [x] **NOSTD-04b**: `gnss-softap` + `gnss-dns` + `gnss-log` gap crate skeletons — trait definitions and `BLOCKER.md` for each documenting specific nostd blockers
 
 ## Future Requirements
 
@@ -98,7 +98,7 @@ Which phases cover which requirements. Updated during roadmap revision 2026-03-1
 | UI-02 | Phase 25 | Complete |
 | UI-03 | Phase 25 | Complete |
 | UI-04 | Phase 25 | Complete |
-| NOSTD-04b | Phase 25 | Pending |
+| NOSTD-04b | Phase 25 | Complete |
 
 **Coverage:**
 - v2.1 requirements: 20 total (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
