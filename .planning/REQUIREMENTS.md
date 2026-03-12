@@ -18,10 +18,10 @@ Requirements for the Server and nostd Foundation milestone. Each maps to roadmap
 
 ### RTCM3 Decode
 
-- [ ] **RTCM-01**: Server decodes RTCM3 MSM4/MSM7 messages for GPS and GLONASS (pseudorange, carrier phase, C/N0)
-- [ ] **RTCM-02**: Server decodes RTCM3 MSM messages for Galileo and BeiDou (best-effort; RINEX 2.11 extension)
-- [ ] **RTCM-03**: Server decodes RTCM3 ephemeris messages 1019 (GPS), 1020 (GLONASS), 1046 (Galileo), 1044 (BeiDou)
-- [ ] **RTCM-04**: Server buffers MSM frames within a ~10ms epoch window before emitting an observation epoch
+- [x] **RTCM-01**: Server decodes RTCM3 MSM4/MSM7 messages for GPS and GLONASS (pseudorange, carrier phase, C/N0)
+- [x] **RTCM-02**: Server decodes RTCM3 MSM messages for Galileo and BeiDou (best-effort; RINEX 2.11 extension)
+- [x] **RTCM-03**: Server decodes RTCM3 ephemeris messages 1019 (GPS), 1020 (GLONASS), 1046 (Galileo), 1044 (BeiDou)
+- [x] **RTCM-04**: Server buffers MSM frames within a ~10ms epoch window before emitting an observation epoch
 
 ### RINEX Files
 
@@ -83,10 +83,10 @@ Which phases cover which requirements. Updated during roadmap revision 2026-03-1
 | NOSTD-01 | Phase 22 | Complete |
 | SRVR-01 | Phase 23 | Complete |
 | SRVR-02 | Phase 23 | Complete |
-| RTCM-01 | Phase 23 | Pending |
-| RTCM-02 | Phase 23 | Pending |
-| RTCM-03 | Phase 23 | Pending |
-| RTCM-04 | Phase 23 | Pending |
+| RTCM-01 | Phase 23 | Complete |
+| RTCM-02 | Phase 23 | Complete |
+| RTCM-03 | Phase 23 | Complete |
+| RTCM-04 | Phase 23 | Complete |
 | NOSTD-02 | Phase 23 | Complete |
 | NOSTD-03 | Phase 23 | Complete |
 | RINEX-01 | Phase 24 | Pending |
