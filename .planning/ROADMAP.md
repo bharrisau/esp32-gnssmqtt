@@ -111,7 +111,12 @@ Plans:
   3. Server decodes MSM messages for Galileo and BeiDou (best-effort) and ephemeris messages 1019, 1020, 1046, 1044; decoded observations from a single epoch (~10ms window) are grouped before emission with epoch boundary visible in server log output
   4. `gnss-nvs` crate exists with a `NvsStore` trait (namespaced, typed getters/setters, blob support) and a working ESP-IDF NVS concrete implementation that compiles for the ESP32-C6 target
   5. `gnss-nvs` contains a started `sequential-storage`-backed `NvsStore` implementation (compiles; hardware validation deferred to a future milestone)
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 23-01-PLAN.md — gnss-nvs crate: NvsStore trait + ESP-IDF impl + sequential-storage impl skeleton
+- [ ] 23-02-PLAN.md — gnss-server foundation: config loading (figment TOML+env) + MQTT supervisor task (watch channel, exponential backoff)
+- [ ] 23-03-PLAN.md — RTCM3 decode pipeline: observation types, MSM + ephemeris decode, epoch buffer with flush-on-change
 
 ### Phase 24: RINEX Files + gnss-ota gap crate
 **Goal**: Server writes RINEX 2.11 observation and navigation files that RTKLIB accepts without error; gnss-ota gap crate defines the dual-slot OTA trait with a documented nostd blocker
@@ -162,7 +167,7 @@ Plans:
 | 19. Pre-2.0 Bugfix | v2.0 | 3/3 | Complete | 2026-03-10 |
 | 20. Field Testing Fixes | v2.0 | 4/4 | Complete | 2026-03-11 |
 | 21. MQTT Performance | v2.0 | 3/3 | Complete | 2026-03-12 |
-| 22. Workspace + Nostd Audit | 2/2 | Complete    | 2026-03-12 | - |
-| 23. MQTT + RTCM3 + gnss-nvs crate | v2.1 | 0/TBD | Not started | - |
+| 22. Workspace + Nostd Audit | v2.1 | 2/2 | Complete | 2026-03-12 |
+| 23. MQTT + RTCM3 + gnss-nvs crate | v2.1 | 0/3 | Not started | - |
 | 24. RINEX Files + gnss-ota gap crate | v2.1 | 0/TBD | Not started | - |
 | 25. Web UI + remaining gap crate skeletons | v2.1 | 0/TBD | Not started | - |
