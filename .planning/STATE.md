@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Server and nostd Foundation
-status: defining_requirements
-stopped_at: —
+status: ready_to_plan
+stopped_at: Phase 22 ready to plan
 last_updated: "2026-03-12"
-last_activity: "2026-03-12 — Milestone v2.1 started"
+last_activity: "2026-03-12 — v2.1 roadmap revised to 4-phase interleaved structure (22-25); gap crate work distributed across server feature phases; NOSTD-04 split into NOSTD-04a (Phase 24) and NOSTD-04b (Phase 25); gnss-nvs moved to Phase 23"
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,145 +21,69 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-12)
 
 **Core value:** GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker in real time, with remote reconfiguration, OTA updates, and automatic recovery — safe for unattended operation.
-**Current focus:** Milestone v2.1 — Server and nostd Foundation
+**Current focus:** Phase 22 — Workspace + Nostd Audit (v2.1 start)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-12 — Milestone v2.1 started
+Phase: 22 of 25 (Workspace + Nostd Audit)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-03-12 — v2.1 roadmap revised to 4 phases (22-25); gap crate work interleaved with server feature phases; 20/20 requirements mapped (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
 
-Progress: [██████████] 100%
+Progress: [████████████████████░░░░░] 84% (21/25 phases complete across all milestones)
+
+## Execution Path
+
+Phase dependencies for v2.1:
+
+```
+22 (Workspace + Audit) → 23 (MQTT + RTCM3 + gnss-nvs) → 24 (RINEX + gnss-ota)
+                                                        → 25 (Web UI + gap skeletons)
+```
+
+Phase 24 and Phase 25 both depend on Phase 23 and can run in parallel with each other once Phase 23 completes.
 
 ## Performance Metrics
 
-**Velocity:**
-- Total plans completed: 0 (v2.0)
-- Prior milestone (v1.3): 9 plans, ~30 min avg/plan
-- Total v1.x execution time: ~8 hours across 24 plans
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| v2.0 — not started | - | - | - |
-
-**Recent Trend:**
-- v1.3 last 5 plans: stable
+**Velocity (v2.0 reference):**
+- Total plans completed: 48 (v1.0-v2.0 combined)
+- v2.0: 24 plans across 8 phases
 - Trend: Stable
 
-| Phase 14 P01 | 5 | 2 tasks | 2 files |
-| Phase 14 P02 | 12 | 2 tasks | 3 files |
-| Phase 15 P03 | 3 | 2 tasks | 3 files |
-| Phase 16 P01 | 6 | 2 tasks | 5 files |
-| Phase 16-remote-logging P02 | 3 | 2 tasks | 2 files |
-| Phase 17-ntrip-client P01 | 4 | 2 tasks | 2 files |
-| Phase 17 P02 | 8 | 2 tasks | 2 files |
-| Phase 17-ntrip-client P03 | 3 | 2 tasks | 4 files |
-| Phase 18-telemetry-and-ota-validation P01 | 3 | 3 tasks | 4 files |
-| Phase 18 P03 | 2 | 1 tasks | 1 files |
-| Phase 18-telemetry-and-ota-validation P02 | 5 | 1 tasks | 2 files |
-| Phase 19-pre-2-0-bugfix P03 | 7 | 2 tasks | 2 files |
-| Phase 20-field-testing-fixes P01 | 15 | 1 tasks | 1 files |
-| Phase 20-field-testing-fixes P02 | 15 | 2 tasks | 3 files |
-| Phase 20-field-testing-fixes P03 | 17 | 2 tasks | 2 files |
-| Phase 20-field-testing-fixes P04 | 25 | 2 tasks | 2 files |
-| Phase 21-mqtt-performance P01 | 3 | 2 tasks | 4 files |
-| Phase 21-mqtt-performance P02 | 10 | 3 tasks | 3 files |
-| Phase 21-mqtt-performance P03 | 525224 | 3 tasks | 6 files |
+**By Milestone:**
+
+| Milestone | Phases | Plans | Status |
+|-----------|--------|-------|--------|
+| v1.0-v2.0 | 21 | 48 | Complete |
+| v2.1 | 4 | TBD | Not started |
 
 ## Accumulated Context
 
 ### Decisions
 
-All decisions from v1.0–v1.3 logged in PROJECT.md Key Decisions table.
-
-Key carry-forward notes:
-- [Build NOTE]: Fresh clone needs `cargo install ldproxy` and first build needs git submodule init in ESP-IDF dir
-- [OTA NOTE]: Verify `esp-idf-svc-0.51.0` OTA Cargo feature name before any OTA changes
-- [BLE NOTE]: BLE provisioning deferred — SoftAP chosen for v2.0; covers WiFi + MQTT in one web UI without custom app
-- [Phase 14]: EspSntp handle in main() scope prevents sntp_stop() on drop — mirrors _gnss_cmd_tx keep-alive pattern
-- [Phase 14]: CONFIG_LOG_TIMESTAMP_SOURCE_SYSTEM=y in sdkconfig.defaults switches ESP-IDF log from ms-since-boot to HH:MM:SS.mmm wall-clock
-- [Phase 14 P02]: QoS 0 (AtMostOnce) for /command subscription — prevents retain replay; old commands must not re-execute (CMD-02)
-- [Phase 14 P02]: Reboot check uses json.trim() == "reboot" before extract_json_str — graceful short-circuit for MAINT-01 without parse error noise
-- [Phase 14 P02]: command_relay_task uses blocking send() for gnss_cmd_tx to ensure no silent drops to UM980
-- [Phase 15 P01]: SoftAP uses open auth (AuthMethod::None), channel 6, SSID 'GNSS-Setup' — no password required from user
-- [Phase 15 P01]: HTTP server stack_size 10240 (not default 6144) to prevent stack overflow in POST handler
-- [Phase 15 P01]: MQTT port stored as two u8 NVS keys (mqtt_port_hi, mqtt_port_lo) — no set_u16 in EspNvs
-- [Phase 15 P01]: esp_restart() after credential save deferred 1s via spawned thread so browser receives HTTP 200
-- [Phase 15 P01]: 300s no-client timeout restarts WITHOUT force_softap so next boot tries STA with stored credentials
-- [Phase 15 P02]: wifi_connect_any does NOT enter SoftAP on failure — RESIL-01 reboot timer handles sustained WiFi failure (PROV-05)
-- [Phase 15 P02]: run_softap_portal is unreachable after return; SoftAP if-else branch ends with unreachable!() macro
-- [Phase 15 P02]: mqtt_connect username/password use None for empty strings — matches MqttClientConfiguration Option<&str> pattern
-- [Phase 15 P02]: config.rs is gitignored (credentials); SOFTAP constants added locally but not committed
-- [Phase 15]: GPIO9 polled every 100ms with 3s hold threshold; timer resets on release preventing accidental SoftAP re-entry
-- [Phase 15]: nvs passed by clone to spawn_ota since EspNvsPartition<NvsDefault> implements Clone cheaply
-- [Phase 16]: cc::Build include paths parsed from embuild cincl_args shell tokens — strip outer quotes, classify by -isystem/-I/-D prefix
-- [Phase 16]: mod log_relay added to main.rs in Plan 01 (not Plan 02) to allow cargo build verification; spawn_log_relay not called yet
-- [Phase 16]: spawn_log_relay returns anyhow::Result<()> — SyncSender stored in LOG_TX OnceLock, main.rs does not hold the sender
-- [Phase 16-remote-logging]: esp_idf_svc::log::set_target_level() free function used instead of EspLogger instance — EspLogger has cache field, not zero-sized; free function delegates to global LOGGER
-- [Phase 16-remote-logging]: Phase 16 LOG-01/02/03 pipeline complete: vprintf hook at Step 2b, spawn_log_relay at 9.5, log_level_relay_task at 9.6
-- [Phase 17-01]: spawn_gnss returns Arc<UartDriver<'static>> as 5th tuple element; main.rs update deferred to Plan 02
-- [Phase 17-01]: RTCM correction bytes written directly to Arc<UartDriver> (not gnss_cmd_tx String channel) to avoid binary data corruption
-- [Phase 17-01]: Custom inline base64 encoder avoids adding base64 crate dependency; NTRIP config no deduplication (reconnect on repeat payload)
-- [Phase 17]: ntrip/config dispatch placed BEFORE /config branch to prevent routing collision (both end with /config)
-- [Phase 17]: NTRIP_BACKOFF_STEPS kept in ntrip_client.rs as module-local const — no config.rs addition needed
-- [Phase 17-03]: strip_ansi uses byte scan (no regex crate) matching ESC-bracket pattern for ANSI SGR sequences from C vprintf path
-- [Phase 17-03]: UM980 reboot monitor uses warning fallback — NVS-backed gnss config re-apply deferred (config_relay reads MQTT channel not NVS)
-- [Phase 17-03]: um980_reboot channel bounded to 1 to coalesce rapid reboot signals; sentence_type cloned before nmea_tx move for reboot check
-- [Phase 17-ntrip-client]: DNS thread intentionally not stopped before 300s timeout: esp_restart() terminates all threads
-- [Phase 17-ntrip-client]: Captive portal probe URLs use meta-refresh HTML (200 OK) not HTTP 302 — matches existing into_ok_response() handler style
-- [Phase 17-04]: Hardware verification of captive portal detection deferred to end of milestone — will be validated alongside Phase 18 hardware sign-off
-- [Phase 18]: Sentinel values 0xFF/0xFFFF in gnss_state atomics indicate no GGA received; heartbeat emits JSON null — unambiguous vs 0 which means no-fix
-- [Phase 18]: HDOP stored as x10 integer in AtomicU32 (e.g. 1.2 -> 12); no AtomicF32 in std Rust; formatted back to 1-decimal in heartbeat JSON
-- [Phase 18]: ends_with('GGA') match in nmea_relay.rs handles GNGGA, GPGGA, GLGGA uniformly without exhaustive list
-- [Phase 18]: README authored from source inspection (led.rs timing, heartbeat null sentinel semantics) to ensure accuracy over plan approximations
-- [Phase 18-telemetry-and-ota-validation]: Hardware validation (OTA + captive portal) deferred to end-of-milestone sign-off session; testing.md checklist written with SHA-256 of canary binary
-- [Phase 19-01]: EspNetif::new_with_conf with RouterConfiguration.dns is the only lifecycle point that survives wifi.start() — post-start DHCP override via unsafe sys calls does not survive ESP-IDF reinit
-- [Phase 19-01]: WifiDriver::new + EspWifi::wrap_all pattern used to inject pre-configured ap_netif for SoftAP; STA netif uses default EspNetif::new(NetifStack::Sta) since STA not used in AP mode
-- [Phase 19]: TLS defaults false on key absence — old firmware never wrote mqtt_tls; absence == plain MQTT
-- [Phase 19]: config_ver=1 written on every credential save — idempotent NVS schema versioning convention
-- [Phase 19]: broker_url scheme switches mqtt:// vs mqtts:// based on tls bool from load_mqtt_config
-- [Phase 19-pre-2-0-bugfix]: BtnPhase enum defined inside GPIO9 thread closure — no module-level visibility required
-- [Phase 19-pre-2-0-bugfix]: Factory reset uses nvs_flash_erase() (all namespaces) — complete credential wipe for field recovery without touching OTA slot
-- [Phase 19-pre-2-0-bugfix]: FEAT-1 boot button: 3s hold flashes ButtonHold LED (warning); 10s hold sets Off LED (danger); release in each window acts accordingly
-- [Phase 20-01]: Windows/iOS captive portal probes require exact response bodies — redirect_html causes silent OS failure; /connecttest.txt returns 'Microsoft Connect Test', /ncsi.txt returns 'Microsoft NCSI', /hotspot-detect.html returns exact Apple success HTML
-- [Phase 20-02]: NMEA channel raised 64->128: 5 Hz x 8 sentence types = 40 msg/s; 128 provides ~3s headroom before drops
-- [Phase 20-02]: MQTT outbox expiry 5s (not default 30s): QoS 0 GNSS data older than 5s is irrelevant; prevents 1200+ message heap growth during disconnect
-- [Phase 20-03]: get_blob() returns Ok(Some(&[u8])) not Ok(Some(usize)) — fixed during Task 2; use data.len() and pass slice directly
-- [Phase 20-03]: NVS save_gnss_config called only after apply_config succeeds (not on hash-dedup skip) — NVS only holds applied configs
-- [Phase 20-03]: UM980 reboot monitor stack increased to 8192 for 512-byte vec allocation headroom; namespace 'gnss'/key 'gnss_config' follows 'prov'/'ntrip' convention
-- [Phase 20-field-testing-fixes]: run_ntrip_session dispatches to TCP or TLS path based on config.tls — no generics; EspTls set_read_timeout unavailability handled by clean split
-- [Phase 20-field-testing-fixes]: read_ntrip_headers accepts ICY 200 OK, HTTP/1.1 200, HTTP/1.0 200 — AUSCORS uses standard HTTP response not NTRIP v1 ICY
-- [Phase 20-field-testing-fixes]: Portal NTRIP section save non-fatal: WiFi/MQTT credentials committed first; ntrip_tls NVS key u8 0/1 consistent with mqtt_tls convention
-- [Phase 21-mqtt-performance]: LOG_REENTERING made pub in Plan 21-01 (not Plan 02) — required for mqtt_publish.rs to compile and pass clippy
-- [Phase 21-mqtt-performance]: MqttMessage::Rtcm uses bytes::Bytes for zero-copy RTCM3 payload; MQTT_OUTBOX_DROPS incremented conservatively on all enqueue errors
-- [Phase 21-mqtt-performance]: NMEA topic consolidated: all sentence types to single gnss/{id}/nmea topic — sentence type visible from payload prefix, zero information loss
-- [Phase 21-mqtt-performance]: LOG_REENTERING removed from log relay loop — publish_thread is sole owner of guard (prevents double-toggle edge case)
-- [Phase 21-mqtt-performance]: EventPayload::Deleted arm added before catch-all warn — increments MQTT_OUTBOX_DROPS for CONFIG_MQTT_REPORT_DELETED_MESSAGES telemetry
-- [Phase 21-mqtt-performance]: RTCM topic consolidated: all message types to single gnss/{id}/rtcm — message type in binary frame header, downstream consumers parse it
-- [Phase 21-mqtt-performance]: Subscribe variant added to MqttMessage: subscriber_loop routes subscribe calls via publish_thread which exclusively owns EspMqttClient — no Arc/Mutex needed for infrequent subscribe operation
-- [Phase 21-mqtt-performance]: OTA publish_status uses Heartbeat variant not Status: Status uses &'static [u8] (compile-time constants only); Heartbeat takes Vec<u8> for dynamic OTA JSON strings
-
-### Roadmap Evolution
-
-- Phase 19 added: pre-2.0-bugfix
-- Phase 20 added: Field testing fixes
-- Phase 21 added: MQTT performance
+Key carry-forward decisions affecting v2.1:
+- [v2.0]: Single publish thread owns EspMqttClient; SyncSender<MqttMessage> pattern — server follows similar message-passing design
+- [v2.0]: bytes crate for zero-copy RTCM on publish path — server receives these Bytes payloads from MQTT
+- [v2.1 planning]: resolver="2" mandatory in workspace root — prevents std feature unification into no_std gap crates (Cargo pitfall)
+- [v2.1 planning]: rtcm-rs 0.11 for server decode — avoids hand-rolled MSM cell mask and pseudorange bugs
+- [v2.1 planning]: GLONASS carrier phase without FCN is Option::None, written as 16 spaces in RINEX, never 0.0
+- [v2.1 revised]: Workspace restructure and nostd audit merged into Phase 22 — both produce no user-facing features and are tightly coupled groundwork; single phase avoids artificial split of interdependent setup work
+- [v2.1 revised 2]: Gap crate work interleaved with server feature phases — gnss-nvs in Phase 23, gnss-ota in Phase 24, remaining skeletons in Phase 25; avoids one large gap crate phase blocking delivery feedback; NOSTD-04 split into NOSTD-04a (gnss-ota, Phase 24) and NOSTD-04b (gnss-softap/dns/log, Phase 25)
 
 ### Pending Todos
 
-- Verify `esp-idf-svc` SoftAP/captive-portal API availability before Phase 15
-- Verify `esp-idf-svc::sntp` API before Phase 14
+None yet.
 
 ### Blockers/Concerns
 
-(none at phase 14 start)
+- [Phase 24]: rinex 0.21 OBS output format (2.x vs 3.x) unverified without running code — evaluate at Phase 24 start; DIY fallback is ~200-300 lines
+- [Phase 24]: rinex 0.21 NAV writer marked under construction — may need DIY fixed-width writer
+- [Phase 23]: esp-hal ecosystem moved fast in 2025; re-check esp-radio SoftAP password-protection and embedded-tls TLS 1.2 status before finalising gap table (Phase 22 audit will surface this)
+- [Phase 23]: sequential-storage + esp-hal flash driver on ESP32-C6 unverified — include minimal build test in phase
 
 ## Session Continuity
 
-Last session: 2026-03-11T19:49:55.095Z
-Stopped at: Completed 21-mqtt-performance 21-03-PLAN.md
+Last session: 2026-03-12
+Stopped at: v2.1 roadmap revised (4 phases, 22-25); ready to plan Phase 22
 Resume file: None
-Next action: Phase 19 Plan 02 — NVS versioning (BUG-3/BUG-4 fix).
+Next action: /gsd:plan-phase 22

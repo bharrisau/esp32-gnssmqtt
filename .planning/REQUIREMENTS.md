@@ -42,7 +42,8 @@ Requirements for the Server and nostd Foundation milestone. Each maps to roadmap
 - [ ] **NOSTD-01**: Complete audit of all `esp-idf-svc`, `esp-idf-hal`, and `esp-idf-sys` usages in the firmware mapped to embassy/esp-hal equivalents or flagged as gaps
 - [ ] **NOSTD-02**: `gnss-nvs` crate created with a `NvsStore` trait (namespaced, typed getters/setters, blob support) and ESP-IDF NVS backing implementation
 - [ ] **NOSTD-03**: `sequential-storage` backed `NvsStore` implementation started (nostd flash backing for embassy port)
-- [ ] **NOSTD-04**: Gap crate skeletons created for each remaining identified gap (OTA dual-slot, SoftAP/provisioning, DNS hijack, log hook), each with trait definitions and documented blocker
+- [ ] **NOSTD-04a**: `gnss-ota` gap crate — dual-slot OTA trait definition and `BLOCKER.md` documenting the specific nostd blocker preventing implementation today
+- [ ] **NOSTD-04b**: `gnss-softap` + `gnss-dns` + `gnss-log` gap crate skeletons — trait definitions and `BLOCKER.md` for each documenting specific nostd blockers
 
 ## Future Requirements
 
@@ -74,35 +75,36 @@ Requirements for the Server and nostd Foundation milestone. Each maps to roadmap
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+Which phases cover which requirements. Updated during roadmap revision 2026-03-12.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | — | Pending |
-| SRVR-01 | — | Pending |
-| SRVR-02 | — | Pending |
-| RTCM-01 | — | Pending |
-| RTCM-02 | — | Pending |
-| RTCM-03 | — | Pending |
-| RTCM-04 | — | Pending |
-| RINEX-01 | — | Pending |
-| RINEX-02 | — | Pending |
-| RINEX-03 | — | Pending |
-| RINEX-04 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
-| UI-03 | — | Pending |
-| UI-04 | — | Pending |
-| NOSTD-01 | — | Pending |
-| NOSTD-02 | — | Pending |
-| NOSTD-03 | — | Pending |
-| NOSTD-04 | — | Pending |
+| INFRA-01 | Phase 22 | Pending |
+| NOSTD-01 | Phase 22 | Pending |
+| SRVR-01 | Phase 23 | Pending |
+| SRVR-02 | Phase 23 | Pending |
+| RTCM-01 | Phase 23 | Pending |
+| RTCM-02 | Phase 23 | Pending |
+| RTCM-03 | Phase 23 | Pending |
+| RTCM-04 | Phase 23 | Pending |
+| NOSTD-02 | Phase 23 | Pending |
+| NOSTD-03 | Phase 23 | Pending |
+| RINEX-01 | Phase 24 | Pending |
+| RINEX-02 | Phase 24 | Pending |
+| RINEX-03 | Phase 24 | Pending |
+| RINEX-04 | Phase 24 | Pending |
+| NOSTD-04a | Phase 24 | Pending |
+| UI-01 | Phase 25 | Pending |
+| UI-02 | Phase 25 | Pending |
+| UI-03 | Phase 25 | Pending |
+| UI-04 | Phase 25 | Pending |
+| NOSTD-04b | Phase 25 | Pending |
 
 **Coverage:**
-- v2.1 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- v2.1 requirements: 20 total (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
+- Mapped to phases: 20
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-12*
-*Last updated: 2026-03-12 after initial definition*
+*Last updated: 2026-03-12 — roadmap revised to 4-phase interleaved structure (22-25); NOSTD-04 split into NOSTD-04a (Phase 24) and NOSTD-04b (Phase 25); gnss-nvs crate work (NOSTD-02, NOSTD-03) moved to Phase 23 alongside MQTT/RTCM3*
