@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Server and nostd Foundation
 status: planning
-stopped_at: Completed 22-workspace-nostd-audit 22-01-PLAN.md
-last_updated: "2026-03-12T02:36:27.901Z"
+stopped_at: Completed 22-workspace-nostd-audit 22-02-PLAN.md
+last_updated: "2026-03-12T03:16:12.470Z"
 last_activity: 2026-03-12 — v2.1 roadmap revised to 4 phases (22-25); gap crate work interleaved with server feature phases; 20/20 requirements mapped (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
   percent: 84
 ---
 
@@ -57,6 +57,7 @@ Phase 24 and Phase 25 both depend on Phase 23 and can run in parallel with each 
 | v1.0-v2.0 | 21 | 48 | Complete |
 | v2.1 | 4 | TBD | Not started |
 | Phase 22-workspace-nostd-audit P01 | 10 | 3 tasks | 10 files |
+| Phase 22-workspace-nostd-audit P02 | 2 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,12 @@ Key carry-forward decisions affecting v2.1:
 - [Phase 22-workspace-nostd-audit]: panic=immediate-abort replaced with -C panic=abort rustflag in firmware/.cargo/config.toml — Cargo workspace builds ignore member profiles; panic cannot be scoped per-package in workspace profile overrides
 - [Phase 22-workspace-nostd-audit]: Firmware builds from firmware/ directory using .cargo/config.toml with [unstable] build-std; workspace root config has no build.target
 - [Phase 22-workspace-nostd-audit]: rust-toolchain.toml kept at workspace root (nightly) and copied to firmware/; both locations ensure nightly is used from any invocation context
+- [Phase 22-workspace-nostd-audit]: NVS: log-based KV store with sequential-storage; crates must be ecosystem-reusable (not project-specific)
+- [Phase 22-workspace-nostd-audit]: OTA target is esp-hal (not pure no_std); willing to contribute to esp-hal-ota for ESP32-C6
+- [Phase 22-workspace-nostd-audit]: NTRIP TLS preferred: rustls unbuffered API with cert-hash pinning in config payload; alternative is RTCM-over-MQTT
+- [Phase 22-workspace-nostd-audit]: HTTP server candidates: picoserve (primary) and nanofish (smaller, client+server); evaluate size tradeoff
+- [Phase 22-workspace-nostd-audit]: MQTT client: benchmark Phase 23, implement Phase 24; SoftAP SSID: GNSS-[ID] with same value as WPA2 PSK
+- [Phase 22-workspace-nostd-audit]: SoftAP portal: WiFi station scan for SSID dropdown; UM980 reset:true field in /config plus first-boot trigger
 
 ### Pending Todos
 
@@ -87,7 +94,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T02:36:27.897Z
-Stopped at: Completed 22-workspace-nostd-audit 22-01-PLAN.md
+Last session: 2026-03-12T03:16:12.467Z
+Stopped at: Completed 22-workspace-nostd-audit 22-02-PLAN.md
 Resume file: None
 Next action: /gsd:plan-phase 22

@@ -78,7 +78,7 @@ Archive: `.planning/milestones/v2.0-ROADMAP.md`
 
 #### Phase Summary
 
-- [ ] **Phase 22: Workspace + Nostd Audit** - Establish Cargo workspace layout AND produce the complete ESP-IDF dependency audit mapped to embassy/nostd equivalents or flagged as gaps
+- [x] **Phase 22: Workspace + Nostd Audit** - Establish Cargo workspace layout AND produce the complete ESP-IDF dependency audit mapped to embassy/nostd equivalents or flagged as gaps (completed 2026-03-12)
 - [ ] **Phase 23: MQTT + RTCM3 + gnss-nvs crate** - Server subscribes to MQTT, decodes all RTCM3 MSM and ephemeris messages into verified observation structs, AND implements the gnss-nvs crate with NvsStore trait, ESP-IDF impl, and sequential-storage impl
 - [ ] **Phase 24: RINEX Files + gnss-ota gap crate** - Server writes hourly-rotating RINEX 2.11 observation and navigation files accepted by RTKLIB, AND implements the gnss-ota gap crate with dual-slot OTA trait and documented nostd blocker
 - [ ] **Phase 25: Web UI + remaining gap crate skeletons** - HTTP + WebSocket server pushes live satellite skyplot, SNR bar chart, and device health panel to browser, AND implements gnss-softap, gnss-dns, and gnss-log gap crate skeletons with trait definitions and BLOCKER.md
@@ -162,7 +162,7 @@ Plans:
 | 19. Pre-2.0 Bugfix | v2.0 | 3/3 | Complete | 2026-03-10 |
 | 20. Field Testing Fixes | v2.0 | 4/4 | Complete | 2026-03-11 |
 | 21. MQTT Performance | v2.0 | 3/3 | Complete | 2026-03-12 |
-| 22. Workspace + Nostd Audit | 1/2 | In Progress|  | - |
+| 22. Workspace + Nostd Audit | 2/2 | Complete   | 2026-03-12 | - |
 | 23. MQTT + RTCM3 + gnss-nvs crate | v2.1 | 0/TBD | Not started | - |
 | 24. RINEX Files + gnss-ota gap crate | v2.1 | 0/TBD | Not started | - |
 | 25. Web UI + remaining gap crate skeletons | v2.1 | 0/TBD | Not started | - |

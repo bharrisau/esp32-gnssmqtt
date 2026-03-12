@@ -39,7 +39,7 @@ Requirements for the Server and nostd Foundation milestone. Each maps to roadmap
 
 ### nostd / Embassy Gap Work
 
-- [ ] **NOSTD-01**: Complete audit of all `esp-idf-svc`, `esp-idf-hal`, and `esp-idf-sys` usages in the firmware mapped to embassy/esp-hal equivalents or flagged as gaps
+- [x] **NOSTD-01**: Complete audit of all `esp-idf-svc`, `esp-idf-hal`, and `esp-idf-sys` usages in the firmware mapped to embassy/esp-hal equivalents or flagged as gaps
 - [ ] **NOSTD-02**: `gnss-nvs` crate created with a `NvsStore` trait (namespaced, typed getters/setters, blob support) and ESP-IDF NVS backing implementation
 - [ ] **NOSTD-03**: `sequential-storage` backed `NvsStore` implementation started (nostd flash backing for embassy port)
 - [ ] **NOSTD-04a**: `gnss-ota` gap crate — dual-slot OTA trait definition and `BLOCKER.md` documenting the specific nostd blocker preventing implementation today
@@ -80,7 +80,7 @@ Which phases cover which requirements. Updated during roadmap revision 2026-03-1
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | INFRA-01 | Phase 22 | Complete |
-| NOSTD-01 | Phase 22 | Pending |
+| NOSTD-01 | Phase 22 | Complete |
 | SRVR-01 | Phase 23 | Pending |
 | SRVR-02 | Phase 23 | Pending |
 | RTCM-01 | Phase 23 | Pending |
