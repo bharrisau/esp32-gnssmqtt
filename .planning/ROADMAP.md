@@ -145,7 +145,12 @@ Plans:
   3. Browser renders an SNR/C/N0 bar chart with one bar per tracked satellite, coloured or labelled by constellation
   4. Browser shows a device health panel with uptime, fix type, satellite count, HDOP, and heap free from the MQTT heartbeat topic; panel updates within 35 seconds of a heartbeat change
   5. `gnss-softap`, `gnss-dns`, and `gnss-log` crates each exist with a trait definition file and a `BLOCKER.md` documenting specifically what prevents a nostd implementation today
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Web server modules: nmea_parse.rs (GSV accumulator), web_server.rs (axum router + WebSocket), static/index.html (browser client), Cargo.toml + config.rs updates
+- [ ] 25-02-PLAN.md — main.rs wiring: broadcast channel, run_decode_task extended for Nmea + Heartbeat variants, web_server task spawned
+- [ ] 25-03-PLAN.md — Gap crate skeletons: gnss-softap, gnss-dns, gnss-log (trait definitions + BLOCKER.md each)
 
 ## Progress
 
@@ -175,4 +180,4 @@ Plans:
 | 22. Workspace + Nostd Audit | v2.1 | 2/2 | Complete | 2026-03-12 |
 | 23. MQTT + RTCM3 + gnss-nvs crate | 3/3 | Complete    | 2026-03-12 | - |
 | 24. RINEX Files + gnss-ota gap crate | 3/3 | Complete    | 2026-03-12 | - |
-| 25. Web UI + remaining gap crate skeletons | v2.1 | 0/TBD | Not started | - |
+| 25. Web UI + remaining gap crate skeletons | v2.1 | 0/3 | Not started | - |
