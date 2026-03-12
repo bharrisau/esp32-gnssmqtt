@@ -71,11 +71,11 @@ Expected: `downloading` → reboot → `mark_running_slot_valid` in `/log` → h
 
 Clear retained trigger after success (empty payload, retained).
 
-- [ ] OTA download completed without error
-- [ ] Device rebooted and reconnected to MQTT
-- [ ] `mark_running_slot_valid` in `/log`
-- [ ] Retained trigger cleared
-- [ ] **Requires BUG-3/BUG-4 fix first**
+- [X] OTA download completed without error
+- [X] Device rebooted and reconnected to MQTT
+- [X] `mark_running_slot_valid` in `/log`
+- [X] Retained trigger cleared
+- [X] **Requires BUG-3/BUG-4 fix first**
 
 ### Part B — Heartbeat GNSS Fields (TELEM-01)
 
@@ -86,9 +86,9 @@ Subscribe to `gnss/FFFEB5/heartbeat` and verify:
 - `fix_type`: 0=No fix, 1=GPS, 2=DGPS, 4=RTK Fixed, 5=RTK Float, 6=Dead reckoning
 - All three fields `null` before first GGA sentence received
 
-- [ ] `fix_type`, `satellites`, `hdop` present in heartbeat JSON
-- [ ] Fields `null` before GNSS lock
-- [ ] `fix_type=4` when RTK correction active
+- [X] `fix_type`, `satellites`, `hdop` present in heartbeat JSON
+- [X] Fields `null` before GNSS lock
+- [X] `fix_type=4` when RTK correction active
 
 ### Part C — SoftAP Captive Portal
 
@@ -100,15 +100,30 @@ On Android and iOS:
 3. Confirm provisioning form renders in browser
 4. Allow 300s timeout or reboot to restore normal operation
 
-- [ ] Android: captive portal notification shown — **requires BUG-1 + BUG-2 fix**
+- [X] Android: captive portal notification shown — **requires BUG-1 + BUG-2 fix**
 - [ ] iOS: captive portal notification shown
-- [ ] Provisioning form renders correctly on mobile browser
+- [X] Provisioning form renders correctly on mobile browser
 
 ### Decision: Canary Version Line
 
 After OTA validation:
 - **Keep**: leave `esp32-gnssmqtt v2.0-ota-canary` in `src/main.rs`
 - **Revert**: remove canary suffix before milestone tag
+
+---
+
+## Phase 24 Hardware Tests (deferred — device FFFEB5)
+
+### RINEX-04: RTKLIB acceptance test
+**Test:** Run server against live RTCM3 stream, collect `.26O` observation and `.26P` navigation files, then run:
+```
+rnx2rtkp -x 5 output.26O output.26P
+```
+**Pass criteria:** No parse errors; `rtkplot` displays valid position data.
+
+### RINEX-01/03: Hourly file rotation
+**Test:** Run server spanning a UTC hour boundary (e.g. 09:59 → 10:01).
+**Pass criteria:** New `.26O` and `.26P` files are created at the hour boundary with fresh headers; old files are closed/flushed.
 
 ---
 

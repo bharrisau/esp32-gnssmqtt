@@ -174,5 +174,5 @@ Plans:
 | 21. MQTT Performance | v2.0 | 3/3 | Complete | 2026-03-12 |
 | 22. Workspace + Nostd Audit | v2.1 | 2/2 | Complete | 2026-03-12 |
 | 23. MQTT + RTCM3 + gnss-nvs crate | 3/3 | Complete    | 2026-03-12 | - |
-| 24. RINEX Files + gnss-ota gap crate | 3/3 | Complete   | 2026-03-12 | - |
+| 24. RINEX Files + gnss-ota gap crate | 3/3 | Complete    | 2026-03-12 | - |
 | 25. Web UI + remaining gap crate skeletons | v2.1 | 0/TBD | Not started | - |

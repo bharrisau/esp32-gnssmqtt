@@ -4,7 +4,7 @@ milestone: v2.1
 milestone_name: Server and nostd Foundation
 status: planning
 stopped_at: Completed 24-02-PLAN.md
-last_updated: "2026-03-12T07:53:43.366Z"
+last_updated: "2026-03-12T07:58:26.032Z"
 last_activity: 2026-03-12 — v2.1 roadmap revised to 4 phases (22-25); gap crate work interleaved with server feature phases; 20/20 requirements mapped (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
 progress:
   total_phases: 4
