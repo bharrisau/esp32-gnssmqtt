@@ -195,6 +195,54 @@
 - Sessions: ~6 (context resets between phases; field testing loop added 2 extra sessions)
 - Notable: Phase 20 field fixes and Phase 21 refactor were both planned and executed in single sessions without escalation
 
+## Milestone: v2.1 — Server and nostd Foundation
+
+**Shipped:** 2026-03-12
+**Phases:** 4 (22-25) | **Plans:** 11 | **Duration:** 1 day
+
+### What Was Built
+
+- Cargo workspace restructured with resolver=2; firmware/ + gnss-server/ + crates/* members; panic=abort via rustflag scoped to embedded target
+- Complete ESP-IDF nostd audit — 27 usages across 12 categories, gap priority ranking, implementation notes
+- gnss-nvs crate: NvsStore trait + ESP-IDF impl + sequential-storage skeleton (first gap crate with actual implementation)
+- RTCM3 MSM4/MSM7 decode pipeline using rtcm-rs 0.11; EpochBuffer flush-on-change; GPS/GLONASS/Galileo/BeiDou + ephemeris 1019/1020/1046/1042
+- RINEX 2.11 observation (.26O) + navigation (.26P) writers with hourly rotation, D19.12 Fortran formatter, GPS week tracking
+- axum HTTP + WebSocket server: polar skyplot SVG, SNR bar chart, device health panel; GsvAccumulator multi-sentence state machine
+- 5 gap crate skeletons: gnss-ota, gnss-softap, gnss-dns, gnss-log — trait definitions + BLOCKER.md documenting exactly what blocks nostd implementation
+
+### What Worked
+
+- **Single-day execution** — all 4 phases and 11 plans completed in one day; clean parallel dependency graph (Phase 23 → Phase 24 + Phase 25 in parallel) enabled efficient ordering
+- **rtcm-rs 0.11 was the right choice** — avoids hand-rolled MSM cell mask and pseudorange bugs; private module paths forced inline signal extraction which turned out cleaner
+- **TDD discipline throughout** — RED tests before GREEN implementation caught plan errors (BeiDou msg1042 vs 1044, D19.12 zero-case, nav header label) before they became integration bugs
+- **Gap crates as trait-only skeletons** — captures exactly what is needed for the embassy port without blocking delivery; BLOCKER.md format proved concise and actionable
+- **Workspace resolver=2** — prevents std feature unification into no_std crates; the pattern was well-understood from planning and executed without surprises
+
+### What Was Inefficient
+
+- **GN-talker functional gap** — nmea 0.7 doesn't support $GN combined-constellation talker (UM980 default); discovered during TDD, worked around in tests with GP talker, but means skyplot/SNR chart won't update with real device data; should be addressed in v2.2 (configure UM980 per-constellation talkers or upgrade nmea crate)
+- **gnss-nvs not wired into firmware** — crate exists with good coverage but firmware still calls EspNvs directly; intentionally deferred but creates a gap between the crate and its actual use
+- **Nyquist VALIDATION.md files not updated post-execution** — all 4 phases have VALIDATION.md with nyquist_compliant: false; planning artifacts created but never updated; run /gsd:validate-phase 22-25 to close
+
+### Patterns Established
+
+- Workspace Cargo.toml resolver=2 with no build.target; embedded target exclusively in firmware/.cargo/config.toml — copy this verbatim for any future Rust embedded + server workspace
+- RTCM3 epoch buffer pattern: EpochBuffer::push() accumulates; epoch_key=0 as sentinel; flush-on-change returns EpochGroup for downstream writers
+- Gap crate template: trait-only, no external deps, `BLOCKER.md` with specific crate/issue references — repeat for all future gap crates
+- broadcast::channel with `_discard` receiver in main() — keeps channel open when no WebSocket clients are connected
+
+### Key Lessons
+
+- Check NMEA crate talker support early when targeting UM980 — it emits $GN by default; this caused test friction and a known production gap
+- Plan RINEX spec-checking tests with the exact column widths before implementing; the D19.12 zero case and nav header label were both caught by TDD in the GREEN phase, not during planning
+- Gap crates should be validated against hardware before marking NOSTD requirements as fully satisfied — gnss-nvs sequential-storage impl is code-complete but not device-tested
+
+### Cost Observations
+
+- Profile: sonnet (balanced profile throughout)
+- Sessions: 1 (full milestone in single context)
+- Notable: All 11 plans executed without escalation; BeiDou ephemeris type correction and RINEX format bugs caught by TDD before integration
+
 ## Cross-Milestone Trends
 
 | Milestone | Phases | Plans | Duration | Notes |
@@ -203,3 +251,4 @@
 | v1.1 GNSS Relay | 3 | 6 | 3 days | Full relay pipeline; hardware-verified throughout |
 | v1.3 Reliability Hardening | 7 | 15 | 2 days | Fast execution; post-phase hardware testing caught real bugs |
 | v2.0 Field Deployment | 8 | 24 | 4 days | Largest milestone; 3 unplanned field-fix phases; MQTT refactor eliminating Arc<Mutex> |
+| v2.1 Server + nostd | 4 | 11 | 1 day | First server + crate milestone; single-day execution; TDD caught 3 plan-level spec errors |

@@ -7,7 +7,7 @@
 - ✅ **v1.2 Observations + OTA** — Phases 7-8 (shipped 2026-03-07)
 - ✅ **v1.3 Reliability Hardening** — Phases 9-13 (shipped 2026-03-08)
 - ✅ **v2.0 Field Deployment** — Phases 14-21 (shipped 2026-03-12)
-- 🚧 **v2.1 Server and nostd Foundation** — Phases 22-25 (in progress)
+- ✅ **v2.1 Server and nostd Foundation** — Phases 22-25 (shipped 2026-03-12)
 
 ## Phases
 
@@ -72,85 +72,17 @@ Archive: `.planning/milestones/v2.0-ROADMAP.md`
 
 </details>
 
-### 🚧 v2.1 Server and nostd Foundation (In Progress)
+<details>
+<summary>✅ v2.1 Server and nostd Foundation (Phases 22-25) — SHIPPED 2026-03-12</summary>
 
-**Milestone Goal:** Build a companion Rust server (RTCM3 → RINEX files + live web UI) and scaffold the embassy/nostd crate ecosystem needed to eventually port the firmware off ESP-IDF.
+- [x] Phase 22: Workspace + Nostd Audit (2/2 plans) — completed 2026-03-12
+- [x] Phase 23: MQTT + RTCM3 + gnss-nvs crate (3/3 plans) — completed 2026-03-12
+- [x] Phase 24: RINEX Files + gnss-ota gap crate (3/3 plans) — completed 2026-03-12
+- [x] Phase 25: Web UI + remaining gap crate skeletons (3/3 plans) — completed 2026-03-12
 
-#### Phase Summary
+Archive: `.planning/milestones/v2.1-ROADMAP.md`
 
-- [x] **Phase 22: Workspace + Nostd Audit** - Establish Cargo workspace layout AND produce the complete ESP-IDF dependency audit mapped to embassy/nostd equivalents or flagged as gaps (completed 2026-03-12)
-- [x] **Phase 23: MQTT + RTCM3 + gnss-nvs crate** - Server subscribes to MQTT, decodes all RTCM3 MSM and ephemeris messages into verified observation structs, AND implements the gnss-nvs crate with NvsStore trait, ESP-IDF impl, and sequential-storage impl (completed 2026-03-12)
-- [x] **Phase 24: RINEX Files + gnss-ota gap crate** - Server writes hourly-rotating RINEX 2.11 observation and navigation files accepted by RTKLIB, AND implements the gnss-ota gap crate with dual-slot OTA trait and documented nostd blocker (completed 2026-03-12)
-- [x] **Phase 25: Web UI + remaining gap crate skeletons** - HTTP + WebSocket server pushes live satellite skyplot, SNR bar chart, and device health panel to browser, AND implements gnss-softap, gnss-dns, and gnss-log gap crate skeletons with trait definitions and BLOCKER.md (completed 2026-03-12)
-
-## Phase Details
-
-### Phase 22: Workspace + Nostd Audit
-**Goal**: Developer can build firmware and server from a single Cargo workspace without target conflicts, and every ESP-IDF dependency usage is mapped to an embassy/nostd equivalent or explicitly flagged as a gap
-**Depends on**: Nothing (first v2.1 phase)
-**Requirements**: INFRA-01, NOSTD-01
-**Success Criteria** (what must be TRUE):
-  1. `cargo build -p esp32-gnssmqtt-firmware` succeeds for the ESP32-C6 RISC-V target from the workspace root; `cargo build -p gnss-server` succeeds for the host target from the workspace root
-  2. Building the server does not pull `std` features into the no_std gap crate members (resolver="2" verified by inspecting the dependency graph)
-  3. The firmware `.cargo/config.toml` applies only to the `firmware/` member — server and gap crate builds are unaffected by embedded-target overrides
-  4. Audit document enumerates every `esp-idf-svc`, `esp-idf-hal`, and `esp-idf-sys` usage by category (WiFi, NVS, OTA, UART, TLS, log hook, SoftAP, DNS), with each usage mapped to an esp-hal/embassy equivalent or marked as a gap with the specific blocker recorded
-  5. Gap list is prioritised — NVS, OTA, SoftAP, DNS hijack, and log hook explicitly ranked for Phase 23-25 implementation order; document committed to the repo
-**Plans**: 2 plans
-
-Plans:
-- [ ] 22-01-PLAN.md — Workspace restructure: root Cargo.toml, firmware/ member, gnss-server stub, both builds verified
-- [ ] 22-02-PLAN.md — Nostd audit document: all 12 ESP-IDF categories mapped with gap priority ranking
-
-### Phase 23: MQTT + RTCM3 + gnss-nvs crate
-**Goal**: Server connects to MQTT and decodes all RTCM3 MSM and ephemeris messages into verified observation structs; gnss-nvs crate provides a working NvsStore trait with ESP-IDF and sequential-storage implementations
-**Depends on**: Phase 22
-**Requirements**: SRVR-01, SRVR-02, RTCM-01, RTCM-02, RTCM-03, RTCM-04, NOSTD-02, NOSTD-03
-**Success Criteria** (what must be TRUE):
-  1. Server connects to MQTT broker and subscribes to `gnss/{id}/rtcm`, `gnss/{id}/nmea`, and `gnss/{id}/heartbeat` for a configured device ID; reconnects automatically after broker disconnect with exponential backoff (observable via server logs)
-  2. Server decodes MSM4/MSM7 pseudorange, carrier phase, and C/N0 for GPS and GLONASS; missing GLONASS carrier phase (no FCN) is represented as None, never 0.0
-  3. Server decodes MSM messages for Galileo and BeiDou (best-effort) and ephemeris messages 1019, 1020, 1046, 1044; decoded observations from a single epoch (~10ms window) are grouped before emission with epoch boundary visible in server log output
-  4. `gnss-nvs` crate exists with a `NvsStore` trait (namespaced, typed getters/setters, blob support) and a working ESP-IDF NVS concrete implementation that compiles for the ESP32-C6 target
-  5. `gnss-nvs` contains a started `sequential-storage`-backed `NvsStore` implementation (compiles; hardware validation deferred to a future milestone)
-**Plans**: 3 plans
-
-Plans:
-- [ ] 23-01-PLAN.md — gnss-nvs crate: NvsStore trait + ESP-IDF impl + sequential-storage impl skeleton
-- [ ] 23-02-PLAN.md — gnss-server foundation: config loading (figment TOML+env) + MQTT supervisor task (watch channel, exponential backoff)
-- [ ] 23-03-PLAN.md — RTCM3 decode pipeline: observation types, MSM + ephemeris decode, epoch buffer with flush-on-change
-
-### Phase 24: RINEX Files + gnss-ota gap crate
-**Goal**: Server writes RINEX 2.11 observation and navigation files that RTKLIB accepts without error; gnss-ota gap crate defines the dual-slot OTA trait with a documented nostd blocker
-**Depends on**: Phase 23
-**Requirements**: RINEX-01, RINEX-02, RINEX-03, RINEX-04, NOSTD-04a
-**Success Criteria** (what must be TRUE):
-  1. Server produces `.26O` observation files with correct RINEX 2.11 column-positioned format; files rotate to a new file at each UTC hour boundary
-  2. Observation file headers contain all mandatory records (VERSION/TYPE, TYPES OF OBSERV, WAVELENGTH FACT, TIME OF FIRST OBS, APPROX POSITION XYZ, END OF HEADER) with labels in columns 61-80
-  3. Server produces `.26P` mixed navigation files from decoded ephemeris messages with hourly rotation
-  4. `rnx2rtkp` or `rtkplot` processes the output files without parse errors (validated manually against a real RTCM3 stream)
-  5. `gnss-ota` crate exists with a dual-slot OTA trait definition and a `BLOCKER.md` documenting specifically what prevents a nostd implementation today
-**Plans**: 3 plans
-
-Plans:
-- [ ] 24-01-PLAN.md — Observation struct fix (rough_range_ms) + RINEX 2.11 obs writer with header, epoch, unit converters
-- [ ] 24-02-PLAN.md — RINEX nav writer (GPS + GLONASS D19.12) + GPS week tracking + main.rs wiring
-- [ ] 24-03-PLAN.md — gnss-ota crate: OtaSlot + OtaManager traits (no_std) + BLOCKER.md
-
-### Phase 25: Web UI + remaining gap crate skeletons
-**Goal**: Browser shows a live satellite skyplot, SNR bar chart, and device health panel updated from the running server; gnss-softap, gnss-dns, and gnss-log gap crate skeletons exist with trait definitions and documented blockers
-**Depends on**: Phase 23
-**Requirements**: UI-01, UI-02, UI-03, UI-04, NOSTD-04b
-**Success Criteria** (what must be TRUE):
-  1. HTTP GET to the server root returns an HTML page; a WebSocket connection from that page receives satellite state JSON at approximately 1 Hz
-  2. Browser renders a polar SVG skyplot showing each satellite's PRN label at its elevation/azimuth position, updated from NMEA GSV sentences
-  3. Browser renders an SNR/C/N0 bar chart with one bar per tracked satellite, coloured or labelled by constellation
-  4. Browser shows a device health panel with uptime, fix type, satellite count, HDOP, and heap free from the MQTT heartbeat topic; panel updates within 35 seconds of a heartbeat change
-  5. `gnss-softap`, `gnss-dns`, and `gnss-log` crates each exist with a trait definition file and a `BLOCKER.md` documenting specifically what prevents a nostd implementation today
-**Plans**: 3 plans
-
-Plans:
-- [ ] 25-01-PLAN.md — Web server modules: nmea_parse.rs (GSV accumulator), web_server.rs (axum router + WebSocket), static/index.html (browser client), Cargo.toml + config.rs updates
-- [ ] 25-02-PLAN.md — main.rs wiring: broadcast channel, run_decode_task extended for Nmea + Heartbeat variants, web_server task spawned
-- [ ] 25-03-PLAN.md — Gap crate skeletons: gnss-softap, gnss-dns, gnss-log (trait definitions + BLOCKER.md each)
+</details>
 
 ## Progress
 
@@ -178,6 +110,6 @@ Plans:
 | 20. Field Testing Fixes | v2.0 | 4/4 | Complete | 2026-03-11 |
 | 21. MQTT Performance | v2.0 | 3/3 | Complete | 2026-03-12 |
 | 22. Workspace + Nostd Audit | v2.1 | 2/2 | Complete | 2026-03-12 |
-| 23. MQTT + RTCM3 + gnss-nvs crate | 3/3 | Complete    | 2026-03-12 | - |
-| 24. RINEX Files + gnss-ota gap crate | 3/3 | Complete    | 2026-03-12 | - |
-| 25. Web UI + remaining gap crate skeletons | 3/3 | Complete    | 2026-03-12 | - |
+| 23. MQTT + RTCM3 + gnss-nvs crate | v2.1 | 3/3 | Complete | 2026-03-12 |
+| 24. RINEX Files + gnss-ota gap crate | v2.1 | 3/3 | Complete | 2026-03-12 |
+| 25. Web UI + remaining gap crate skeletons | v2.1 | 3/3 | Complete | 2026-03-12 |

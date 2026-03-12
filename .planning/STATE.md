@@ -2,72 +2,47 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Server and nostd Foundation
-status: planning
-stopped_at: Completed 25-02-PLAN.md — plan 25-02 fully complete including human-verify checkpoint
-last_updated: "2026-03-12T11:55:36.177Z"
-last_activity: 2026-03-12 — v2.1 roadmap revised to 4 phases (22-25); gap crate work interleaved with server feature phases; 20/20 requirements mapped (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
+status: complete
+stopped_at: Milestone v2.1 archived — ready for /gsd:new-milestone
+last_updated: "2026-03-12T12:40:00.000Z"
+last_activity: 2026-03-12 — v2.1 milestone complete; 4 phases (22-25), 11 plans; server + nostd gap crates shipped and archived
 progress:
   total_phases: 4
   completed_phases: 4
   total_plans: 11
   completed_plans: 11
-  percent: 84
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-12)
+See: .planning/PROJECT.md (updated 2026-03-12 after v2.1 milestone)
 
 **Core value:** GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker in real time, with remote reconfiguration, OTA updates, and automatic recovery — safe for unattended operation.
-**Current focus:** Phase 22 — Workspace + Nostd Audit (v2.1 start)
+**Current focus:** Planning next milestone (v2.2)
 
 ## Current Position
 
-Phase: 22 of 25 (Workspace + Nostd Audit)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-03-12 — v2.1 roadmap revised to 4 phases (22-25); gap crate work interleaved with server feature phases; 20/20 requirements mapped (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
+Milestone: v2.1 complete — Server and nostd Foundation shipped 2026-03-12
+Status: Archived — ready for /gsd:new-milestone
 
-Progress: [████████████████████░░░░░] 84% (21/25 phases complete across all milestones)
+Progress: [█████████████████████████] 100% (all 25 phases across v1.0-v2.1 complete)
 
-## Execution Path
-
-Phase dependencies for v2.1:
-
-```
-22 (Workspace + Audit) → 23 (MQTT + RTCM3 + gnss-nvs) → 24 (RINEX + gnss-ota)
-                                                        → 25 (Web UI + gap skeletons)
-```
-
-Phase 24 and Phase 25 both depend on Phase 23 and can run in parallel with each other once Phase 23 completes.
-
-## Performance Metrics
-
-**Velocity (v2.0 reference):**
-- Total plans completed: 48 (v1.0-v2.0 combined)
-- v2.0: 24 plans across 8 phases
-- Trend: Stable
-
-**By Milestone:**
+## v2.1 Summary
 
 | Milestone | Phases | Plans | Status |
 |-----------|--------|-------|--------|
 | v1.0-v2.0 | 21 | 48 | Complete |
-| v2.1 | 4 | TBD | Not started |
-| Phase 22-workspace-nostd-audit P01 | 10 | 3 tasks | 10 files |
-| Phase 22-workspace-nostd-audit P02 | 2 | 2 tasks | 1 files |
-| Phase 23-mqtt-rtcm3-gnss-nvs-crate P02 | 5 | 2 tasks | 4 files |
-| Phase 23-mqtt-rtcm3-gnss-nvs-crate P01 | 14 | 3 tasks | 6 files |
-| Phase 23-mqtt-rtcm3-gnss-nvs-crate P03 | 7 | 1 tasks | 6 files |
-| Phase 24-rinex-files-gnss-ota-gap-crate P03 | 2 | 1 tasks | 3 files |
-| Phase 24-rinex-files-gnss-ota-gap-crate P01 | 11 | 1 tasks | 5 files |
-| Phase 24-rinex-files-gnss-ota-gap-crate P02 | 7 | 2 tasks | 3 files |
-| Phase 25-web-ui-remaining-gap-crate-skeletons P01 | 10 | 2 tasks | 6 files |
-| Phase 25-web-ui-remaining-gap-crate-skeletons P03 | 3 | 2 tasks | 9 files |
-| Phase 25-web-ui-remaining-gap-crate-skeletons P02 | 5 | 1 tasks | 1 files |
-| Phase 25-web-ui-remaining-gap-crate-skeletons P02 | 10 | 2 tasks | 1 files |
+| v2.1 | 4 (22-25) | 11 | Complete |
+
+## Known Tech Debt for v2.2 Planning
+
+- **GN-talker gap**: nmea 0.7 ignores $GN combined-constellation talker; UM980 emits $GN by default — skyplot/SNR chart will not update with real device data; fix: configure UM980 per-constellation talkers or upgrade nmea crate
+- **gnss-nvs not wired into firmware**: firmware still calls EspNvs directly; crate is ready but intentionally deferred
+- **Hardware testing**: RINEX-04 rnx2rtkp test + hourly rotation test pending on device FFFEB5 (see testing.md)
+- **Nyquist compliance**: Phases 22-25 have VALIDATION.md with nyquist_compliant: false — run /gsd:validate-phase 22/23/24/25
 
 ## Accumulated Context
 
@@ -111,20 +86,9 @@ Key carry-forward decisions affecting v2.1:
 - [Phase 25-web-ui-remaining-gap-crate-skeletons]: broadcast::channel capacity 16 in main(); _ws_rx_discard holds receiver so channel stays open when no WebSocket clients connected
 - [Phase 25-web-ui-remaining-gap-crate-skeletons]: broadcast::channel capacity 16 in main(); _ws_rx_discard holds receiver so channel stays open when no WebSocket clients connected
 
-### Pending Todos
-
-None yet.
-
-### Blockers/Concerns
-
-- [Phase 24]: rinex 0.21 OBS output format (2.x vs 3.x) unverified without running code — evaluate at Phase 24 start; DIY fallback is ~200-300 lines
-- [Phase 24]: rinex 0.21 NAV writer marked under construction — may need DIY fixed-width writer
-- [Phase 23]: esp-hal ecosystem moved fast in 2025; re-check esp-radio SoftAP password-protection and embedded-tls TLS 1.2 status before finalising gap table (Phase 22 audit will surface this)
-- [Phase 23]: sequential-storage + esp-hal flash driver on ESP32-C6 unverified — include minimal build test in phase
-
 ## Session Continuity
 
-Last session: 2026-03-12T11:51:38.270Z
-Stopped at: Completed 25-02-PLAN.md — plan 25-02 fully complete including human-verify checkpoint
+Last session: 2026-03-12
+Stopped at: v2.1 milestone archived
 Resume file: None
-Next action: /gsd:plan-phase 22
+Next action: /gsd:new-milestone

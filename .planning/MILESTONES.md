@@ -1,5 +1,19 @@
 # Milestones
 
+## v2.1 Server and nostd Foundation (Shipped: 2026-03-12)
+
+**Phases completed:** 4 phases (22-25), 11 plans
+**LOC:** ~12,331 lines added (Rust server + gap crates)
+**Timeline:** 2026-03-12 (single day)
+
+**Key accomplishments:**
+- Phase 22: Cargo workspace restructured with resolver=2; firmware/ + gnss-server/ + crates/* members; embedded target scoped to firmware/.cargo/config.toml; complete ESP-IDF nostd audit across 12 categories (27 usages mapped to embassy/nostd or flagged as gaps with priority ranking)
+- Phase 23: gnss-nvs crate with NvsStore trait, ESP-IDF NVS impl, sequential-storage skeleton; Server subscribes to MQTT and reconnects with exponential backoff; RTCM3 MSM4/MSM7 decode for GPS/GLONASS/Galileo/BeiDou + 4 ephemeris types; EpochBuffer flush-on-change; 8 unit tests with real fixture data
+- Phase 24: RINEX 2.11 observation files (.26O) with hourly rotation, mandatory headers, column-exact format; RINEX 2.11 navigation files (.26P) with D19.12 Fortran format and GPS week tracking; gnss-ota gap crate with OtaSlot + OtaManager traits and BLOCKER.md
+- Phase 25: axum 0.7 HTTP + WebSocket server with live polar satellite skyplot SVG, SNR bar chart, device health panel; broadcast fan-out to multiple WebSocket clients; gnss-softap, gnss-dns, gnss-log gap crate skeletons with trait definitions and BLOCKER.md each; 38+ tests passing
+
+---
+
 ## v2.0 Field Deployment (Shipped: 2026-03-12)
 
 **Phases completed:** 8 phases (14-21), 24 plans

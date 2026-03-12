@@ -116,6 +116,14 @@ None — no external service configuration required.
 - ServerConfig fields (device_id, mqtt.*) are all available via Arc<ServerConfig> passed to supervisor
 - Watch channel provides connection state to any future consumer (RINEX writer, web UI status endpoint)
 
+## Self-Check: PASSED
+
+- config.rs: FOUND
+- mqtt.rs: FOUND
+- SUMMARY.md: FOUND
+- Commit 1bb06c9 (Task 1): FOUND
+- Commit 11e6338 (Task 2): FOUND
+
 ---
 *Phase: 23-mqtt-rtcm3-gnss-nvs-crate*
 *Completed: 2026-03-12*

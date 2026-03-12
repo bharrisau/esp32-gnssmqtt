@@ -4,7 +4,9 @@
 
 Rust firmware for the ESP32-C6 (XIAO Seeed) that bridges a UM980 GNSS module to an MQTT broker over WiFi. The device reads NMEA sentences and RTCM3 correction frames from the UM980 over UART, publishes each to dedicated MQTT topics in real time, accepts remote UM980 reconfiguration via retained MQTT config, supports MQTT-triggered OTA firmware updates with rollback safety, and publishes periodic health telemetry including GNSS fix quality.
 
-v2.0 shipped: field deployment — SoftAP web provisioning (no recompile), NTRIP corrections client with TLS, remote log streaming, captive portal with DNS hijack, GNSS fix telemetry, post-field bug fixes (captive portal probes, MQTT throughput, UM980 config persistence), and MQTT publish thread refactor eliminating Arc<Mutex> contention.
+A companion Rust server (`gnss-server`) subscribes to the same MQTT topics, decodes RTCM3 frames into RINEX 2.11 observation and navigation files with hourly rotation, and serves a live browser UI with polar satellite skyplot, SNR bar chart, and device health panel via HTTP + WebSocket.
+
+v2.1 shipped: server + nostd foundation — Cargo workspace restructure, complete ESP-IDF nostd audit, gnss-nvs crate (NvsStore trait + ESP-IDF + sequential-storage impls), RTCM3 MSM/ephemeris decode pipeline, RINEX 2.11 .26O/.26P writers, axum HTTP+WebSocket server with live browser UI, and 5 gap crate skeletons (gnss-ota, gnss-softap, gnss-dns, gnss-log) with trait definitions and BLOCKER.md each.
 
 ## Core Value
 
@@ -52,32 +54,19 @@ GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker
 - ✓ UM980 GNSS config persisted to NVS and auto-reapplied after UM980 hardware reboot — v2.0
 - ✓ MQTT publish thread refactor: single publish thread owns EspMqttClient exclusively; SyncSender<MqttMessage> across all relay threads; bytes crate for zero-copy RTCM — v2.0
 - ✓ MQTT outbox observability: MQTT_ENQUEUE_ERRORS + MQTT_OUTBOX_DROPS atomics; bench:N trigger for field diagnostics — v2.0
-
-## Current Milestone: v2.1 Server and nostd Foundation
-
-**Goal:** Build a companion Rust server that converts MQTT telemetry into RINEX files and a live web UI, while auditing and scaffolding the embassy/nostd crate ecosystem needed to eventually port the firmware off ESP-IDF.
-
-**Target features:**
-- MQTT-subscribed server binary: RTCM3 MSM decode → RINEX 2.x .26O/.26P files with hourly rotation
-- HTTP + WebSocket server: live skyplot (polar SVG), SNR bar chart, device health panel
-- Complete ESP-IDF dependency audit against embassy/nostd equivalents
-- Gap crate skeletons with trait definitions for every missing nostd capability (NVS, OTA, SoftAP, NTRIP TLS…)
-- Begin implementation of priority gap crates
+- ✓ Cargo workspace with resolver=2; firmware/ + gnss-server/ + crates/* members without target conflicts — v2.1
+- ✓ Complete audit of all ESP-IDF dependency usages mapped to embassy/nostd equivalents or flagged as gaps — v2.1
+- ✓ gnss-nvs crate: NvsStore trait (namespaced, typed getters/setters, blob support) + ESP-IDF impl + sequential-storage skeleton — v2.1
+- ✓ Server subscribes to MQTT gnss/{id}/rtcm, nmea, heartbeat; reconnects with exponential backoff — v2.1
+- ✓ RTCM3 MSM4/MSM7 decode for GPS, GLONASS, Galileo, BeiDou + ephemeris 1019/1020/1046/1042; EpochBuffer flush-on-change — v2.1
+- ✓ RINEX 2.11 observation files (.26O) with hourly rotation, mandatory headers, column-exact format — v2.1
+- ✓ RINEX 2.11 navigation files (.26P) from decoded GPS/GLONASS ephemeris with hourly rotation — v2.1
+- ✓ HTTP + WebSocket server: live satellite skyplot SVG, SNR bar chart, device health panel at ~1 Hz — v2.1
+- ✓ Gap crate skeletons: gnss-ota, gnss-softap, gnss-dns, gnss-log — trait definitions + BLOCKER.md each — v2.1
 
 ### Active
 
-- [ ] Server subscribes to MQTT RTCM3 and NMEA topics for a configured device ID
-- [ ] Server decodes RTCM3 MSM messages to extract pseudorange, carrier phase, and SNR observations
-- [ ] Server decodes RTCM3 ephemeris messages (1019/1020/1044/1045) for GPS/GLONASS/BeiDou/Galileo
-- [ ] Server writes RINEX 2.x observation files (.26O) with hourly rotation
-- [ ] Server writes RINEX 2.x mixed navigation files (.26P) with hourly rotation
-- [ ] HTTP server with WebSocket pushes live satellite state to browser
-- [ ] Browser renders polar skyplot SVG (elevation/azimuth per satellite from NMEA GSV)
-- [ ] Browser renders SNR bar chart per satellite
-- [ ] Browser shows device health panel from MQTT heartbeat
-- [ ] Complete audit of all ESP-IDF crate dependencies mapped to nostd/embassy equivalents
-- [ ] Gap crates created with trait definitions for each capability lacking a nostd solution
-- [ ] Priority gap crates (NVS at minimum) begin implementation
+*(Next milestone requirements to be defined via `/gsd:new-milestone`)*
 
 ### Out of Scope
 
@@ -86,20 +75,24 @@ GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker
 - Local NMEA buffering across power cycles — real-time relay only
 - JSON-wrapped NMEA publish — raw NMEA preferred
 - Multi-broker publishing — single broker only
+- Full embassy firmware port — blocked by SoftAP password, DNS hijack, and log hook gaps
+- RINEX 3.x format — RINEX 2.11 sufficient for RTKLIB/PPP workflows
+- BLE provisioning — SoftAP covers WiFi+MQTT+NTRIP without custom app
 
 ## Context
 
 - **Hardware**: Seeed XIAO ESP32-C6 — RISC-V, WiFi 6, single yellow LED GPIO15 active-low
 - **GNSS**: UM980 multi-band RTK receiver, UART0 at 115200 baud (GPIO16 TX, GPIO17 RX)
-- **Language**: Rust with std via esp-idf-svc/hal/sys (ESP-IDF v5.3.3)
+- **Language**: Rust with std via esp-idf-svc/hal/sys (ESP-IDF v5.3.3); server uses tokio + axum
 - **MQTT broker**: External (Mosquitto/HiveMQ); username/password auth, no TLS in v1
-- **Shipped v2.0**: 4,726 lines of Rust, 21 phases, 48 plans total; device FFFEB5
+- **Shipped v2.1**: Cargo workspace with firmware/ + gnss-server/ + 6 gap crates; 25 phases, 59 plans total; device FFFEB5
 - **UM980 UART protocol**: NMEA sentences (`$`-prefix), RTCM3 frames (`0xD3`-prefix), `#`-prefix query responses (checksum-terminated); free-text banners otherwise
 - **UM980 config**: Configured via retained MQTT config topic at boot; RESET causes reboot (wait required), UNLOG cleans NMEA outputs without reboot; avoid CONFIGSAVE (NVM wear)
+- **Known tech debt**: GN-talker gap (nmea 0.7 crate ignores $GN combined-constellation sentences — skyplot/SNR chart will not update with live UM980 data until UM980 emits per-constellation talkers or crate is upgraded); gnss-nvs not yet wired into firmware (intentionally deferred)
 
 ## Constraints
 
-- **Tech stack**: Rust (esp-idf-hal, esp-idf-svc, esp-idf-sys)
+- **Tech stack**: Rust (esp-idf-hal, esp-idf-svc, esp-idf-sys for firmware; tokio/axum for server)
 - **Hardware**: ESP32-C6 only
 - **UART**: UM980 fixed at 115200 baud, 8N1
 - **MQTT**: No TLS in v1; standard MQTT 3.1.1
@@ -133,6 +126,14 @@ GNSS data (NMEA + RTCM3) from the UM980 is reliably delivered to the MQTT broker
 | Single publish thread owning EspMqttClient exclusively | Arc<Mutex<EspMqttClient>> caused contention; SyncSender<MqttMessage> decouples callers cleanly | ✓ Good — simpler ownership, measurably lower latency |
 | bytes crate for zero-copy RTCM on publish path | RTCM frames were cloned into Vec<u8> per message; Bytes avoids allocation after initial receive | ✓ Good — no per-frame heap allocation on publish path |
 | NTRIP TLS via EspTls (mbedTLS crt_bundle_attach) | AUSCORS requires port 443/TLS; ESP-IDF's bundled CA certs cover the certificate chain | ✓ Good — no manual cert management required |
+| Cargo workspace resolver=2 mandatory | Prevents std feature unification leaking into no_std gap crates; member profiles ignored by workspace builds | ✓ Good — resolver=2 confirmed via dependency graph |
+| panic=abort via -C rustflag in firmware/.cargo/config.toml | cargo-features panic-immediate-abort cannot be scoped per-package in workspace profile overrides | ✓ Good — abort-on-panic preserved for embedded target only |
+| rtcm-rs 0.11 for server RTCM3 decode | Avoids hand-rolled MSM cell mask and pseudorange bugs; covers all 8 MSM variants and 4 ephemeris types | ✓ Good — 8 unit tests pass with real fixture data |
+| BeiDou ephemeris is RTCM msg 1042 (not 1044) | Plan had incorrect type; msg 1044 is QZSS | ✓ Corrected — rtcm_decode.rs matches Msg1042T |
+| figment TOML+env for server config | GNSS_ prefix with __ nesting separator; consistent with 12-factor app config | ✓ Good — TOML file + env override works cleanly |
+| axum 0.7 + broadcast::Sender<String> for WebSocket fan-out | Tokio-native; broadcast channel decouples MQTT decode task from N WebSocket clients | ✓ Good — Lagged errors skipped gracefully |
+| include_str! for embedding index.html | Single binary, no runtime file dependency; simplest path for deployment | ✓ Good — no ServeDir complexity |
+| Gap crates as trait-only skeletons with BLOCKER.md | Captures exactly what is missing for a nostd implementation without blocking v2.1 delivery | ✓ Good — 5 gap crates document the embassy port path |
 
 ---
-*Last updated: 2026-03-12 after v2.1 milestone start*
+*Last updated: 2026-03-12 after v2.1 milestone — Server and nostd Foundation shipped*
