@@ -2,6 +2,7 @@ mod config;
 mod epoch;
 mod mqtt;
 mod observation;
+mod rinex_writer;
 mod rtcm_decode;
 
 use std::sync::Arc;

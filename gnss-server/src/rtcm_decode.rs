@@ -53,14 +53,29 @@ fn handle_message(msg: Message, epoch_buf: &mut EpochBuffer, events: &mut Vec<Rt
                 .data_segment
                 .signal_data
                 .iter()
-                .map(|s| Observation {
-                    constellation: Constellation::Gps,
-                    sv_id: s.satellite_id,
-                    signal_id: s.signal_id.band(),
-                    pseudorange_ms: s.gnss_signal_fine_pseudorange_ms,
-                    carrier_phase_ms: s.gnss_signal_fine_phaserange_ms,
-                    cnr_dbhz: s.gnss_signal_cnr_dbhz.map(|v| v as f64),
-                    epoch_ms,
+                .map(|s| {
+                    let rough = m
+                        .data_segment
+                        .satellite_data
+                        .iter()
+                        .find(|sat| sat.satellite_id == s.satellite_id);
+                    let rough_range_ms = rough.map(|sat| {
+                        sat.gnss_satellite_rough_range_integer_ms.unwrap_or(0) as f64
+                            + sat.gnss_satellite_rough_range_mod1ms_ms
+                    }).unwrap_or(0.0);
+                    let pseudorange_ms = rough
+                        .and_then(|sat| sat.gnss_satellite_rough_range_integer_ms)
+                        .and_then(|_| s.gnss_signal_fine_pseudorange_ms.map(|fine| rough_range_ms + fine));
+                    Observation {
+                        constellation: Constellation::Gps,
+                        sv_id: s.satellite_id,
+                        signal_id: s.signal_id.band(),
+                        pseudorange_ms,
+                        rough_range_ms,
+                        carrier_phase_ms: s.gnss_signal_fine_phaserange_ms,
+                        cnr_dbhz: s.gnss_signal_cnr_dbhz.map(|v| v as f64),
+                        epoch_ms,
+                    }
                 })
                 .collect();
             push_and_collect(epoch_buf, epoch_ms, obs, events);
@@ -72,14 +87,29 @@ fn handle_message(msg: Message, epoch_buf: &mut EpochBuffer, events: &mut Vec<Rt
                 .data_segment
                 .signal_data
                 .iter()
-                .map(|s| Observation {
-                    constellation: Constellation::Gps,
-                    sv_id: s.satellite_id,
-                    signal_id: s.signal_id.band(),
-                    pseudorange_ms: s.gnss_signal_fine_pseudorange_ext_ms,
-                    carrier_phase_ms: s.gnss_signal_fine_phaserange_ext_ms,
-                    cnr_dbhz: s.gnss_signal_cnr_ext_dbhz,
-                    epoch_ms,
+                .map(|s| {
+                    let rough = m
+                        .data_segment
+                        .satellite_data
+                        .iter()
+                        .find(|sat| sat.satellite_id == s.satellite_id);
+                    let rough_range_ms = rough.map(|sat| {
+                        sat.gnss_satellite_rough_range_integer_ms.unwrap_or(0) as f64
+                            + sat.gnss_satellite_rough_range_mod1ms_ms
+                    }).unwrap_or(0.0);
+                    let pseudorange_ms = rough
+                        .and_then(|sat| sat.gnss_satellite_rough_range_integer_ms)
+                        .and_then(|_| s.gnss_signal_fine_pseudorange_ext_ms.map(|fine| rough_range_ms + fine));
+                    Observation {
+                        constellation: Constellation::Gps,
+                        sv_id: s.satellite_id,
+                        signal_id: s.signal_id.band(),
+                        pseudorange_ms,
+                        rough_range_ms,
+                        carrier_phase_ms: s.gnss_signal_fine_phaserange_ext_ms,
+                        cnr_dbhz: s.gnss_signal_cnr_ext_dbhz,
+                        epoch_ms,
+                    }
                 })
                 .collect();
             push_and_collect(epoch_buf, epoch_ms, obs, events);
@@ -91,16 +121,31 @@ fn handle_message(msg: Message, epoch_buf: &mut EpochBuffer, events: &mut Vec<Rt
                 .data_segment
                 .signal_data
                 .iter()
-                .map(|s| Observation {
-                    constellation: Constellation::Glonass,
-                    sv_id: s.satellite_id,
-                    signal_id: s.signal_id.band(),
-                    pseudorange_ms: s.gnss_signal_fine_pseudorange_ms,
-                    // FCN not in MSM signal data; carrier phase requires FCN for cycle conversion —
-                    // emit raw ms value, conversion deferred to Phase 24.
-                    carrier_phase_ms: s.gnss_signal_fine_phaserange_ms,
-                    cnr_dbhz: s.gnss_signal_cnr_dbhz.map(|v| v as f64),
-                    epoch_ms,
+                .map(|s| {
+                    let rough = m
+                        .data_segment
+                        .satellite_data
+                        .iter()
+                        .find(|sat| sat.satellite_id == s.satellite_id);
+                    let rough_range_ms = rough.map(|sat| {
+                        sat.gnss_satellite_rough_range_integer_ms.unwrap_or(0) as f64
+                            + sat.gnss_satellite_rough_range_mod1ms_ms
+                    }).unwrap_or(0.0);
+                    let pseudorange_ms = rough
+                        .and_then(|sat| sat.gnss_satellite_rough_range_integer_ms)
+                        .and_then(|_| s.gnss_signal_fine_pseudorange_ms.map(|fine| rough_range_ms + fine));
+                    Observation {
+                        constellation: Constellation::Glonass,
+                        sv_id: s.satellite_id,
+                        signal_id: s.signal_id.band(),
+                        pseudorange_ms,
+                        rough_range_ms,
+                        // FCN not in MSM signal data; carrier phase requires FCN for cycle conversion —
+                        // emit raw ms value, conversion deferred to Phase 24.
+                        carrier_phase_ms: s.gnss_signal_fine_phaserange_ms,
+                        cnr_dbhz: s.gnss_signal_cnr_dbhz.map(|v| v as f64),
+                        epoch_ms,
+                    }
                 })
                 .collect();
             push_and_collect(epoch_buf, epoch_ms, obs, events);
@@ -112,16 +157,31 @@ fn handle_message(msg: Message, epoch_buf: &mut EpochBuffer, events: &mut Vec<Rt
                 .data_segment
                 .signal_data
                 .iter()
-                .map(|s| Observation {
-                    constellation: Constellation::Glonass,
-                    sv_id: s.satellite_id,
-                    signal_id: s.signal_id.band(),
-                    pseudorange_ms: s.gnss_signal_fine_pseudorange_ext_ms,
-                    // FCN not in MSM signal data; carrier phase requires FCN for cycle conversion —
-                    // emit raw ms value, conversion deferred to Phase 24.
-                    carrier_phase_ms: s.gnss_signal_fine_phaserange_ext_ms,
-                    cnr_dbhz: s.gnss_signal_cnr_ext_dbhz,
-                    epoch_ms,
+                .map(|s| {
+                    let rough = m
+                        .data_segment
+                        .satellite_data
+                        .iter()
+                        .find(|sat| sat.satellite_id == s.satellite_id);
+                    let rough_range_ms = rough.map(|sat| {
+                        sat.gnss_satellite_rough_range_integer_ms.unwrap_or(0) as f64
+                            + sat.gnss_satellite_rough_range_mod1ms_ms
+                    }).unwrap_or(0.0);
+                    let pseudorange_ms = rough
+                        .and_then(|sat| sat.gnss_satellite_rough_range_integer_ms)
+                        .and_then(|_| s.gnss_signal_fine_pseudorange_ext_ms.map(|fine| rough_range_ms + fine));
+                    Observation {
+                        constellation: Constellation::Glonass,
+                        sv_id: s.satellite_id,
+                        signal_id: s.signal_id.band(),
+                        pseudorange_ms,
+                        rough_range_ms,
+                        // FCN not in MSM signal data; carrier phase requires FCN for cycle conversion —
+                        // emit raw ms value, conversion deferred to Phase 24.
+                        carrier_phase_ms: s.gnss_signal_fine_phaserange_ext_ms,
+                        cnr_dbhz: s.gnss_signal_cnr_ext_dbhz,
+                        epoch_ms,
+                    }
                 })
                 .collect();
             push_and_collect(epoch_buf, epoch_ms, obs, events);
@@ -133,14 +193,29 @@ fn handle_message(msg: Message, epoch_buf: &mut EpochBuffer, events: &mut Vec<Rt
                 .data_segment
                 .signal_data
                 .iter()
-                .map(|s| Observation {
-                    constellation: Constellation::Galileo,
-                    sv_id: s.satellite_id,
-                    signal_id: s.signal_id.band(),
-                    pseudorange_ms: s.gnss_signal_fine_pseudorange_ms,
-                    carrier_phase_ms: s.gnss_signal_fine_phaserange_ms,
-                    cnr_dbhz: s.gnss_signal_cnr_dbhz.map(|v| v as f64),
-                    epoch_ms,
+                .map(|s| {
+                    let rough = m
+                        .data_segment
+                        .satellite_data
+                        .iter()
+                        .find(|sat| sat.satellite_id == s.satellite_id);
+                    let rough_range_ms = rough.map(|sat| {
+                        sat.gnss_satellite_rough_range_integer_ms.unwrap_or(0) as f64
+                            + sat.gnss_satellite_rough_range_mod1ms_ms
+                    }).unwrap_or(0.0);
+                    let pseudorange_ms = rough
+                        .and_then(|sat| sat.gnss_satellite_rough_range_integer_ms)
+                        .and_then(|_| s.gnss_signal_fine_pseudorange_ms.map(|fine| rough_range_ms + fine));
+                    Observation {
+                        constellation: Constellation::Galileo,
+                        sv_id: s.satellite_id,
+                        signal_id: s.signal_id.band(),
+                        pseudorange_ms,
+                        rough_range_ms,
+                        carrier_phase_ms: s.gnss_signal_fine_phaserange_ms,
+                        cnr_dbhz: s.gnss_signal_cnr_dbhz.map(|v| v as f64),
+                        epoch_ms,
+                    }
                 })
                 .collect();
             push_and_collect(epoch_buf, epoch_ms, obs, events);
@@ -152,14 +227,29 @@ fn handle_message(msg: Message, epoch_buf: &mut EpochBuffer, events: &mut Vec<Rt
                 .data_segment
                 .signal_data
                 .iter()
-                .map(|s| Observation {
-                    constellation: Constellation::Galileo,
-                    sv_id: s.satellite_id,
-                    signal_id: s.signal_id.band(),
-                    pseudorange_ms: s.gnss_signal_fine_pseudorange_ext_ms,
-                    carrier_phase_ms: s.gnss_signal_fine_phaserange_ext_ms,
-                    cnr_dbhz: s.gnss_signal_cnr_ext_dbhz,
-                    epoch_ms,
+                .map(|s| {
+                    let rough = m
+                        .data_segment
+                        .satellite_data
+                        .iter()
+                        .find(|sat| sat.satellite_id == s.satellite_id);
+                    let rough_range_ms = rough.map(|sat| {
+                        sat.gnss_satellite_rough_range_integer_ms.unwrap_or(0) as f64
+                            + sat.gnss_satellite_rough_range_mod1ms_ms
+                    }).unwrap_or(0.0);
+                    let pseudorange_ms = rough
+                        .and_then(|sat| sat.gnss_satellite_rough_range_integer_ms)
+                        .and_then(|_| s.gnss_signal_fine_pseudorange_ext_ms.map(|fine| rough_range_ms + fine));
+                    Observation {
+                        constellation: Constellation::Galileo,
+                        sv_id: s.satellite_id,
+                        signal_id: s.signal_id.band(),
+                        pseudorange_ms,
+                        rough_range_ms,
+                        carrier_phase_ms: s.gnss_signal_fine_phaserange_ext_ms,
+                        cnr_dbhz: s.gnss_signal_cnr_ext_dbhz,
+                        epoch_ms,
+                    }
                 })
                 .collect();
             push_and_collect(epoch_buf, epoch_ms, obs, events);
@@ -171,14 +261,29 @@ fn handle_message(msg: Message, epoch_buf: &mut EpochBuffer, events: &mut Vec<Rt
                 .data_segment
                 .signal_data
                 .iter()
-                .map(|s| Observation {
-                    constellation: Constellation::BeiDou,
-                    sv_id: s.satellite_id,
-                    signal_id: s.signal_id.band(),
-                    pseudorange_ms: s.gnss_signal_fine_pseudorange_ms,
-                    carrier_phase_ms: s.gnss_signal_fine_phaserange_ms,
-                    cnr_dbhz: s.gnss_signal_cnr_dbhz.map(|v| v as f64),
-                    epoch_ms,
+                .map(|s| {
+                    let rough = m
+                        .data_segment
+                        .satellite_data
+                        .iter()
+                        .find(|sat| sat.satellite_id == s.satellite_id);
+                    let rough_range_ms = rough.map(|sat| {
+                        sat.gnss_satellite_rough_range_integer_ms.unwrap_or(0) as f64
+                            + sat.gnss_satellite_rough_range_mod1ms_ms
+                    }).unwrap_or(0.0);
+                    let pseudorange_ms = rough
+                        .and_then(|sat| sat.gnss_satellite_rough_range_integer_ms)
+                        .and_then(|_| s.gnss_signal_fine_pseudorange_ms.map(|fine| rough_range_ms + fine));
+                    Observation {
+                        constellation: Constellation::BeiDou,
+                        sv_id: s.satellite_id,
+                        signal_id: s.signal_id.band(),
+                        pseudorange_ms,
+                        rough_range_ms,
+                        carrier_phase_ms: s.gnss_signal_fine_phaserange_ms,
+                        cnr_dbhz: s.gnss_signal_cnr_dbhz.map(|v| v as f64),
+                        epoch_ms,
+                    }
                 })
                 .collect();
             push_and_collect(epoch_buf, epoch_ms, obs, events);
@@ -190,14 +295,29 @@ fn handle_message(msg: Message, epoch_buf: &mut EpochBuffer, events: &mut Vec<Rt
                 .data_segment
                 .signal_data
                 .iter()
-                .map(|s| Observation {
-                    constellation: Constellation::BeiDou,
-                    sv_id: s.satellite_id,
-                    signal_id: s.signal_id.band(),
-                    pseudorange_ms: s.gnss_signal_fine_pseudorange_ext_ms,
-                    carrier_phase_ms: s.gnss_signal_fine_phaserange_ext_ms,
-                    cnr_dbhz: s.gnss_signal_cnr_ext_dbhz,
-                    epoch_ms,
+                .map(|s| {
+                    let rough = m
+                        .data_segment
+                        .satellite_data
+                        .iter()
+                        .find(|sat| sat.satellite_id == s.satellite_id);
+                    let rough_range_ms = rough.map(|sat| {
+                        sat.gnss_satellite_rough_range_integer_ms.unwrap_or(0) as f64
+                            + sat.gnss_satellite_rough_range_mod1ms_ms
+                    }).unwrap_or(0.0);
+                    let pseudorange_ms = rough
+                        .and_then(|sat| sat.gnss_satellite_rough_range_integer_ms)
+                        .and_then(|_| s.gnss_signal_fine_pseudorange_ext_ms.map(|fine| rough_range_ms + fine));
+                    Observation {
+                        constellation: Constellation::BeiDou,
+                        sv_id: s.satellite_id,
+                        signal_id: s.signal_id.band(),
+                        pseudorange_ms,
+                        rough_range_ms,
+                        carrier_phase_ms: s.gnss_signal_fine_phaserange_ext_ms,
+                        cnr_dbhz: s.gnss_signal_cnr_ext_dbhz,
+                        epoch_ms,
+                    }
                 })
                 .collect();
             push_and_collect(epoch_buf, epoch_ms, obs, events);
@@ -248,6 +368,7 @@ mod tests {
             sv_id: 1,
             signal_id: 1,
             pseudorange_ms: None,
+            rough_range_ms: 0.0,
             carrier_phase_ms: None,
             cnr_dbhz: None,
             epoch_ms: 99999999,
@@ -281,6 +402,7 @@ mod tests {
             sv_id: 3,
             signal_id: 1,
             pseudorange_ms: Some(1.0),
+            rough_range_ms: 1.0,
             carrier_phase_ms: None, // None is valid — FCN required for cycle conversion
             cnr_dbhz: Some(30.0),
             epoch_ms: 500,

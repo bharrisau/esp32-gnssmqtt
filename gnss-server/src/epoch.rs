@@ -105,6 +105,7 @@ mod tests {
             sv_id: 1,
             signal_id: 1,
             pseudorange_ms: Some(0.0),
+            rough_range_ms: 0.0,
             carrier_phase_ms: Some(0.0),
             cnr_dbhz: Some(40.0),
             epoch_ms,
@@ -117,6 +118,7 @@ mod tests {
             sv_id: 2,
             signal_id: 1,
             pseudorange_ms: Some(0.0),
+            rough_range_ms: 0.0,
             carrier_phase_ms: None, // FCN not available
             cnr_dbhz: Some(35.0),
             epoch_ms,
@@ -182,6 +184,7 @@ mod tests {
             sv_id: 5,
             signal_id: 1,
             pseudorange_ms: Some(1.0),
+            rough_range_ms: 1.0,
             carrier_phase_ms: None, // None is valid — FCN required for conversion
             cnr_dbhz: Some(30.0),
             epoch_ms: 1000,
