@@ -1,0 +1,29 @@
+[package]
+name = "gnss-nvs"
+version = "0.1.0"
+edition = "2021"
+description = "NvsStore trait and backing implementations for GNSS device NVS storage"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "gnss_nvs"
+
+[features]
+esp-idf = ["dep:esp-idf-svc"]
+sequential = [
+    "dep:sequential-storage",
+    "dep:embedded-storage-async",
+    "dep:embassy-futures",
+]
+
+[dependencies]
+postcard = { version = "1", default-features = false, features = ["alloc"] }
+serde = { version = "1", default-features = false, features = ["derive"] }
+
+# Optional: ESP-IDF NVS implementation
+esp-idf-svc = { version = "0.51", optional = true }
+
+# Optional: sequential-storage flash-backed implementation
+sequential-storage = { version = "7", optional = true }
+embedded-storage-async = { version = "0.4", optional = true }
+embassy-futures = { version = "0.1", optional = true }
