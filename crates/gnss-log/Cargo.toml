@@ -1,0 +1,11 @@
+[package]
+name = "gnss-log"
+version = "0.1.0"
+edition = "2021"
+description = "MQTT log hook trait for embedded GNSS firmware — nostd gap crate"
+
+[dependencies]
+# No external dependencies — trait-only skeleton
+# ESP-IDF implementation would add: log (workspace), esp-idf-sys (for esp_log_set_vprintf)
+# nostd Rust log::Log side: fully portable, no C required
+# nostd C component capture: requires one C FFI call — see BLOCKER.md
