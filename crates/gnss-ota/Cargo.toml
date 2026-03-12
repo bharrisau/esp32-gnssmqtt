@@ -1,0 +1,10 @@
+[package]
+name = "gnss-ota"
+version = "0.1.0"
+edition = "2021"
+description = "Dual-slot OTA trait for embedded GNSS firmware — nostd gap crate"
+
+[dependencies]
+# No external dependencies — trait-only skeleton
+# ESP-IDF implementation would add: esp-idf-svc, esp-idf-sys
+# nostd implementation blocked — see BLOCKER.md
