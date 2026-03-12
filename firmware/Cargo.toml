@@ -1,0 +1,28 @@
+cargo-features = ["panic-immediate-abort"]
+
+[package]
+name = "esp32-gnssmqtt-firmware"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+
+[dependencies]
+log = "0.4"
+sha2 = { version = "0.10", default-features = false, features = ["oid"] }
+anyhow = "1"
+bytes = "1"
+embedded-svc = "=0.28.1"
+esp-idf-svc = { version = "=0.51.0", features = [] }
+esp-idf-hal = "=0.45.2"
+esp-idf-sys = "=0.36.1"
+
+[build-dependencies]
+embuild = "0.33"
+cc = "1"
+
+[package.metadata.espflash]
+partition_table = "partitions.csv"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(esp_idf_log_timestamp_source_system)'] }
+

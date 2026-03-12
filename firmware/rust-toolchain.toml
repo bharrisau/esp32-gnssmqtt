@@ -1,0 +1,6 @@
+[toolchain]
+channel = "nightly"
+components = ["rust-src"]
+# Note: If `cargo build` fails with *const i8 / *const u8 pointer type mismatches
+# in generated esp-idf-sys bindings (nightly breakage), pin to a known-good date:
+# channel = "nightly-2024-12-01"

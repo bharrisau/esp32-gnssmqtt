@@ -518,7 +518,7 @@ fn main() {
         .expect("GPIO9 monitor thread spawn failed");
     log::info!("GPIO9 monitor started");
 
-    log::info!("All subsystems started — device operational");
+    log::info!("All subsystems started — device operational 128");
     let _gnss_cmd_tx = gnss_cmd_tx; // keep Sender alive — TX thread exits if all Senders drop
     loop {
         std::thread::sleep(std::time::Duration::from_secs(60));

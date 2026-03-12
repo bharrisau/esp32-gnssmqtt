@@ -51,14 +51,24 @@ CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 # Requires EspSntp to be initialised at runtime (see main.rs Step 6.5).
 CONFIG_LOG_TIMESTAMP_SOURCE_SYSTEM=y
 
-# MQTT throughput tuning (PERF-1: 5 Hz GNSS support)
-# Reduce outbox message expiry from 30s default to 5s.
-# At QoS 0, messages not ACKed within 5s (MQTT disconnected) are discarded.
-# Prevents outbox memory growth during short MQTT disconnects at high publish rates.
-CONFIG_MQTT_OUTBOX_EXPIRED_TIMEOUT_MS=5000
+# MQTT outbox limits
+# OUTBOX_EXPIRED_TIMEOUT_MS: restore to 30s default. The 5s value caused silent expiry of
+# queued QoS-0 messages when drain rate (50 msg/s at 20ms poll) couldn't keep up with bursts.
+# Heap growth is capped instead by OUTBOX_SIZE_BYTES below.
+# OUTBOX_SIZE_BYTES: hard byte cap on outbox heap (~16 KB ≈ 200 NMEA sentences).
+# When exceeded, enqueue() returns -2 → publish_thread increments MQTT_OUTBOX_DROPS.
+# This is more reliable than MQTT_REPORT_DELETED_MESSAGES which has a bug where
+# QoS-0 expiry events never fire (msg_id=0 fails the `while (msg_id > 0)` loop condition).
+CONFIG_MQTT_OUTBOX_EXPIRED_TIMEOUT_MS=30000
+CONFIG_MQTT_OUTBOX_SIZE_BYTES=16384
 
-# MQTT outbox deletion events (Phase 21 observability)
-# Enables EventPayload::Deleted(MessageId) in the MQTT callback when outbox messages expire.
-# Required for MQTT_OUTBOX_DROPS atomic counter in heartbeat.
-# Default is n; without this, no event fires when outbox messages expire.
-CONFIG_MQTT_REPORT_DELETED_MESSAGES=y
+# MQTT publish throughput
+# MQTT_USE_CUSTOM_CONFIG is required — POLL_READ_TIMEOUT and EVENT_QUEUE_SIZE both
+# depend on it in Kconfig; without it they silently stay at defaults (1000ms, 1).
+# POLL_READ_TIMEOUT_MS=20: 50 msg/s drain rate — headroom for 5 Hz × 10 sentences/epoch.
+# EVENT_QUEUE_SIZE=10: enables max_poll_timeout() fast-path (10ms when queued_events>0)
+# but note queued_events only increments for custom events, not outbox publishes —
+# so the fast-path does not apply to our QoS-0 publish path.
+CONFIG_MQTT_USE_CUSTOM_CONFIG=y
+CONFIG_MQTT_POLL_READ_TIMEOUT_MS=20
+CONFIG_MQTT_EVENT_QUEUE_SIZE=10

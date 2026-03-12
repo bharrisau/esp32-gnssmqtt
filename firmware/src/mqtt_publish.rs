@@ -33,11 +33,11 @@ use esp_idf_svc::mqtt::client::EspMqttClient;
 /// Incremented with `Ordering::Relaxed` — approximate; used for diagnostics only.
 pub static MQTT_ENQUEUE_ERRORS: AtomicU32 = AtomicU32::new(0);
 
-/// Number of messages dropped because the outbox was full at enqueue time.
-/// This counter is incremented separately from `MQTT_ENQUEUE_ERRORS` when we can
-/// distinguish an outbox-full condition; currently incremented on any enqueue error
-/// alongside `MQTT_ENQUEUE_ERRORS` as a conservative over-count until finer error
-/// classification is available.
+/// Number of messages rejected because the outbox exceeded `CONFIG_MQTT_OUTBOX_SIZE_BYTES`.
+/// Incremented when `client.enqueue()` returns an error (esp-mqtt returns -2 when the
+/// byte cap is hit). Does NOT count silent expiry — the `MQTT_REPORT_DELETED_MESSAGES`
+/// expiry path is broken for QoS-0 (msg_id=0 fails the `while (msg_id > 0)` loop in
+/// `mqtt_delete_expired_messages`), so expiry is invisible to this counter.
 pub static MQTT_OUTBOX_DROPS: AtomicU32 = AtomicU32::new(0);
 
 /// Typed MQTT message — carries topic, payload, and variant-specific flags.
