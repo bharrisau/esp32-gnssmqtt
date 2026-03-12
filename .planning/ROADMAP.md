@@ -128,7 +128,12 @@ Plans:
   3. Server produces `.26P` mixed navigation files from decoded ephemeris messages with hourly rotation
   4. `rnx2rtkp` or `rtkplot` processes the output files without parse errors (validated manually against a real RTCM3 stream)
   5. `gnss-ota` crate exists with a dual-slot OTA trait definition and a `BLOCKER.md` documenting specifically what prevents a nostd implementation today
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 24-01-PLAN.md — Observation struct fix (rough_range_ms) + RINEX 2.11 obs writer with header, epoch, unit converters
+- [ ] 24-02-PLAN.md — RINEX nav writer (GPS + GLONASS D19.12) + GPS week tracking + main.rs wiring
+- [ ] 24-03-PLAN.md — gnss-ota crate: OtaSlot + OtaManager traits (no_std) + BLOCKER.md
 
 ### Phase 25: Web UI + remaining gap crate skeletons
 **Goal**: Browser shows a live satellite skyplot, SNR bar chart, and device health panel updated from the running server; gnss-softap, gnss-dns, and gnss-log gap crate skeletons exist with trait definitions and documented blockers
@@ -169,5 +174,5 @@ Plans:
 | 21. MQTT Performance | v2.0 | 3/3 | Complete | 2026-03-12 |
 | 22. Workspace + Nostd Audit | v2.1 | 2/2 | Complete | 2026-03-12 |
 | 23. MQTT + RTCM3 + gnss-nvs crate | 3/3 | Complete    | 2026-03-12 | - |
-| 24. RINEX Files + gnss-ota gap crate | v2.1 | 0/TBD | Not started | - |
+| 24. RINEX Files + gnss-ota gap crate | v2.1 | 0/3 | Not started | - |
 | 25. Web UI + remaining gap crate skeletons | v2.1 | 0/TBD | Not started | - |
