@@ -19,7 +19,7 @@ created: 2026-03-12
 |----------|-------|
 | **Framework** | cargo test (Rust unit tests) |
 | **Config file** | Cargo.toml (workspace) |
-| **Quick run command** | `cargo test -p gnss-web 2>&1 \| tail -20` |
+| **Quick run command** | `cargo test -p gnss-server 2>&1 \| tail -20` |
 | **Full suite command** | `cargo test --workspace 2>&1 \| tail -40` |
 | **Estimated runtime** | ~30 seconds |
 
@@ -27,7 +27,7 @@ created: 2026-03-12
 
 ## Sampling Rate
 
-- **After every task commit:** Run `cargo test -p gnss-web 2>&1 | tail -20`
+- **After every task commit:** Run `cargo test -p gnss-server 2>&1 | tail -20`
 - **After every plan wave:** Run `cargo test --workspace 2>&1 | tail -40`
 - **Before `/gsd:verify-work`:** Full suite must be green
 - **Max feedback latency:** 60 seconds
@@ -38,10 +38,10 @@ created: 2026-03-12
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 25-01-01 | 01 | 1 | UI-01 | unit | `cargo test -p gnss-web test_ws_broadcast` | ❌ W0 | ⬜ pending |
-| 25-01-02 | 01 | 1 | UI-02 | unit | `cargo test -p gnss-web test_gsv_accumulation` | ❌ W0 | ⬜ pending |
-| 25-01-03 | 01 | 1 | UI-03 | unit | `cargo test -p gnss-web test_snr_bar_chart` | ❌ W0 | ⬜ pending |
-| 25-01-04 | 01 | 1 | UI-04 | unit | `cargo test -p gnss-web test_heartbeat_forwarding` | ❌ W0 | ⬜ pending |
+| 25-01-01 | 01 | 1 | UI-01 | unit | `cargo test -p gnss-server test_ws_broadcast` | ❌ W0 | ⬜ pending |
+| 25-01-02 | 01 | 1 | UI-02 | unit | `cargo test -p gnss-server test_gsv_accumulation` | ❌ W0 | ⬜ pending |
+| 25-01-03 | 01 | 1 | UI-03 | unit | `cargo test -p gnss-server test_snr_bar_chart` | ❌ W0 | ⬜ pending |
+| 25-01-04 | 01 | 1 | UI-04 | unit | `cargo test -p gnss-server test_heartbeat_forwarding` | ❌ W0 | ⬜ pending |
 | 25-02-01 | 02 | 2 | NOSTD-04b | unit | `cargo test -p gnss-softap test_trait_exists` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
@@ -50,7 +50,8 @@ created: 2026-03-12
 
 ## Wave 0 Requirements
 
-- [ ] `crates/gnss-web/src/lib.rs` — crate scaffold with test stubs for UI-01..UI-04
+- [ ] `crates/gnss-server/src/nmea_parse.rs` — GSV accumulator + test stubs for UI-01..UI-04
+- [ ] `crates/gnss-server/src/web_server.rs` — axum router + AppState test stubs
 - [ ] `crates/gnss-softap/src/lib.rs` — trait definition stub for NOSTD-04b
 - [ ] `crates/gnss-dns/src/lib.rs` — trait definition stub for NOSTD-04b
 - [ ] `crates/gnss-log/src/lib.rs` — trait definition stub for NOSTD-04b
