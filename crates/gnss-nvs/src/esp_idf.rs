@@ -88,7 +88,7 @@ impl NvsStore for EspNvsStore {
         data: &[u8],
     ) -> Result<(), Self::Error> {
         // Open a fresh handle per call — matches firmware pattern; avoids multi-handle corruption.
-        let mut nvs = EspNvs::new(self.partition.clone(), namespace, true)?;
+        let nvs = EspNvs::new(self.partition.clone(), namespace, true)?;
         nvs.set_blob(key, data)
     }
 }
