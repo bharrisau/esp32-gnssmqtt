@@ -9,7 +9,7 @@ Requirements for the Server and nostd Foundation milestone. Each maps to roadmap
 
 ### Infrastructure
 
-- [ ] **INFRA-01**: Developer can build firmware and server binary from the same Cargo workspace without target conflicts (`resolver = "2"`, firmware/ + server/ + crates/ layout)
+- [x] **INFRA-01**: Developer can build firmware and server binary from the same Cargo workspace without target conflicts (`resolver = "2"`, firmware/ + server/ + crates/ layout)
 
 ### Server
 
@@ -79,7 +79,7 @@ Which phases cover which requirements. Updated during roadmap revision 2026-03-1
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 22 | Pending |
+| INFRA-01 | Phase 22 | Complete |
 | NOSTD-01 | Phase 22 | Pending |
 | SRVR-01 | Phase 23 | Pending |
 | SRVR-02 | Phase 23 | Pending |

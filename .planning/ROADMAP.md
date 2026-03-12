@@ -162,7 +162,7 @@ Plans:
 | 19. Pre-2.0 Bugfix | v2.0 | 3/3 | Complete | 2026-03-10 |
 | 20. Field Testing Fixes | v2.0 | 4/4 | Complete | 2026-03-11 |
 | 21. MQTT Performance | v2.0 | 3/3 | Complete | 2026-03-12 |
-| 22. Workspace + Nostd Audit | v2.1 | 0/TBD | Not started | - |
+| 22. Workspace + Nostd Audit | 1/2 | In Progress|  | - |
 | 23. MQTT + RTCM3 + gnss-nvs crate | v2.1 | 0/TBD | Not started | - |
 | 24. RINEX Files + gnss-ota gap crate | v2.1 | 0/TBD | Not started | - |
 | 25. Web UI + remaining gap crate skeletons | v2.1 | 0/TBD | Not started | - |

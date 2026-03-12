@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Server and nostd Foundation
-status: ready_to_plan
-stopped_at: Phase 22 ready to plan
-last_updated: "2026-03-12"
-last_activity: "2026-03-12 — v2.1 roadmap revised to 4-phase interleaved structure (22-25); gap crate work distributed across server feature phases; NOSTD-04 split into NOSTD-04a (Phase 24) and NOSTD-04b (Phase 25); gnss-nvs moved to Phase 23"
+status: planning
+stopped_at: Completed 22-workspace-nostd-audit 22-01-PLAN.md
+last_updated: "2026-03-12T02:36:27.901Z"
+last_activity: 2026-03-12 — v2.1 roadmap revised to 4 phases (22-25); gap crate work interleaved with server feature phases; 20/20 requirements mapped (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 84
 ---
 
 # Project State
@@ -56,6 +56,7 @@ Phase 24 and Phase 25 both depend on Phase 23 and can run in parallel with each 
 |-----------|--------|-------|--------|
 | v1.0-v2.0 | 21 | 48 | Complete |
 | v2.1 | 4 | TBD | Not started |
+| Phase 22-workspace-nostd-audit P01 | 10 | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,9 @@ Key carry-forward decisions affecting v2.1:
 - [v2.1 planning]: GLONASS carrier phase without FCN is Option::None, written as 16 spaces in RINEX, never 0.0
 - [v2.1 revised]: Workspace restructure and nostd audit merged into Phase 22 — both produce no user-facing features and are tightly coupled groundwork; single phase avoids artificial split of interdependent setup work
 - [v2.1 revised 2]: Gap crate work interleaved with server feature phases — gnss-nvs in Phase 23, gnss-ota in Phase 24, remaining skeletons in Phase 25; avoids one large gap crate phase blocking delivery feedback; NOSTD-04 split into NOSTD-04a (gnss-ota, Phase 24) and NOSTD-04b (gnss-softap/dns/log, Phase 25)
+- [Phase 22-workspace-nostd-audit]: panic=immediate-abort replaced with -C panic=abort rustflag in firmware/.cargo/config.toml — Cargo workspace builds ignore member profiles; panic cannot be scoped per-package in workspace profile overrides
+- [Phase 22-workspace-nostd-audit]: Firmware builds from firmware/ directory using .cargo/config.toml with [unstable] build-std; workspace root config has no build.target
+- [Phase 22-workspace-nostd-audit]: rust-toolchain.toml kept at workspace root (nightly) and copied to firmware/; both locations ensure nightly is used from any invocation context
 
 ### Pending Todos
 
@@ -83,7 +87,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12
-Stopped at: v2.1 roadmap revised (4 phases, 22-25); ready to plan Phase 22
+Last session: 2026-03-12T02:36:27.897Z
+Stopped at: Completed 22-workspace-nostd-audit 22-01-PLAN.md
 Resume file: None
 Next action: /gsd:plan-phase 22
