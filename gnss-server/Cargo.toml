@@ -6,3 +6,15 @@ edition = "2021"
 [[bin]]
 name = "gnss-server"
 path = "src/main.rs"
+
+[dependencies]
+rumqttc = "0.24"
+tokio = { version = "1", features = ["full"] }
+figment = { version = "0.10", features = ["toml", "env"] }
+clap = { version = "4", features = ["derive"] }
+tokio-retry = "0.3"
+serde = { version = "1", features = ["derive"] }
+anyhow = "1"
+log = { workspace = true }
+env_logger = "0.11"
+bytes = { workspace = true }
