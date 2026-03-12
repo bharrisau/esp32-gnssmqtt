@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Server and nostd Foundation
 status: planning
-stopped_at: Phase 23 context gathered
-last_updated: "2026-03-12T05:29:23.495Z"
+stopped_at: Completed 23-mqtt-rtcm3-gnss-nvs-crate-02-PLAN.md
+last_updated: "2026-03-12T05:58:55.661Z"
 last_activity: 2026-03-12 — v2.1 roadmap revised to 4 phases (22-25); gap crate work interleaved with server feature phases; 20/20 requirements mapped (NOSTD-04 split into NOSTD-04a + NOSTD-04b)
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 5
+  completed_plans: 3
   percent: 84
 ---
 
@@ -58,6 +58,7 @@ Phase 24 and Phase 25 both depend on Phase 23 and can run in parallel with each 
 | v2.1 | 4 | TBD | Not started |
 | Phase 22-workspace-nostd-audit P01 | 10 | 3 tasks | 10 files |
 | Phase 22-workspace-nostd-audit P02 | 2 | 2 tasks | 1 files |
+| Phase 23-mqtt-rtcm3-gnss-nvs-crate P02 | 5 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,8 @@ Key carry-forward decisions affecting v2.1:
 - [Phase 22-workspace-nostd-audit]: HTTP server candidates: picoserve (primary) and nanofish (smaller, client+server); evaluate size tradeoff
 - [Phase 22-workspace-nostd-audit]: MQTT client: benchmark Phase 23, implement Phase 24; SoftAP SSID: GNSS-[ID] with same value as WPA2 PSK
 - [Phase 22-workspace-nostd-audit]: SoftAP portal: WiFi station scan for SSID dropdown; UM980 reset:true field in /config plus first-boot trigger
+- [Phase 23-mqtt-rtcm3-gnss-nvs-crate]: Fresh AsyncClient+EventLoop per reconnect cycle in mqtt_supervisor — avoids rumqttc connection state pollution; subscribe() before poll loop is idiomatic rumqttc (enqueued, not blocking)
+- [Phase 23-mqtt-rtcm3-gnss-nvs-crate]: figment TOML+env config: GNSS_ prefix with __ nesting separator; MqttConfig and MqttMessage marked #[allow(dead_code)] for Phase 23-03 forward-compat
 
 ### Pending Todos
 
@@ -94,7 +97,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T05:29:23.491Z
-Stopped at: Phase 23 context gathered
-Resume file: .planning/phases/23-mqtt-rtcm3-gnss-nvs-crate/23-CONTEXT.md
+Last session: 2026-03-12T05:58:55.657Z
+Stopped at: Completed 23-mqtt-rtcm3-gnss-nvs-crate-02-PLAN.md
+Resume file: None
 Next action: /gsd:plan-phase 22

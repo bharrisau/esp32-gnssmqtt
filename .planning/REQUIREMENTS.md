@@ -13,8 +13,8 @@ Requirements for the Server and nostd Foundation milestone. Each maps to roadmap
 
 ### Server
 
-- [ ] **SRVR-01**: Server binary subscribes to MQTT `gnss/{id}/rtcm`, `gnss/{id}/nmea`, and `gnss/{id}/heartbeat` for a configured device ID
-- [ ] **SRVR-02**: Server reconnects to MQTT broker after disconnect with exponential backoff
+- [x] **SRVR-01**: Server binary subscribes to MQTT `gnss/{id}/rtcm`, `gnss/{id}/nmea`, and `gnss/{id}/heartbeat` for a configured device ID
+- [x] **SRVR-02**: Server reconnects to MQTT broker after disconnect with exponential backoff
 
 ### RTCM3 Decode
 
@@ -81,8 +81,8 @@ Which phases cover which requirements. Updated during roadmap revision 2026-03-1
 |-------------|-------|--------|
 | INFRA-01 | Phase 22 | Complete |
 | NOSTD-01 | Phase 22 | Complete |
-| SRVR-01 | Phase 23 | Pending |
-| SRVR-02 | Phase 23 | Pending |
+| SRVR-01 | Phase 23 | Complete |
+| SRVR-02 | Phase 23 | Complete |
 | RTCM-01 | Phase 23 | Pending |
 | RTCM-02 | Phase 23 | Pending |
 | RTCM-03 | Phase 23 | Pending |
